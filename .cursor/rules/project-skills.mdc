@@ -1,0 +1,12 @@
+---
+description: Use repository-local Codex skills for ROS 2 workspace engineering.
+alwaysApply: true
+---
+
+Project-level agent skills live in `.codex/skills`.
+
+Before changing ROS 2 workspace, build, launch, testing, realtime, simulation, navigation, perception, hardware, or deployment behavior, inspect the matching `SKILL.md` under `.codex/skills/ros2-engineering-skills/`.
+
+Use `.codex/skills/karpathy-guidelines/SKILL.md` for general engineering style and code quality guidance when applicable.
+
+Do not duplicate skill bodies into Cursor rules. Keep `.codex/skills` as the canonical source.

@@ -1,5 +1,35 @@
 # Runtime Architecture
 
+## Workspace layout
+
+```text
+src/
+  interfaces/              shared custom ROS msg/srv/action packages, when justified
+  execution/               source arbitration and execution contracts
+  controller/              reusable ros2_control controllers
+  embodiments/
+    robots/                robot descriptions and hardware interfaces
+    sensors/               sensor model defaults; no application composition
+  teleop/                  device/session adapters and retargeters (submodules OK)
+  motion_planning/         planner contracts and backend adapters
+  recording/               raw episode recording and replay tools
+  visualization/           runtime inspection and debug sources
+  toolbox/                 uncategorized reusable runtime tools
+  apps/                    robot/application launch and configuration
+docs/                      architecture, contracts, validation, migration
+scripts/                   idempotent workspace setup and diagnostics
+```
+
+Directories express ownership; only real ROS packages should be added beneath
+them. Empty category directories may hold `.gitkeep` until the first package
+lands.
+
+`interfaces/` is not a mandate to invent a universal Physical AI message
+layer. Prefer standard ROS messages (`PoseStamped`, `TwistStamped`,
+`JointState`, `JointTrajectory`, …). A custom interface moves under
+`src/interfaces/` only when multiple producers and consumers need a stable
+shared schema.
+
 ## Product boundary
 
 Physical AI Runtime owns online robot execution:

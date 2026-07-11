@@ -39,9 +39,5 @@ MUJOCO_LOG.TXT
 .DS_Store
 Thumbs.db
 
-# Local agent / IDE tooling (not part of the runtime release)
-.codex/
-.cursor/
-
 # Reference checkouts are development inputs, not runtime source packages.
 ref/

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Physical AI Incremental Validation"
+  short_description: "Stage complex robot AI work into verifiable safe gates."
+  default_prompt: "Use this skill to break a physical AI robotics task into incremental validation steps with explicit expected outputs, safety gates, and handoff instructions for real-hardware testing."
