@@ -13,7 +13,7 @@ Architecture, ownership rules, and migration gates live under
 ## Features
 
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
-- **Direnv** (optional): enter the directory → frozen Pixi shell + colcon overlay
+- **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`
 - **Submodules**: reusable packages such as
   [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
@@ -21,8 +21,23 @@ Architecture, ownership rules, and migration gates live under
 ## Prerequisites
 
 - [Pixi](https://pixi.sh/latest/#installation)
-- (Optional) [Direnv](https://direnv.net/)
+- [Direnv](https://direnv.net/) (recommended)
 - Git with submodule support
+
+On Ubuntu / Debian, install Direnv first:
+
+```bash
+sudo apt update
+sudo apt install -y direnv
+```
+
+Hook it into your shell (bash shown; see [Direnv docs](https://direnv.net/docs/hook.html)
+for zsh/fish), then restart the shell:
+
+```bash
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+source ~/.bashrc
+```
 
 ## Getting Started
 
@@ -42,19 +57,21 @@ pixi install --locked
 pixi run setup
 ```
 
-### 3. Activate
-
-With Direnv:
+### 3. Activate (recommended: Direnv)
 
 ```bash
 direnv allow
 ```
 
+After this, entering the repository directory activates the locked Pixi
+environment and sources `install/setup.bash` when it exists. Leaving the
+directory deactivates it.
+
 Without Direnv:
 
 ```bash
 eval "$(pixi shell-hook --frozen)"
-# or: source .envrc   (also sets PIXI_FROZEN and sources install/setup.bash)
+# or: source .envrc
 ```
 
 `CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
