@@ -1,0 +1,47 @@
+# Pixi, direnv, and Python caches
+.pixi/
+.direnv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# ROS 2 / colcon artifacts
+build/
+install/
+log/
+compile_commands.json
+
+# Local virtual environments and environment overrides
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Runtime data and machine-local state
+.cloudxr/*
+!.cloudxr/.gitkeep
+data/
+calibrations/
+metrics/
+MUJOCO_LOG.TXT
+
+# Editor and operating-system noise
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local agent / IDE tooling (not part of the runtime release)
+.codex/
+.cursor/
+
+# Reference checkouts are development inputs, not runtime source packages.
+ref/

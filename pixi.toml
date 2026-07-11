@@ -1,0 +1,139 @@
+[workspace]
+name = "physical-ai-runtime"
+version = "0.1.0"
+description = "Release-first ROS 2 Jazzy runtime for Physical AI systems"
+authors = ["Gabriel-Ning <guomning@gmail.com>"]
+channels = ["robostack-jazzy", "conda-forge", "https://prefix.dev/gabriel-robotics"]
+platforms = ["linux-64"]
+
+# Match isaacteleop manylinux_2_35 so `pixi install --locked` does not treat the
+# lock as stale relative to the direct wheel URL.
+[system-requirements]
+libc = "2.35"
+
+# One supported Pixi environment. No [feature.*] / multi-env split.
+# Conda owns numpy + opencv; never add them under [pypi-dependencies].
+
+[dependencies]
+python = "3.12.*"
+
+# ── ROS 2 Jazzy baseline ─────────────────────────────────────────────────────
+ros-jazzy-desktop = "*"
+
+# ── Workspace tooling ────────────────────────────────────────────────────────
+colcon-common-extensions = "*"
+vcstool = "*"
+rosdep = "*"
+
+# ── Native build toolchain ───────────────────────────────────────────────────
+cmake = "*"
+ninja = "*"
+c-compiler = "*"
+cxx-compiler = "*"
+pkg-config = "*"
+sysroot_linux-64 = ">=2.39"
+patchelf = "*"
+swig = "*"
+libusb = "*"
+eigen = "*"
+
+# ── ros2_control ─────────────────────────────────────────────────────────────
+ros-jazzy-ros2-control = "*"
+ros-jazzy-ros2-controllers = "*"
+ros-jazzy-ros2-control-cmake = "*"
+
+# ── Descriptions / fake hardware ─────────────────────────────────────────────
+ros-jazzy-xacro = "*"
+ros-jazzy-joint-state-publisher = "*"
+ros-jazzy-joint-state-publisher-gui = "*"
+ros-jazzy-mujoco-vendor = "*"
+
+# ── Robot SDKs (gabriel-robotics channel) ────────────────────────────────────
+libpiper = ">=0.1.0,<0.2"
+libmarvin = "==0.1.0"
+
+# ── Sensors / calibration ────────────────────────────────────────────────────
+ros-jazzy-orbbec-camera = "*"
+# RealSense: robostack packages (librealsense comes via ros-jazzy-librealsense2).
+# Historical note: an older workspace used a colcon overlay of realsense-ros
+# because of a then-unsolvable pin against ros-jazzy-realsense2-camera. With
+# matching 2.57.7 / 4.57.7 on current channels, the full stack solves cleanly,
+# so the overlay is no longer required for dependency reasons.
+ros-jazzy-realsense2-camera = "*"
+ros-jazzy-realsense2-camera-msgs = "*"
+ros-jazzy-realsense2-description = "*"
+# easy_handeye2 needs transforms3d beside rclpy/cv_bridge/numpy/cv2 (conda).
+transforms3d = ">=0.4.2,<0.5"
+ros-jazzy-apriltag = ">=3.4.5,<4"
+ros-jazzy-apriltag-msgs = ">=2.0.1,<3"
+
+# ── Motion planning (conda) ──────────────────────────────────────────────────
+placo = "==0.9.23"
+osqp-eigen = "*"
+ros-jazzy-ruckig = ">=0.9.2,<0.10"
+# Meta package pulls planners, plugins (incl. simple-controller-manager),
+# moveit-ros (move-group, visualization), setup-assistant (configs-utils), etc.
+ros-jazzy-moveit = "*"
+
+# ── Teleop input devices ─────────────────────────────────────────────────────
+ros-jazzy-teleop-twist-keyboard = ">=2.4.1,<3"
+ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
+ros-jazzy-joy-linux = ">=3.3.0,<4"
+
+# ── Recording / visualization / debug ────────────────────────────────────────
+ros-jazzy-foxglove-bridge = "*"
+ros-jazzy-rqt-action = ">=2.2.0,<3"
+filelock = "*"
+
+# ── Launch testing ───────────────────────────────────────────────────────────
+ros-jazzy-launch-testing = "*"
+ros-jazzy-launch-pytest = "*"
+
+# ── PyPI (flat; torch declared once for teleop + planners) ───────────────────
+#
+# Intentionally omitted as pypi (already provided by conda / transitive):
+#   pin          -> pinocchio via placo / ros-jazzy-pinocchio
+#   pyyaml       -> conda pyyaml (ROS stack)
+#   scipy        -> conda scipy
+#   msgpack      -> conda msgpack-python
+# Do not add numpy, opencv-python, or opencv-python-headless here.
+
+[pypi-options]
+index-url = "https://pypi.org/simple"
+extra-index-urls = ["https://pypi.nvidia.com", "https://download.pytorch.org/whl/cu130"]
+index-strategy = "unsafe-best-match"
+
+[pypi-dependencies]
+torch = { version = ">=2.9", index = "https://download.pytorch.org/whl/cu130" }
+
+# Isaac Teleop (wheel URL avoids manylinux_2_28 vs NVIDIA manylinux_2_35 mismatch)
+isaacteleop = { url = "https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl" }
+mcap = ">=1.2.0"
+msgpack-numpy = "*"
+nlopt = ">=2.8.0"
+viser = ">=0.2.0"
+websockets = ">=14.0"
+cmeel-tinyxml2 = "*"
+cmeel-urdfdom = "*"
+daqp = "*"
+loop-rate-limiters = "*"
+pin-pink = "*"
+dex-retargeting = "*"
+
+# Motion planning backends (git-pinned; never live-query upstream HEAD)
+# Bump pyroki: git ls-remote https://github.com/Gabriel-Ning/pyroki.git main
+# then `pixi update pyroki` with PIXI_FROZEN unset.
+pyroki = { git = "https://github.com/Gabriel-Ning/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
+nvidia-curobo = { git = "https://github.com/NVlabs/curobo.git", rev = "a35a708ecfbb26eb9ab2d7ef22c65919c4fae4a9", extras = ["cu13-torch"] }
+
+# Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
+# `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
+[activation.env]
+WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
+CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
+RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
+
+[tasks]
+setup = "bash scripts/setup.sh"
+build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
+test = "bash -c 'colcon test && colcon test-result --verbose'"
