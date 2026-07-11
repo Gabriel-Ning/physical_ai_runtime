@@ -84,7 +84,7 @@ Validated:
 
 No ROS source package is migrated in this gate.
 
-## Gate 2 — execution and controller foundation
+## Gate 2 — execution and controller foundation (in progress)
 
 Migrate any required shared interfaces, the execution manager, and
 manipulation position controllers without robot applications.
@@ -99,6 +99,34 @@ pixi run test
 Tests must cover package installation and fake/reference behavior. No real
 hardware is enabled. Required Pixi packages (`ros2_control`, Eigen,
 launch-testing) are already in the single environment.
+
+Current evidence:
+
+- `manipulation_execution_manager` migrated as a submodule under
+  `src/execution/manipulation_execution_manager`, pinned to `main` after the
+  `gracious-heisenberg` arbitration refactor merged (JSPC/TSKPC route
+  exclusion, `joint_trajectory_goal` as an independent path, contract-drift
+  and code-review fixes R-01..R-04/R-12); no Piper-specific launch or package
+  coupling carried over;
+- deps are standard ROS messages + numpy, already resolved by the single
+  environment; no `pixi.toml` additions required for this package;
+- Release build and 78 deterministic unit tests pass.
+
+Environment fix landed in this gate: Robostack's `ros-jazzy-launch-testing`
+(3.4.10) registers a pytest11 plugin against the pre-9.0
+`pytest_pycollect_makemodule(path, parent)` hookspec. `pytest` had solved to
+9.1.1, which dropped that legacy parameter, so every `colcon test` /
+`ament_cmake_pytest` run failed at plugin load — including previously-passing
+`isaacteleop_toolbox` tests. Pinned `pytest = "<9"` in `pixi.toml` (now
+`8.4.2`) until Robostack ships a `launch_testing` build compatible with
+pytest 9. Re-verified both packages' tests pass after the pin.
+
+Remaining for this gate:
+
+- migrate `manipulation_position_controllers` into `src/controller/`;
+- confirm its native deps (`osqp`, `control_toolbox`, `osqp-eigen`, `placo`,
+  `pinocchio`, `ruckig`) resolve or land in `pixi.toml`;
+- Release build and test with no robot application wired in.
 
 ## Gate 3 — one embodiment foundation
 

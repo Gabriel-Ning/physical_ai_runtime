@@ -24,6 +24,12 @@ ros-jazzy-desktop = "*"
 colcon-common-extensions = "*"
 vcstool = "*"
 rosdep = "*"
+# Robostack ros-jazzy-launch-testing (3.4.10) registers a pytest11 plugin
+# against the pre-9.0 `pytest_pycollect_makemodule(path, parent)` hookspec.
+# pytest >=9 dropped that legacy parameter, so any colcon/ament_cmake_pytest
+# test run fails at plugin load. Pin below the break until robostack ships a
+# launch_testing build compatible with pytest 9.
+pytest = ">=8,<9"
 
 # ── Native build toolchain ───────────────────────────────────────────────────
 cmake = "*"
@@ -124,7 +130,9 @@ dex-retargeting = "*"
 # Bump pyroki: git ls-remote https://github.com/Gabriel-Ning/pyroki.git main
 # then `pixi update pyroki` with PIXI_FROZEN unset.
 pyroki = { git = "https://github.com/Gabriel-Ning/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
-nvidia-curobo = { git = "https://github.com/NVlabs/curobo.git", rev = "a35a708ecfbb26eb9ab2d7ef22c65919c4fae4a9", extras = ["cu13-torch"] }
+# Bump curobo: git ls-remote https://github.com/Gabriel-Ning/curobo.git main
+# then `pixi update nvidia-curobo` with PIXI_FROZEN unset.
+nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3", extras = ["cu13-torch"] }
 
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
