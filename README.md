@@ -14,30 +14,15 @@ Architecture, ownership rules, and migration gates live under
 
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
-- **Pre-configured tasks**: `setup`, `build`, `test`
+- **Pre-configured tasks**: `setup`, `build`, `test`, `clean`
 - **Submodules**: reusable packages such as
   [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
 
 ## Prerequisites
 
 - [Pixi](https://pixi.sh/latest/#installation)
-- [Direnv](https://direnv.net/) (recommended)
+- [Direnv](https://direnv.net/) (recommended; install steps under Activate)
 - Git with submodule support
-
-On Ubuntu / Debian, install Direnv first:
-
-```bash
-sudo apt update
-sudo apt install -y direnv
-```
-
-Hook it into your shell (bash shown; see [Direnv docs](https://direnv.net/docs/hook.html)
-for zsh/fish), then restart the shell:
-
-```bash
-echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
-source ~/.bashrc
-```
 
 ## Getting Started
 
@@ -58,6 +43,23 @@ pixi run setup
 ```
 
 ### 3. Activate (recommended: Direnv)
+
+Install Direnv if needed (Ubuntu / Debian):
+
+```bash
+sudo apt update
+sudo apt install -y direnv
+```
+
+Hook it into your shell (bash shown; see [Direnv docs](https://direnv.net/docs/hook.html)
+for zsh/fish), then restart the shell:
+
+```bash
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Allow this repository:
 
 ```bash
 direnv allow
@@ -92,6 +94,14 @@ Default build type is `Release`. After the first successful build,
 pixi run test
 ```
 
+### 6. Clean
+
+Remove colcon `build/`, `install/`, and `log/`:
+
+```bash
+pixi run clean
+```
+
 ## Adding Dependencies
 
 - **Conda / ROS / native packages**: edit `pixi.toml` `[dependencies]`, then
@@ -108,4 +118,4 @@ owns those ABIs.
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**.
 - Application launches stay in ROS packages; Pixi tasks stay limited to
-  workspace lifecycle (`setup` / `build` / `test`).
+  workspace lifecycle (`setup` / `build` / `test` / `clean`).
