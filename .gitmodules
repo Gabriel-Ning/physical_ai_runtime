@@ -4,3 +4,6 @@
 [submodule "src/execution/manipulation_execution_manager"]
 	path = src/execution/manipulation_execution_manager
 	url = git@github.com:Gabriel-Ning/manipulation_execution_manager.git
+[submodule "src/controller/manipulation_position_controllers"]
+	path = src/controller/manipulation_position_controllers
+	url = git@github.com:Gabriel-Ning/manipulation_position_controllers.git
