@@ -608,6 +608,7 @@ environments:
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-lifecycle-0.33.10-np2py312h2ed9cc7_18.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-lifecycle-msgs-2.0.3-np2py312h2ed9cc7_18.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-logging-demo-0.33.10-np2py312h2ed9cc7_18.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-map-msgs-2.4.1-np2py312h2ed9cc7_18.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-mcap-vendor-0.26.10-np2py312h2ed9cc7_18.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-mecanum-drive-controller-4.40.0-np2py312h2ed9cc7_18.conda
@@ -11786,6 +11787,33 @@ packages:
   license: Apache-2.0
   size: 218938
   timestamp: 1782304089896
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
+  sha256: 3dfca81066b22403b5eca911b77da0136bb0baebe30af2ce7acff165bdd9b40a
+  md5: 103a202e0a79fe289e7981f5d4ba920e
+  depends:
+  - libosqp
+  - osqp-eigen
+  - placo ==0.9.23
+  - ros-jazzy-control-toolbox
+  - ros-jazzy-controller-interface
+  - ros-jazzy-geometry-msgs
+  - ros-jazzy-hardware-interface
+  - ros-jazzy-pinocchio
+  - ros-jazzy-pluginlib
+  - ros-jazzy-rclcpp
+  - ros-jazzy-rclcpp-lifecycle
+  - ros-jazzy-realtime-tools
+  - ros-jazzy-ruckig
+  - ros-jazzy-sensor-msgs
+  - ros-jazzy-std-msgs
+  - ros-jazzy-trajectory-msgs
+  - libstdcxx >=15
+  - libgcc >=15
+  - libosqp >=1.0.0,<1.0.1.0a0
+  - osqp-eigen >=0.11.0,<0.12.0a0
+  license: Apache-2.0
+  size: 539573
+  timestamp: 1783929495995
 - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-map-msgs-2.4.1-np2py312h2ed9cc7_18.conda
   sha256: 0669b179b281c7a8c896c097c67cde1aaf5f2412e6ca7c058f54e33e19bfda3f
   md5: aaf3b4a14bace9fe528dd1ada074587d

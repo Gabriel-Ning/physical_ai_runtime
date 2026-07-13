@@ -47,6 +47,7 @@ eigen = "*"
 ros-jazzy-ros2-control = "*"
 ros-jazzy-ros2-controllers = "*"
 ros-jazzy-ros2-control-cmake = "*"
+ros-jazzy-manipulation-position-controllers = "==0.1.0"
 
 # ── Descriptions / fake hardware ─────────────────────────────────────────────
 ros-jazzy-xacro = "*"

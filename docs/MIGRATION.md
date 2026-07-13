@@ -121,12 +121,14 @@ Environment fix landed in this gate: Robostack's `ros-jazzy-launch-testing`
 `8.4.2`) until Robostack ships a `launch_testing` build compatible with
 pytest 9. Re-verified both packages' tests pass after the pin.
 
-Remaining for this gate:
+Completed for this gate:
 
-- migrate `manipulation_position_controllers` into `src/controller/`;
-- confirm its native deps (`osqp`, `control_toolbox`, `osqp-eigen`, `placo`,
-  `pinocchio`, `ruckig`) resolve or land in `pixi.toml`;
-- Release build and test with no robot application wired in.
+- publish `manipulation_position_controllers` as the runtime-only Prefix
+  package `ros-jazzy-manipulation-position-controllers ==0.1.0`;
+- consume the controller from the `gabriel-robotics` channel instead of
+  carrying its source repository under `src/controller/`;
+- verify its ament plugin index and shared library load from the locked Pixi
+  environment with no robot application wired in.
 
 ## Gate 3 — one embodiment foundation
 
