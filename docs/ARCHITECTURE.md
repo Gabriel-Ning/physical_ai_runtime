@@ -23,11 +23,12 @@ scripts/                   idempotent workspace setup and diagnostics
 ```
 
 This repository is a **shared workspace template**: Pixi + colcon + docs + empty
-`src/` categories. Teams develop on top of it by cloning ROS packages into the
-matching `src/` path (`git clone`, not submodules). Those checkouts are local
-working trees and are not committed back into this template. Shared bringup /
-toolbox content for Marvin debug pipelines lives in
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+`src/` categories. Teams learn and develop by cloning **external example /
+tutorial packages** into the matching `src/` path (`git clone`, not
+submodules). Those checkouts are local working trees and are not committed back
+into this template. Marvin debug bringups used as tutorials live in
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources);
+embodiment and execution packages stay in their own repos.
 
 Typical clones:
 

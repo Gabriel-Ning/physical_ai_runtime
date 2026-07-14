@@ -1,34 +1,23 @@
 # Physical AI Runtime
 
 A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems.
-Teams clone this repository as a shared baseline, then pull the ROS packages
-they need into `src/` and develop on top. One locked Pixi environment covers
-ROS, native libraries, CUDA/PyTorch, and teleop/planning Python dependencies.
-
-This repository does **not** vendor ROS packages and does **not** use git
-submodules for application/component repos. Empty ownership directories under
-`src/` are scaffolding only.
+Everyone starts from this shared baseline: install the locked environment, then
+clone external example packages into `src/` to learn the layout and develop on
+top. Component code stays in its own repositories — this tree only provides
+Pixi/colcon scaffolding, ownership directories, and docs.
 
 Architecture and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Migration](docs/MIGRATION.md)
 
-Related package repositories (clone into `src/` as needed):
-
-- [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
-- [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
-- [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
-- [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
-- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) (bringups / toolbox)
-
 ## Features
 
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
-- **Empty `src/` layout**: category folders with `.gitkeep`; add packages with
-  `git clone` (not submodules)
+- **Empty `src/` layout**: category folders with `.gitkeep`; tutorials clone
+  packages in (not submodules, not vendored here)
 
 ## Prerequisites
 
@@ -89,40 +78,90 @@ eval "$(pixi shell-hook --frozen)"
 `CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
 `pixi.toml` `[activation.env]` via the shell hook.
 
-### Add ROS packages (clone into `src/`)
+### 4. Build / test / clean
 
-This template ships with empty `src/` categories only. Clone component repos
-into the matching ownership path — **do not** add them as git submodules of
-this workspace, and **do not** commit those checkouts back into the template.
+With an empty `src/` the build is a no-op for packages; after you clone
+examples below, run:
 
 ```bash
-# Execution manager
+pixi run build
+pixi run test
+pixi run clean   # removes colcon build/ install/ log/
+```
+
+Default build type is `Release`. After the first successful build,
+`install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
+
+## Examples and tutorials
+
+External repos are **examples**: clone only what you need into the matching
+ownership path, build, and follow each package's own README. Do **not** add
+them as git submodules of this workspace, and do **not** commit those checkouts
+back into the template.
+
+### Example A — Execution manager
+
+Learn validation / arbitration / streaming routes:
+
+```bash
 git clone https://github.com/Gabriel-Ning/manipulation_execution_manager.git \
   src/execution/manipulation_execution_manager
+pixi run build
+# then see that package's README for launch and tests
+```
 
-# Isaac Teleop source package (needs the main / GPU Pixi env)
-git clone https://github.com/Gabriel-Ning/isaacteleop_toolbox.git \
-  src/teleop/isaacteleop_toolbox
+### Example B — Marvin fake-hardware bringup
 
-# Marvin embodiment (description + hardware interface)
+End-to-end familiarization: description + hardware plugin + debug apps
+(RViz marker → execution manager → task-space controller).
+
+```bash
 mkdir -p src/embodiments/robots/marvin
+
 git clone https://github.com/Gabriel-Ning/marvin_description.git \
   src/embodiments/robots/marvin/marvin_description
 git clone https://github.com/Gabriel-Ning/marvin_hardware_interface.git \
   src/embodiments/robots/marvin/marvin_hardware_interface
 
-# Optional: bringups + RViz marker teleop
-# git clone https://github.com/Gabriel-Ning/runtime_resources.git \
-#   src/runtime_resources
-```
+git clone https://github.com/Gabriel-Ning/manipulation_execution_manager.git \
+  src/execution/manipulation_execution_manager
 
-`colcon` discovers packages recursively under `src/`. After cloning:
+git clone https://github.com/Gabriel-Ning/runtime_resources.git \
+  src/runtime_resources
 
-```bash
 pixi run build
 ```
 
-### Cross-machine DDS (optional)
+Then open [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
+and the Marvin app READMEs (for example `marvin_rviz_debug_bringup`) for launch
+steps. Prefer `use_fake_hardware:=true` until you intentionally gate real
+hardware.
+
+### Example C — Isaac Teleop (GPU / `main` Pixi env)
+
+Quest-class teleop source package (needs CUDA/PyTorch from the `main` branch
+environment, not the `cpu` branch):
+
+```bash
+git clone https://github.com/Gabriel-Ning/isaacteleop_toolbox.git \
+  src/teleop/isaacteleop_toolbox
+pixi run build
+# see isaacteleop_toolbox README for CloudXR setup and live launch
+```
+
+### Package map
+
+| Example package | Clone into |
+|-----------------|------------|
+| [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/manipulation_execution_manager` |
+| [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/marvin_description` |
+| [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/marvin_hardware_interface` |
+| [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) | `src/runtime_resources` |
+| [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/isaacteleop_toolbox` |
+
+`colcon` discovers packages recursively under `src/`.
+
+## Cross-machine DDS (optional)
 
 Same-machine ROS needs no extra CycloneDDS file. When nodes run on **different
 machines** over a dedicated LAN (for example camera hosts publishing large
@@ -145,29 +184,6 @@ Use jumbo frames (MTU 9000) on that LAN when shipping uncompressed camera
 frames. Commit only `.config/cyclonedds_template.xml`; filled-in host XML stays
 local (gitignored).
 
-### 4. Build
-
-```bash
-pixi run build
-```
-
-Default build type is `Release`. After the first successful build,
-`install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
-
-### 5. Test
-
-```bash
-pixi run test
-```
-
-### 6. Clean
-
-Remove colcon `build/`, `install/`, and `log/`:
-
-```bash
-pixi run clean
-```
-
 ## Adding Dependencies
 
 - **Conda / ROS / native packages**: edit `pixi.toml` `[dependencies]`, then
@@ -182,8 +198,9 @@ owns those ABIs.
 
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
-- Default ROS distro is **Jazzy**.
-- Application launches stay in ROS packages cloned into `src/`; Pixi tasks stay
+- Default ROS distro is **Jazzy**. Use branch `cpu` when you need a
+  conda-only env without NVIDIA / Isaac Teleop / cuRobo.
+- Application launches live in the external example packages; Pixi tasks stay
   limited to workspace lifecycle (`setup` / `build` / `test` / `clean` / `stop`).
-- Prefer contributing Pixi/docs/template changes here; contribute package
-  changes in each package's own repository.
+- Contribute Pixi/docs/template changes here; contribute package changes in
+  each package's own repository.
