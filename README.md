@@ -7,9 +7,10 @@ learn the layout and develop on top. Component code stays in its own
 repositories — this tree only provides Pixi/colcon scaffolding, ownership
 directories, and docs.
 
-Architecture and migration notes live under [`docs/`](docs/):
+Architecture, examples, and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
 - [Migration](docs/MIGRATION.md)
 
 ## Features
@@ -111,46 +112,6 @@ pixi run clean   # removes colcon build/ install/ log/
 Default build type is `Release`. After the first successful build,
 `install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
 
-## Example 1 — Marvin bringup
-
-The current example is Marvin:
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
-apps (→ `src/apps/`) plus Marvin embodiment packages and the marker toolbox.
-It builds on the necessary execution manager above (RViz marker → EM →
-task-space controller). Prefer `use_fake_hardware:=true` until you
-intentionally gate real hardware.
-
-```bash
-# Embodiment (separate Git repos) via vcs — re-runnable
-vcs import src < repos/embodiment.repos
-
-# Example 1 apps from runtime_resources → src/apps/ (see repos/example1.repos)
-bash scripts/fetch_example1_apps.sh
-
-# Marker toolbox from the same monorepo → src/toolbox/
-mkdir -p src/toolbox
-curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=2 -C src/toolbox runtime_resources-main/toolbox
-
-pixi run build
-```
-
-Do **not** nest the whole `runtime_resources` tree under `src/runtime_resources/`.
-Then follow `src/apps/marvin_rviz_debug_bringup`.
-
-### Package map
-
-| Role | Package | Place under |
-|------|---------|-------------|
-| Necessary | [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/…` via `repos/necessary.repos` |
-| Necessary | [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/…` via `repos/necessary.repos` |
-| Example 1 | `runtime_resources` `apps/*` | `src/apps/` via `repos/example1.repos` + `scripts/fetch_example1_apps.sh` |
-| Example 1 | `runtime_resources` `toolbox/*` | `src/toolbox/` via `curl\|tar` |
-| Embodiment | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/…` via `repos/embodiment.repos` |
-| Embodiment | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/…` via `repos/embodiment.repos` |
-
-`colcon` discovers packages recursively under `src/`.
-
 ## Cross-machine DDS (optional)
 
 Same-machine ROS needs no extra CycloneDDS file. When nodes run on **different
@@ -190,8 +151,8 @@ owns those ABIs.
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**. Use branch `cpu` when you need a
   conda-only env without NVIDIA / Isaac Teleop / cuRobo.
-- Application launches for Example 1 live under `src/apps/` (from
-  `runtime_resources`); Pixi tasks stay limited to workspace lifecycle
-  (`setup` / `build` / `test` / `clean` / `stop`).
+- Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
+  `test` / `clean` / `stop`). For Marvin Example 1, see
+  [docs/EXAMPLE1.md](docs/EXAMPLE1.md).
 - Contribute Pixi/docs/template changes here; contribute package changes in
   each package's own repository.

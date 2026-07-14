@@ -46,7 +46,8 @@ Embodiment:
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
   → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/embodiment.repos`)
 
-Example 1 (Marvin apps from `runtime_resources`):
+Example 1 (Marvin apps from `runtime_resources`) — fetch/build steps and
+package map: [EXAMPLE1.md](EXAMPLE1.md).
 
 - `runtime_resources/apps/*` → `src/apps/` (`repos/example1.repos` +
   `scripts/fetch_example1_apps.sh`)
