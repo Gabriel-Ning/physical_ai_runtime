@@ -141,9 +141,29 @@ nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
 CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
+# Cross-machine DDS is optional. Leave these commented for single-host use.
+# For a camera LAN (or any multi-host domain), copy
+# .config/cyclonedds.xml.template → a local file under .config/, fill in
+# {{LOCAL_ADDRESS}} / {{PEER_ADDRESS}}, then uncomment and point at that file.
+# Prefer file:// + an absolute path; $PIXI_PROJECT_ROOT expands on activation.
+# Do not commit the filled-in XML (gitignored); only *.template is tracked.
+#ROS_DOMAIN_ID = "1"
+#CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_hik_host_192.168.10.100.xml"
+
 
 [tasks]
 setup = "bash scripts/setup.sh"
 build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
-test = "bash -c 'colcon test && colcon test-result --verbose'"
+# --python-testing pytest: colcon's default Python testing step only picks
+# pytest when a package's *exact* extracted test dependency name is
+# `pytest`. ROS package.xml <test_depend> entries use the rosdep key
+# `python3-pytest`, which never matches, so ament_python packages silently
+# fall back to `python -m unittest` discovery and drop every pytest-style
+# (non-unittest.TestCase) test with zero error output. Force pytest so
+# ament_python test suites are actually collected and run.
+test = "bash -c 'colcon test --python-testing pytest && colcon test-result --verbose'"
 clean = "rm -rf build install log"
+# Kill leftover background ROS 2 processes (nodes, spawners,
+# controller_manager, rviz, ...) from a `ros2 launch` that wasn't cleanly
+# Ctrl-C'd. Safe to run with nothing running.
+stop = "bash scripts/stop_ros.sh"

@@ -84,7 +84,7 @@ Validated:
 
 No ROS source package is migrated in this gate.
 
-## Gate 2 — execution and controller foundation (in progress)
+## Gate 2 — execution and controller foundation (completed)
 
 Migrate any required shared interfaces, the execution manager, and
 manipulation position controllers without robot applications.
@@ -121,6 +121,21 @@ Environment fix landed in this gate: Robostack's `ros-jazzy-launch-testing`
 `8.4.2`) until Robostack ships a `launch_testing` build compatible with
 pytest 9. Re-verified both packages' tests pass after the pin.
 
+Second environment fix landed in this gate: colcon's default Python testing
+step only selects its `pytest` step extension when a package's *exact*
+extracted test dependency name is `pytest`; ROS `package.xml`
+`<test_depend>` entries declare the rosdep key `python3-pytest`, which never
+matches that check. Affected `ament_python` packages silently fell back to
+`python -m unittest` discovery, which drops every pytest-style test (plain
+functions/classes not inheriting `unittest.TestCase`) with zero error
+output — `manipulation_execution_manager` reported "Ran 0 tests" while a
+direct `pytest` invocation passed all 84. The `pixi run test` task now passes
+`--python-testing pytest` to `colcon test` explicitly, forcing pytest for
+every `ament_python` package regardless of that mismatch (pytest also
+collects `unittest.TestCase`-style tests fine, so `isaacteleop_toolbox` is
+unaffected). Verified from a clean `pixi run clean && pixi run build && pixi
+run test`: 98 tests across 4 test-bearing packages, 0 failures.
+
 Completed for this gate:
 
 - publish `manipulation_position_controllers` as the runtime-only Prefix
@@ -130,7 +145,7 @@ Completed for this gate:
 - verify its ament plugin index and shared library load from the locked Pixi
   environment with no robot application wired in.
 
-## Gate 3 — one embodiment foundation
+## Gate 3 — one embodiment foundation (in progress)
 
 Migrate one robot description and its fake-hardware bringup first. Add the real
 hardware interface only after description, joint ordering, lifecycle, and fake
@@ -147,6 +162,66 @@ Pass evidence progresses through:
 Description tooling, MuJoCo vendor, and robot SDKs (`libpiper`, `libmarvin`)
 are already in Pixi. Confirm whether `libmarvin` stays with the embodiment or
 moves with the app package when that integration starts.
+
+Current evidence:
+
+- `marvin_description` migrated as a submodule under
+  `src/embodiments/robots/marvin/marvin_description`, pinned to `dev` HEAD
+  (`baa8a27`, includes the bimanual arm-mount calibration commits not yet on
+  `main`); the package is hardware-free (no SDK) and defaults to
+  `mock_components/GenericSystem`;
+- `marvin_hardware_interface` migrated as a submodule under
+  `src/embodiments/robots/marvin/marvin_hardware_interface`, pinned to
+  `main` (`c078243`); depends only on the already-present `libmarvin` conda
+  package; Release build succeeds and its 3 deterministic gtest suites (SDK
+  bridge, write guard, transaction) pass under `pixi run test` with no
+  network or real hardware involved; `hardware_interface::SystemInterface`
+  plugin `marvin_hardware_interface/MarvinBimanualArmHardware` is
+  pluginlib-discoverable from the install space;
+- `xacro ... ros2_control:=true use_fake_hardware:=true` expands and
+  `check_urdf` passes: one connected tree from `world`, 14 arm joints,
+  `flange_L`/`flange_R` present; `use_fake_hardware:=false` correctly
+  swaps to the real plugin with `robot_ip` param wired through, verified by
+  xacro expansion only (no real hardware connection attempted from this
+  session);
+- first closed loop composed in `src/apps/marvin_rviz_debug_bringup`, made
+  bimanual: two independent chains, one per arm --
+  `rviz_interactive_marker_teleop` (`target_marker_left`/`_right`) ->
+  `manipulation_execution_manager` (`em_left`/`em_right`) ->
+  `TaskSpaceKinematicPositionController`
+  (`left_task_space_kinematic_position_controller`/`right_...`) ->
+  ros2_control hardware, sharing one `controller_manager` process and one
+  URDF; each arm's `base_frame`/`tip_frame` is its own native frame
+  (`Base_L`/`flange_L`, `Base_R`/`flange_R`), not the shared `base_link`;
+- both TSKPC instances declare explicit `lower_limits`/`upper_limits` in
+  `config/controllers.yaml`, copied from
+  `marvin_description/config/joint_limits.yaml` (the same native M6 numbers
+  the URDF xacro loads); this duplication is intentional --
+  `TaskSpaceKinematicPositionController` does not parse the URDF's `<limit>`
+  tags itself (it only clamps if given explicit `lower_limits`/`upper_limits`
+  parameters, defaulting to unbounded otherwise), so leaving them unset would
+  silently run both arms with no position limit at all;
+- the bringup exposes `use_fake_hardware` (default `true`), `hardware_plugin`,
+  and `robot_ip` launch arguments so the same launch file runs the fake and
+  real hardware gates; the real-hardware path is opt-in only and undocumented
+  as a default per the project's real-hardware safety rule;
+- both TSKPCs' spawners are sequenced after `joint_state_broadcaster`'s
+  spawner exits (`RegisterEventHandler(OnProcessExit(...))`, matching the
+  reference workspace's `marvin_bimanual_task_space_teleop.launch.py`
+  pattern) rather than raced in parallel: three concurrent spawner calls
+  against one `controller_manager` had two of them lose a "configure from
+  active state" race and exit non-zero, even though the net controller state
+  was already correct;
+- verified end-to-end with the real controller_manager on fake hardware (not
+  a unit test): `joint_state_broadcaster` and both TSKPC instances reach
+  `active` with clean spawner exits; a `PoseStamped` streamed on
+  `/action_sources/marker_left/pose_target` and
+  `/action_sources/marker_right/pose_target` is validated/forwarded by each
+  EM instance (`active_streaming_route: tskpc`) and both arms' 7 joints move
+  symmetrically in `/joint_states` toward their mirrored IK solutions;
+- stages 4-5 (real state-only connection, conservative real motion) are not
+  attempted; running `use_fake_hardware:=false` requires the physical robot
+  present, powered, and safed, and is left to the user's own hands-on gate.
 
 ## Gate 4 — IsaacTeleop vertical slice (package gate completed)
 
@@ -194,6 +269,16 @@ counts/gaps, and raw replay before any dataset conversion.
 
 Sensors, MoveIt, PyRoki, cuRobo, Foxglove, and related packages are already in
 Pixi. Migration still lands one closed loop at a time.
+
+Current evidence (partial):
+
+- `rviz_interactive_marker_teleop` migrated under
+  `src/toolbox/rviz_interactive_marker_teleop` as a pure PoseStamped source;
+- Piper-specific RViz bringup removed from the package launch; apps compose
+  RViz and embodiment frames;
+- default output topic aligned to the EM pose contract
+  (`/action_sources/marker/pose_target`);
+- Release build succeeds; no unit tests in the upstream package yet.
 
 ## Gate 6 — release acceptance
 

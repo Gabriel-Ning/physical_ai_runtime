@@ -3,26 +3,32 @@
 ## Workspace layout
 
 ```text
-src/
+src/                       empty ownership dirs only (.gitkeep); no vendored packages
   interfaces/              shared custom ROS msg/srv/action packages, when justified
   execution/               source arbitration and execution contracts
   controller/              reusable ros2_control controllers
   embodiments/
     robots/                robot descriptions and hardware interfaces
     sensors/               sensor model defaults; no application composition
-  teleop/                  device/session adapters and retargeters (submodules OK)
+  teleop/                  device/session adapters and retargeters
   motion_planning/         planner contracts and backend adapters
   recording/               raw episode recording and replay tools
   visualization/           runtime inspection and debug sources
   toolbox/                 uncategorized reusable runtime tools
   apps/                    robot/application launch and configuration
+  runtime_resources/       optional submodule: Gabriel-Ning/runtime_resources
 docs/                      architecture, contracts, validation, migration
 scripts/                   idempotent workspace setup and diagnostics
+.config/                   checked-in templates (e.g. CycloneDDS)
 ```
 
+This repository is a **workspace template**: Pixi + colcon + docs + empty
+`src/` categories. ROS packages are added by the user (clone or submodule), not
+committed here. Shared bringup/toolbox content for Marvin debug pipelines lives
+in [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+
 Directories express ownership; only real ROS packages should be added beneath
-them. Empty category directories may hold `.gitkeep` until the first package
-lands.
+them. Empty category directories hold `.gitkeep` until the first package lands.
 
 `interfaces/` is not a mandate to invent a universal Physical AI message
 layer. Prefer standard ROS messages (`PoseStamped`, `TwistStamped`,
@@ -71,7 +77,10 @@ Packages consume these as defaults and retain explicit arguments for
 standalone overrides. They must not silently place runtime data under `$HOME`.
 CycloneDDS is the fixed workspace RMW. Its ROS package is already provided by
 the resolved Jazzy runtime dependency graph, so it is not repeated as a direct
-Pixi dependency.
+Pixi dependency. Cross-machine DDS (camera LAN, dedicated NIC, peers) is
+optional and configured via `CYCLONEDDS_URI` from
+[`.config/cyclonedds.xml.template`](../.config/cyclonedds.xml.template); see
+the README.
 
 There is one supported Pixi environment. CUDA-enabled PyTorch, IsaacTeleop,
 planning backends, ROS, camera dependencies, and robot SDK dependencies share

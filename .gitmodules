@@ -1,6 +1,0 @@
-[submodule "src/teleop/isaacteleop_toolbox"]
-	path = src/teleop/isaacteleop_toolbox
-	url = git@github.com:Gabriel-Ning/isaacteleop_toolbox.git
-[submodule "src/execution/manipulation_execution_manager"]
-	path = src/execution/manipulation_execution_manager
-	url = git@github.com:Gabriel-Ning/manipulation_execution_manager.git

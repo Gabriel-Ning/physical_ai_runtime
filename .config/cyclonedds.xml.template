@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Template: CycloneDDS for cross-machine ROS 2 on a dedicated LAN.
+     Copy to a site-local file, replace the placeholders, then:
+
+       export CYCLONEDDS_URI=file:///absolute/path/to/your_copy.xml
+
+     Do the same on every machine that must exchange large topics (e.g. camera
+     images). Pair with ROS_DOMAIN_ID and jumbo MTU (9000) on that LAN.
+
+     Placeholders:
+       {{LOCAL_ADDRESS}}  — this host's LAN IP (e.g. 192.168.10.100)
+       {{PEER_ADDRESS}}   — peer host's LAN IP (e.g. 192.168.10.13)
+
+     Without binding NetworkInterface, multicast often exits via WiFi/VPN and
+     payloads never arrive even though topic discovery still works.
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface address="{{LOCAL_ADDRESS}}" />
+      </Interfaces>
+      <AllowMulticast>true</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers>
+        <Peer address="{{PEER_ADDRESS}}" />
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
