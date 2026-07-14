@@ -16,16 +16,25 @@ src/                       empty ownership dirs only (.gitkeep); no vendored pac
   visualization/           runtime inspection and debug sources
   toolbox/                 uncategorized reusable runtime tools
   apps/                    robot/application launch and configuration
-  runtime_resources/       optional submodule: Gabriel-Ning/runtime_resources
+  runtime_resources/       optional local clone of Gabriel-Ning/runtime_resources
 docs/                      architecture, contracts, validation, migration
 scripts/                   idempotent workspace setup and diagnostics
 .config/                   checked-in templates (e.g. CycloneDDS)
 ```
 
-This repository is a **workspace template**: Pixi + colcon + docs + empty
-`src/` categories. ROS packages are added by the user (clone or submodule), not
-committed here. Shared bringup/toolbox content for Marvin debug pipelines lives
-in [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+This repository is a **shared workspace template**: Pixi + colcon + docs + empty
+`src/` categories. Teams develop on top of it by cloning ROS packages into the
+matching `src/` path (`git clone`, not submodules). Those checkouts are local
+working trees and are not committed back into this template. Shared bringup /
+toolbox content for Marvin debug pipelines lives in
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+
+Typical clones:
+
+- [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
+  → `src/execution/manipulation_execution_manager`
+- [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
+  → `src/teleop/isaacteleop_toolbox`
 
 Directories express ownership; only real ROS packages should be added beneath
 them. Empty category directories hold `.gitkeep` until the first package lands.

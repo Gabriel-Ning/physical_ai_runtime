@@ -1,36 +1,42 @@
 # Physical AI Runtime
 
-A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems. One
-locked environment covers ROS, native libraries, CUDA/PyTorch, and
-teleop/planning Python dependencies. This repository does **not** vendor ROS
-packages under `src/`; it only provides the Pixi/colcon shell, empty ownership
-directories, and docs.
+A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems.
+Teams clone this repository as a shared baseline, then pull the ROS packages
+they need into `src/` and develop on top. One locked Pixi environment covers
+ROS, native libraries, CUDA/PyTorch, and teleop/planning Python dependencies.
+
+This repository does **not** vendor ROS packages and does **not** use git
+submodules for application/component repos. Empty ownership directories under
+`src/` are scaffolding only.
 
 Architecture and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Migration](docs/MIGRATION.md)
 
-Reusable bringup/toolbox packages live in a separate repository:
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+Related package repositories (clone into `src/` as needed):
+
+- [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
+- [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
+- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) (bringups / toolbox)
 
 ## Features
 
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
-- **Empty `src/` layout**: category folders with `.gitkeep`; add packages via
-  clone/submodule when needed
+- **Empty `src/` layout**: category folders with `.gitkeep`; add packages with
+  `git clone` (not submodules)
 
 ## Prerequisites
 
 - [Pixi](https://pixi.sh/latest/#installation)
 - [Direnv](https://direnv.net/) (recommended; install steps under Activate)
-- Git (submodules optional, only if you pull external packages that way)
+- Git
 
 ## Getting Started
 
-### 1. Clone
+### 1. Clone the workspace template
 
 ```bash
 git clone git@github.com:Gabriel-Ning/physical_ai_runtime.git
@@ -81,24 +87,31 @@ eval "$(pixi shell-hook --frozen)"
 `CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
 `pixi.toml` `[activation.env]` via the shell hook.
 
-### Add ROS packages (optional)
+### Add ROS packages (clone into `src/`)
 
-This template ships with empty `src/` categories only. Pull packages you need,
-for example:
+This template ships with empty `src/` categories only. Clone component repos
+into the matching ownership path — **do not** add them as git submodules of
+this workspace, and **do not** commit those checkouts back into the template.
 
 ```bash
-# Bringups + RViz marker teleop
-git submodule add git@github.com:Gabriel-Ning/runtime_resources.git \
-  src/runtime_resources
+# Execution manager
+git clone https://github.com/Gabriel-Ning/manipulation_execution_manager.git \
+  src/execution/manipulation_execution_manager
 
-# Other component repos (examples)
-# git submodule add git@github.com:Gabriel-Ning/manipulation_execution_manager.git \
-#   src/execution/manipulation_execution_manager
-# git submodule add git@github.com:Gabriel-Ning/isaacteleop_toolbox.git \
-#   src/teleop/isaacteleop_toolbox
+# Isaac Teleop source package (needs the main / GPU Pixi env)
+git clone https://github.com/Gabriel-Ning/isaacteleop_toolbox.git \
+  src/teleop/isaacteleop_toolbox
+
+# Optional: bringups + RViz marker teleop
+# git clone https://github.com/Gabriel-Ning/runtime_resources.git \
+#   src/runtime_resources
 ```
 
-`colcon` discovers packages recursively under `src/`.
+`colcon` discovers packages recursively under `src/`. After cloning:
+
+```bash
+pixi run build
+```
 
 ### Cross-machine DDS (optional)
 
@@ -161,5 +174,7 @@ owns those ABIs.
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**.
-- Application launches stay in ROS packages pulled into `src/`; Pixi tasks stay
+- Application launches stay in ROS packages cloned into `src/`; Pixi tasks stay
   limited to workspace lifecycle (`setup` / `build` / `test` / `clean` / `stop`).
+- Prefer contributing Pixi/docs/template changes here; contribute package
+  changes in each package's own repository.

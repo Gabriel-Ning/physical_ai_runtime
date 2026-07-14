@@ -48,3 +48,9 @@ Thumbs.db
 
 # Reference checkouts are development inputs, not runtime source packages.
 ref/
+
+# Local ROS package clones under src/ stay on each developer's machine.
+# Keep only ownership scaffolding (.gitkeep); do not vendor packages here.
+src/**/*
+!src/**/
+!src/**/.gitkeep
