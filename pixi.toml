@@ -58,6 +58,7 @@ ros-jazzy-mujoco-vendor = "*"
 # ── Robot SDKs (gabriel-robotics channel) ────────────────────────────────────
 libpiper = ">=0.1.0,<0.2"
 libmarvin = "==0.1.0"
+libmvs = "4.7.0.3.*"
 
 # ── Sensors / calibration ────────────────────────────────────────────────────
 ros-jazzy-orbbec-camera = "*"
