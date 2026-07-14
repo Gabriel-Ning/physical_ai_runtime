@@ -107,7 +107,7 @@ machines** over a dedicated LAN (for example camera hosts publishing large
 `sensor_msgs/Image` topics), bind each host to that LAN NIC and point peers at
 each other:
 
-1. Copy [`.config/cyclonedds.xml.template`](.config/cyclonedds.xml.template) to a
+1. Copy [`.config/cyclonedds_template.xml`](.config/cyclonedds_template.xml) to a
    local path under `.config/` (for example
    `.config/cyclonedds_hik_host_192.168.10.100.xml`).
 2. Replace `{{LOCAL_ADDRESS}}` / `{{PEER_ADDRESS}}` with each machine's LAN IP.
@@ -120,8 +120,8 @@ export CYCLONEDDS_URI=file://$PWD/.config/cyclonedds_hik_host_192.168.10.100.xml
 ```
 
 Use jumbo frames (MTU 9000) on that LAN when shipping uncompressed camera
-frames. Commit only `.config/*.template`; filled-in host XML stays local
-(gitignored).
+frames. Commit only `.config/cyclonedds_template.xml`; filled-in host XML stays
+local (gitignored).
 
 ### 4. Build
 

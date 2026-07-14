@@ -79,7 +79,7 @@ CycloneDDS is the fixed workspace RMW. Its ROS package is already provided by
 the resolved Jazzy runtime dependency graph, so it is not repeated as a direct
 Pixi dependency. Cross-machine DDS (camera LAN, dedicated NIC, peers) is
 optional and configured via `CYCLONEDDS_URI` from
-[`.config/cyclonedds.xml.template`](../.config/cyclonedds.xml.template); see
+[`.config/cyclonedds_template.xml`](../.config/cyclonedds_template.xml); see
 the README.
 
 There is one supported Pixi environment. CUDA-enabled PyTorch, IsaacTeleop,

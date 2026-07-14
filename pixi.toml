@@ -144,12 +144,13 @@ CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 # Cross-machine DDS is optional. Leave these commented for single-host use.
 # For a camera LAN (or any multi-host domain), copy
-# .config/cyclonedds.xml.template → a local file under .config/, fill in
-# {{LOCAL_ADDRESS}} / {{PEER_ADDRESS}}, then uncomment and point at that file.
+# .config/cyclonedds_template.xml → a local filled XML under .config/, then
+# point CYCLONEDDS_URI at that file (template itself has placeholders).
 # Prefer file:// + an absolute path; $PIXI_PROJECT_ROOT expands on activation.
-# Do not commit the filled-in XML (gitignored); only *.template is tracked.
+# Do not commit filled-in host XML (gitignored); only cyclonedds_template.xml
+# is tracked.
 #ROS_DOMAIN_ID = "1"
-#CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_hik_host_192.168.10.100.xml"
+#CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_template.xml"
 
 
 [tasks]
