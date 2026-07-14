@@ -24,11 +24,11 @@ venv/
 !.env.example
 
 # Machine-local CycloneDDS instances live under .config/ next to the
-# checked-in template. Track only *.template; ignore filled-in copies
-# (e.g. cyclonedds_hik_host_192.168.10.100.xml).
+# checked-in template. Track only cyclonedds_template.xml; ignore filled-in
+# copies (e.g. cyclonedds_hik_host_192.168.10.100.xml).
 .config/*
 !.config/
-!.config/*.template
+!.config/cyclonedds_template.xml
 
 # Runtime data and machine-local state
 .cloudxr/*
