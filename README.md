@@ -112,17 +112,24 @@ Default build type is `Release`. After the first successful build,
 
 ## Example 1 — Marvin bringup
 
-The current example is Marvin: apps/toolbox from
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) plus
-the Marvin embodiment packages. It builds on the necessary execution manager
-above (RViz marker → EM → task-space controller). Prefer
-`use_fake_hardware:=true` until you intentionally gate real hardware.
+The current example is Marvin:
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) (a
+mirror of this workspace's `src/` layout: `apps/` → `src/apps/`, `toolbox/` →
+`src/toolbox/`, …) plus the Marvin embodiment packages. It builds on the
+necessary execution manager above (RViz marker → EM → task-space controller).
+Prefer `use_fake_hardware:=true` until you intentionally gate real hardware.
 
 ```bash
-mkdir -p src/embodiments/robots/marvin
+# Place example packages into matching src/ ownership dirs
+git clone https://github.com/Gabriel-Ning/runtime_resources.git /tmp/runtime_resources
+cp -a /tmp/runtime_resources/apps/marvin_rviz_debug_bringup \
+      /tmp/runtime_resources/apps/marvin_trajectory_jtc_test \
+      src/apps/
+cp -a /tmp/runtime_resources/toolbox/rviz_interactive_marker_teleop \
+      src/toolbox/
 
-git clone https://github.com/Gabriel-Ning/runtime_resources.git \
-  src/runtime_resources
+# Marvin embodiment (external repos)
+mkdir -p src/embodiments/robots/marvin
 git clone https://github.com/Gabriel-Ning/marvin_description.git \
   src/embodiments/robots/marvin/marvin_description
 git clone https://github.com/Gabriel-Ning/marvin_hardware_interface.git \
@@ -131,16 +138,18 @@ git clone https://github.com/Gabriel-Ning/marvin_hardware_interface.git \
 pixi run build
 ```
 
-Then follow the app READMEs under `src/runtime_resources/apps/` (start with
-`marvin_rviz_debug_bringup`).
+Then follow `src/apps/marvin_rviz_debug_bringup`. Do **not** nest the whole
+`runtime_resources` repo under `src/runtime_resources/`.
 
 ### Package map
 
-| Role | Package | Clone into |
-|------|---------|------------|
+| Role | Package | Clone / place into |
+|------|---------|-------------------|
 | Necessary | [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/manipulation_execution_manager` |
 | Necessary | [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/isaacteleop_toolbox` |
-| Example 1 | [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) | `src/runtime_resources` |
+| Example 1 | `runtime_resources` → `apps/marvin_rviz_debug_bringup` | `src/apps/marvin_rviz_debug_bringup` |
+| Example 1 | `runtime_resources` → `apps/marvin_trajectory_jtc_test` | `src/apps/marvin_trajectory_jtc_test` |
+| Example 1 | `runtime_resources` → `toolbox/rviz_interactive_marker_teleop` | `src/toolbox/rviz_interactive_marker_teleop` |
 | Example 1 | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/marvin_description` |
 | Example 1 | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/marvin_hardware_interface` |
 
@@ -185,8 +194,8 @@ owns those ABIs.
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**. Use branch `cpu` when you need a
   conda-only env without NVIDIA / Isaac Teleop / cuRobo.
-- Application launches for Example 1 live under `runtime_resources`; Pixi tasks
-  stay limited to workspace lifecycle (`setup` / `build` / `test` / `clean` /
-  `stop`).
+- Application launches for Example 1 live under `src/apps/` (from
+  `runtime_resources`); Pixi tasks stay limited to workspace lifecycle
+  (`setup` / `build` / `test` / `clean` / `stop`).
 - Contribute Pixi/docs/template changes here; contribute package changes in
   each package's own repository.

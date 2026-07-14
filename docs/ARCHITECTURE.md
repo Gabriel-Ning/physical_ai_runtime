@@ -16,7 +16,6 @@ src/                       empty ownership dirs only (.gitkeep); no vendored pac
   visualization/           runtime inspection and debug sources
   toolbox/                 uncategorized reusable runtime tools
   apps/                    robot/application launch and configuration
-  runtime_resources/       optional local clone of Gabriel-Ning/runtime_resources
 docs/                      architecture, contracts, validation, migration
 scripts/                   idempotent workspace setup and diagnostics
 .config/                   checked-in templates (e.g. CycloneDDS)
@@ -25,11 +24,13 @@ scripts/                   idempotent workspace setup and diagnostics
 This repository is a **shared workspace template**: Pixi + colcon + docs + empty
 `src/` categories. Teams clone **necessary** packages
 (`manipulation_execution_manager`, `isaacteleop_toolbox`) into matching `src/`
-paths, then optionally clone **Example 1** (Marvin):
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) apps
-plus `marvin_description` / `marvin_hardware_interface` under
-`src/embodiments/robots/marvin/`. Use `git clone` (not submodules); local
-checkouts are not committed back into this template.
+paths, then optionally assemble **Example 1** (Marvin).
+
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) is a
+**folder-layout mirror of `src/`** (`apps/` → `src/apps/`, `toolbox/` →
+`src/toolbox/`, …). Copy its example packages into those ownership dirs — do
+not nest the whole repo as `src/runtime_resources/`. Marvin embodiment packages
+stay in their own repos under `src/embodiments/robots/marvin/`.
 
 Necessary:
 
@@ -40,8 +41,8 @@ Necessary:
 
 Example 1 (Marvin):
 
-- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
-  → `src/runtime_resources`
+- `runtime_resources/apps/*` → `src/apps/`
+- `runtime_resources/toolbox/*` → `src/toolbox/`
 - [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
   → `src/embodiments/robots/marvin/marvin_description`
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
