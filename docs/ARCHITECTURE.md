@@ -39,14 +39,18 @@ Necessary:
 - [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
   → `src/teleop/isaacteleop_toolbox` (`repos/necessary.repos`)
 
-Example 1 (Marvin):
+Embodiment:
 
-- `runtime_resources/apps/*` → `src/apps/` (`curl|tar`, not nested under `src/runtime_resources/`)
-- `runtime_resources/toolbox/*` → `src/toolbox/`
 - [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
-  → `src/embodiments/robots/marvin/marvin_description` (`repos/example1.repos`)
+  → `src/embodiments/robots/marvin/marvin_description` (`repos/embodiment.repos`)
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
-  → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/example1.repos`)
+  → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/embodiment.repos`)
+
+Example 1 (Marvin apps from `runtime_resources`):
+
+- `runtime_resources/apps/*` → `src/apps/` (`repos/example1.repos` +
+  `scripts/fetch_example1_apps.sh`)
+- `runtime_resources/toolbox/*` → `src/toolbox/` (`curl|tar`)
 
 Directories express ownership; only real ROS packages should be added beneath
 them. Empty category directories hold `.gitkeep` until the first package lands.

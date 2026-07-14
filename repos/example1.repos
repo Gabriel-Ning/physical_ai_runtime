@@ -1,12 +1,23 @@
-# Example 1 — full Git repos only (Marvin embodiment).
-# Apps/toolbox from runtime_resources are fetched with curl|tar into src/apps
-# and src/toolbox (vcs cannot map a monorepo subdirectory into those paths).
+# Example 1 — apps from Gabriel-Ning/runtime_resources → src/apps/
+#
+# runtime_resources is a monorepo, so these entries are not meant for a plain
+# `vcs import` of the whole Git tree into each path. Fetch with:
+#
+#   bash scripts/fetch_example1_apps.sh
+#
+# or:
+#
+#   mkdir -p src/apps
+#   curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
+#     | tar -xz --strip-components=2 -C src/apps runtime_resources-main/apps
+#
+# Safe to re-run (overwrites packages under src/apps/).
 repositories:
-  embodiments/robots/marvin/marvin_description:
+  apps/marvin_rviz_debug_bringup:
     type: git
-    url: https://github.com/Gabriel-Ning/marvin_description.git
+    url: https://github.com/Gabriel-Ning/runtime_resources.git
     version: main
-  embodiments/robots/marvin/marvin_hardware_interface:
+  apps/marvin_trajectory_jtc_test:
     type: git
-    url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
+    url: https://github.com/Gabriel-Ning/runtime_resources.git
     version: main

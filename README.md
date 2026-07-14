@@ -115,31 +115,27 @@ Default build type is `Release`. After the first successful build,
 
 The current example is Marvin:
 [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
-(`apps/` → `src/apps/`, `toolbox/` → `src/toolbox/`) plus the Marvin
-embodiment packages. It builds on the necessary execution manager above
-(RViz marker → EM → task-space controller). Prefer
-`use_fake_hardware:=true` until you intentionally gate real hardware.
+apps (→ `src/apps/`) plus Marvin embodiment packages and the marker toolbox.
+It builds on the necessary execution manager above (RViz marker → EM →
+task-space controller). Prefer `use_fake_hardware:=true` until you
+intentionally gate real hardware.
 
 ```bash
-# Marvin embodiment (separate Git repos) via vcs — re-runnable
-vcs import src < repos/example1.repos
+# Embodiment (separate Git repos) via vcs — re-runnable
+vcs import src < repos/embodiment.repos
 
-# runtime_resources apps/ → src/apps/, toolbox/ → src/toolbox/
-# (direct extract, no /tmp; safe to re-run and overwrite)
-mkdir -p src/apps src/toolbox
-curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=2 -C src/apps runtime_resources-main/apps
+# Example 1 apps from runtime_resources → src/apps/ (see repos/example1.repos)
+bash scripts/fetch_example1_apps.sh
+
+# Marker toolbox from the same monorepo → src/toolbox/
+mkdir -p src/toolbox
 curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
   | tar -xz --strip-components=2 -C src/toolbox runtime_resources-main/toolbox
 
 pixi run build
 ```
 
-`vcs` clones whole repositories; `runtime_resources` keeps several packages in
-one repo, so apps/toolbox are unpacked with `curl|tar` straight into
-`src/apps` and `src/toolbox`. Do **not** nest the whole `runtime_resources`
-tree under `src/runtime_resources/`.
-
+Do **not** nest the whole `runtime_resources` tree under `src/runtime_resources/`.
 Then follow `src/apps/marvin_rviz_debug_bringup`.
 
 ### Package map
@@ -148,10 +144,10 @@ Then follow `src/apps/marvin_rviz_debug_bringup`.
 |------|---------|-------------|
 | Necessary | [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/…` via `repos/necessary.repos` |
 | Necessary | [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/…` via `repos/necessary.repos` |
-| Example 1 | `runtime_resources` `apps/*` | `src/apps/` via `curl\|tar` |
+| Example 1 | `runtime_resources` `apps/*` | `src/apps/` via `repos/example1.repos` + `scripts/fetch_example1_apps.sh` |
 | Example 1 | `runtime_resources` `toolbox/*` | `src/toolbox/` via `curl\|tar` |
-| Example 1 | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/…` via `repos/example1.repos` |
-| Example 1 | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/…` via `repos/example1.repos` |
+| Embodiment | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/…` via `repos/embodiment.repos` |
+| Embodiment | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/…` via `repos/embodiment.repos` |
 
 `colcon` discovers packages recursively under `src/`.
 

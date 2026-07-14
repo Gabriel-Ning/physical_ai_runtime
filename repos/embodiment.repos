@@ -1,0 +1,10 @@
+# Marvin embodiment packages (full Git repos).
+repositories:
+  embodiments/robots/marvin/marvin_description:
+    type: git
+    url: https://github.com/Gabriel-Ning/marvin_description.git
+    version: main
+  embodiments/robots/marvin/marvin_hardware_interface:
+    type: git
+    url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
+    version: main
