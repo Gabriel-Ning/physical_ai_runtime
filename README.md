@@ -113,11 +113,11 @@ Default build type is `Release`. After the first successful build,
 ## Example 1 — Marvin bringup
 
 The current example is Marvin:
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) (a
-mirror of this workspace's `src/` layout: `apps/` → `src/apps/`, `toolbox/` →
-`src/toolbox/`, …) plus the Marvin embodiment packages. It builds on the
-necessary execution manager above (RViz marker → EM → task-space controller).
-Prefer `use_fake_hardware:=true` until you intentionally gate real hardware.
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
+(`apps/` → `src/apps/`, `toolbox/` → `src/toolbox/`) plus the Marvin
+embodiment packages. It builds on the necessary execution manager above
+(RViz marker → EM → task-space controller). Prefer
+`use_fake_hardware:=true` until you intentionally gate real hardware.
 
 ```bash
 # Place example packages into matching src/ ownership dirs

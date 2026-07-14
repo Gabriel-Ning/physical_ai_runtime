@@ -26,11 +26,11 @@ This repository is a **shared workspace template**: Pixi + colcon + docs + empty
 (`manipulation_execution_manager`, `isaacteleop_toolbox`) into matching `src/`
 paths, then optionally assemble **Example 1** (Marvin).
 
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) is a
-**folder-layout mirror of `src/`** (`apps/` → `src/apps/`, `toolbox/` →
-`src/toolbox/`, …). Copy its example packages into those ownership dirs — do
-not nest the whole repo as `src/runtime_resources/`. Marvin embodiment packages
-stay in their own repos under `src/embodiments/robots/marvin/`.
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) holds
+Example 1 app/toolbox packages (`apps/` → `src/apps/`, `toolbox/` →
+`src/toolbox/`). Copy those packages into the ownership dirs — do not nest the
+whole repo as `src/runtime_resources/`. Marvin embodiment packages stay in
+their own repos under `src/embodiments/robots/marvin/`.
 
 Necessary:
 
