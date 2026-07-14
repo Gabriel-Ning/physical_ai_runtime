@@ -1,18 +1,14 @@
 [workspace]
 name = "physical-ai-runtime"
 version = "0.1.0"
-description = "Release-first ROS 2 Jazzy runtime for Physical AI systems"
+description = "CPU / realtime-kernel ROS 2 Jazzy runtime (no NVIDIA GPU / Isaac Teleop / cuRobo stack)"
 authors = ["Gabriel-Ning <guomning@gmail.com>"]
 channels = ["robostack-jazzy", "conda-forge", "https://prefix.dev/gabriel-robotics"]
 platforms = ["linux-64"]
 
-# Match isaacteleop manylinux_2_35 so `pixi install --locked` does not treat the
-# lock as stale relative to the direct wheel URL.
-[system-requirements]
-libc = "2.35"
-
+# cpu branch: conda-only. No [pypi-dependencies] (torch, isaacteleop, pyroki,
+# nvidia-curobo, and their NVIDIA wheel indexes live on main only).
 # One supported Pixi environment. No [feature.*] / multi-env split.
-# Conda owns numpy + opencv; never add them under [pypi-dependencies].
 
 [dependencies]
 python = "3.12.*"
@@ -96,50 +92,10 @@ filelock = "*"
 ros-jazzy-launch-testing = "*"
 ros-jazzy-launch-pytest = "*"
 
-# ── PyPI (flat; torch declared once for teleop + planners) ───────────────────
-#
-# Intentionally omitted as pypi (already provided by conda / transitive):
-#   pin          -> pinocchio via placo / ros-jazzy-pinocchio
-#   pyyaml       -> conda pyyaml (ROS stack)
-#   scipy        -> conda scipy
-#   msgpack      -> conda msgpack-python
-# Do not add numpy, opencv-python, or opencv-python-headless here.
-
-[pypi-options]
-index-url = "https://pypi.org/simple"
-extra-index-urls = ["https://pypi.nvidia.com", "https://download.pytorch.org/whl/cu130"]
-index-strategy = "unsafe-best-match"
-
-[pypi-dependencies]
-torch = { version = ">=2.9", index = "https://download.pytorch.org/whl/cu130" }
-
-# Isaac Teleop (wheel URL avoids manylinux_2_28 vs NVIDIA manylinux_2_35 mismatch)
-isaacteleop = { url = "https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl" }
-mcap = ">=1.2.0"
-msgpack-numpy = "*"
-nlopt = ">=2.8.0"
-viser = ">=0.2.0"
-websockets = ">=14.0"
-cmeel-tinyxml2 = "*"
-cmeel-urdfdom = "*"
-daqp = "*"
-loop-rate-limiters = "*"
-pin-pink = "*"
-dex-retargeting = "*"
-
-# Motion planning backends (git-pinned; never live-query upstream HEAD)
-# Bump pyroki: git ls-remote https://github.com/Gabriel-Ning/pyroki.git main
-# then `pixi update pyroki` with PIXI_FROZEN unset.
-pyroki = { git = "https://github.com/Gabriel-Ning/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
-# Bump curobo: git ls-remote https://github.com/Gabriel-Ning/curobo.git main
-# then `pixi update nvidia-curobo` with PIXI_FROZEN unset.
-nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3", extras = ["cu13-torch"] }
-
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
-CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 # Cross-machine DDS is optional. Leave these commented for single-host use.
 # For a camera LAN (or any multi-host domain), copy
