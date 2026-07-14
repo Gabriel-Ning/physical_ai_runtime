@@ -23,25 +23,29 @@ scripts/                   idempotent workspace setup and diagnostics
 ```
 
 This repository is a **shared workspace template**: Pixi + colcon + docs + empty
-`src/` categories. Teams learn and develop by cloning **external example /
-tutorial packages** into the matching `src/` path (`git clone`, not
-submodules). Those checkouts are local working trees and are not committed back
-into this template. Marvin debug bringups used as tutorials live in
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources);
-embodiment and execution packages stay in their own repos.
+`src/` categories. Teams clone **necessary** packages
+(`manipulation_execution_manager`, `isaacteleop_toolbox`) into matching `src/`
+paths, then optionally clone **Example 1** (Marvin):
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) apps
+plus `marvin_description` / `marvin_hardware_interface` under
+`src/embodiments/robots/marvin/`. Use `git clone` (not submodules); local
+checkouts are not committed back into this template.
 
-Typical clones:
+Necessary:
 
 - [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
   → `src/execution/manipulation_execution_manager`
 - [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
   → `src/teleop/isaacteleop_toolbox`
+
+Example 1 (Marvin):
+
+- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
+  → `src/runtime_resources`
 - [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
   → `src/embodiments/robots/marvin/marvin_description`
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
   → `src/embodiments/robots/marvin/marvin_hardware_interface`
-- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
-  → `src/runtime_resources`
 
 Directories express ownership; only real ROS packages should be added beneath
 them. Empty category directories hold `.gitkeep` until the first package lands.
