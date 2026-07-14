@@ -9,6 +9,10 @@ platforms = ["linux-64"]
 # cpu branch: conda-only. No [pypi-dependencies] (torch, isaacteleop, pyroki,
 # nvidia-curobo, and their NVIDIA wheel indexes live on main only).
 # One supported Pixi environment. No [feature.*] / multi-env split.
+# Robostack realsense / libudev need a declared glibc floor or the solver
+# reports "__glibc ... no candidates".
+[system-requirements]
+libc = "2.35"
 
 [dependencies]
 python = "3.12.*"
@@ -54,6 +58,7 @@ ros-jazzy-mujoco-vendor = "*"
 # ── Robot SDKs (gabriel-robotics channel) ────────────────────────────────────
 libpiper = ">=0.1.0,<0.2"
 libmarvin = "==0.1.0"
+libmvs = "4.7.0.3.*"
 
 # ── Sensors / calibration ────────────────────────────────────────────────────
 ros-jazzy-orbbec-camera = "*"

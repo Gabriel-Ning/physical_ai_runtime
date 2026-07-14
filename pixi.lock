@@ -265,6 +265,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmarvin-0.1.0-hb0f4dca_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libmicrohttpd-1.0.5-hc2fc477_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libmujoco-3.8.1-h70afa4a_1.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libnetcdf-4.10.0-nompi_h3fa17b5_205.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libnghttp2-1.68.1-h877daf1_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/libnsl-2.0.1-hb9d3cd8_1.conda
@@ -4470,6 +4471,18 @@ packages:
   purls: []
   size: 11231161
   timestamp: 1779878063159
+- conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_1.conda
+  sha256: f49e8fcc0c0778992c1c48271a0297322694f1d9ac00dd4d428d713d4db95c54
+  md5: 96e1b9556cf5451d123736aa631ea911
+  depends:
+  - libgcc >=14
+  - libstdcxx >=14
+  - libdrm >=2.4
+  - libzlib >=1.3
+  - bzip2 >=1.0.8
+  license: LicenseRef-Hikrobot-MVS
+  size: 22642674
+  timestamp: 1783009154520
 - conda: https://conda.anaconda.org/conda-forge/linux-64/libnetcdf-4.10.0-nompi_h3fa17b5_205.conda
   build_number: 105
   sha256: 3bc277e30bb2dc0bece235239c4d7dbe3b8f6c31239eec0c6bf88649f93d1459
