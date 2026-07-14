@@ -1,0 +1,12 @@
+# Example 1 — full Git repos only (Marvin embodiment).
+# Apps/toolbox from runtime_resources are fetched with curl|tar into src/apps
+# and src/toolbox (vcs cannot map a monorepo subdirectory into those paths).
+repositories:
+  embodiments/robots/marvin/marvin_description:
+    type: git
+    url: https://github.com/Gabriel-Ning/marvin_description.git
+    version: main
+  embodiments/robots/marvin/marvin_hardware_interface:
+    type: git
+    url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
+    version: main

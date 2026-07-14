@@ -1,0 +1,9 @@
+repositories:
+  execution/manipulation_execution_manager:
+    type: git
+    url: https://github.com/Gabriel-Ning/manipulation_execution_manager.git
+    version: main
+  teleop/isaacteleop_toolbox:
+    type: git
+    url: https://github.com/Gabriel-Ning/isaacteleop_toolbox.git
+    version: main

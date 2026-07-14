@@ -81,23 +81,24 @@ eval "$(pixi shell-hook --frozen)"
 
 ### 4. Clone necessary packages
 
-These two packages are part of the baseline stack. Clone them into the matching
-ownership paths — **do not** add them as git submodules, and **do not** commit
-those checkouts back into this template.
+These two packages are part of the baseline stack. Import them with
+[`vcs`](https://github.com/dirk-thomas/vcstool) (already in the Pixi env) into
+the matching ownership paths — **do not** add them as git submodules, and
+**do not** commit those checkouts back into this template.
 
 ```bash
-# Execution manager (validation / arbitration / streaming routes)
-git clone https://github.com/Gabriel-Ning/manipulation_execution_manager.git \
-  src/execution/manipulation_execution_manager
-
-# Isaac Teleop source package (needs the main / GPU Pixi env, not cpu)
-git clone https://github.com/Gabriel-Ning/isaacteleop_toolbox.git \
-  src/teleop/isaacteleop_toolbox
-
+vcs import src < repos/necessary.repos
 pixi run build
 ```
 
+Safe to run again: missing entries are added; to refresh existing checkouts:
+
+```bash
+vcs pull src
+```
+
 See each package README for launches, CloudXR setup, and tests.
+`isaacteleop_toolbox` needs the `main` / GPU Pixi env (not the `cpu` branch).
 
 ### 5. Build / test / clean
 
@@ -120,38 +121,37 @@ embodiment packages. It builds on the necessary execution manager above
 `use_fake_hardware:=true` until you intentionally gate real hardware.
 
 ```bash
-# Place example packages into matching src/ ownership dirs
-git clone https://github.com/Gabriel-Ning/runtime_resources.git /tmp/runtime_resources
-cp -a /tmp/runtime_resources/apps/marvin_rviz_debug_bringup \
-      /tmp/runtime_resources/apps/marvin_trajectory_jtc_test \
-      src/apps/
-cp -a /tmp/runtime_resources/toolbox/rviz_interactive_marker_teleop \
-      src/toolbox/
+# Marvin embodiment (separate Git repos) via vcs — re-runnable
+vcs import src < repos/example1.repos
 
-# Marvin embodiment (external repos)
-mkdir -p src/embodiments/robots/marvin
-git clone https://github.com/Gabriel-Ning/marvin_description.git \
-  src/embodiments/robots/marvin/marvin_description
-git clone https://github.com/Gabriel-Ning/marvin_hardware_interface.git \
-  src/embodiments/robots/marvin/marvin_hardware_interface
+# runtime_resources apps/ → src/apps/, toolbox/ → src/toolbox/
+# (direct extract, no /tmp; safe to re-run and overwrite)
+mkdir -p src/apps src/toolbox
+curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=2 -C src/apps runtime_resources-main/apps
+curl -fsSL https://github.com/Gabriel-Ning/runtime_resources/archive/refs/heads/main.tar.gz \
+  | tar -xz --strip-components=2 -C src/toolbox runtime_resources-main/toolbox
 
 pixi run build
 ```
 
-Then follow `src/apps/marvin_rviz_debug_bringup`. Do **not** nest the whole
-`runtime_resources` repo under `src/runtime_resources/`.
+`vcs` clones whole repositories; `runtime_resources` keeps several packages in
+one repo, so apps/toolbox are unpacked with `curl|tar` straight into
+`src/apps` and `src/toolbox`. Do **not** nest the whole `runtime_resources`
+tree under `src/runtime_resources/`.
+
+Then follow `src/apps/marvin_rviz_debug_bringup`.
 
 ### Package map
 
-| Role | Package | Clone / place into |
-|------|---------|-------------------|
-| Necessary | [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/manipulation_execution_manager` |
-| Necessary | [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/isaacteleop_toolbox` |
-| Example 1 | `runtime_resources` → `apps/marvin_rviz_debug_bringup` | `src/apps/marvin_rviz_debug_bringup` |
-| Example 1 | `runtime_resources` → `apps/marvin_trajectory_jtc_test` | `src/apps/marvin_trajectory_jtc_test` |
-| Example 1 | `runtime_resources` → `toolbox/rviz_interactive_marker_teleop` | `src/toolbox/rviz_interactive_marker_teleop` |
-| Example 1 | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/marvin_description` |
-| Example 1 | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/marvin_hardware_interface` |
+| Role | Package | Place under |
+|------|---------|-------------|
+| Necessary | [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager) | `src/execution/…` via `repos/necessary.repos` |
+| Necessary | [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox) | `src/teleop/…` via `repos/necessary.repos` |
+| Example 1 | `runtime_resources` `apps/*` | `src/apps/` via `curl\|tar` |
+| Example 1 | `runtime_resources` `toolbox/*` | `src/toolbox/` via `curl\|tar` |
+| Example 1 | [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description) | `src/embodiments/robots/marvin/…` via `repos/example1.repos` |
+| Example 1 | [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface) | `src/embodiments/robots/marvin/…` via `repos/example1.repos` |
 
 `colcon` discovers packages recursively under `src/`.
 
