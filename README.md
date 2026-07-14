@@ -18,6 +18,8 @@ Related package repositories (clone into `src/` as needed):
 
 - [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
 - [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
+- [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
+- [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
 - [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) (bringups / toolbox)
 
 ## Features
@@ -101,6 +103,13 @@ git clone https://github.com/Gabriel-Ning/manipulation_execution_manager.git \
 # Isaac Teleop source package (needs the main / GPU Pixi env)
 git clone https://github.com/Gabriel-Ning/isaacteleop_toolbox.git \
   src/teleop/isaacteleop_toolbox
+
+# Marvin embodiment (description + hardware interface)
+mkdir -p src/embodiments/robots/marvin
+git clone https://github.com/Gabriel-Ning/marvin_description.git \
+  src/embodiments/robots/marvin/marvin_description
+git clone https://github.com/Gabriel-Ning/marvin_hardware_interface.git \
+  src/embodiments/robots/marvin/marvin_hardware_interface
 
 # Optional: bringups + RViz marker teleop
 # git clone https://github.com/Gabriel-Ning/runtime_resources.git \

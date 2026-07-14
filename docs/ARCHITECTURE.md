@@ -35,6 +35,12 @@ Typical clones:
   → `src/execution/manipulation_execution_manager`
 - [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
   → `src/teleop/isaacteleop_toolbox`
+- [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
+  → `src/embodiments/robots/marvin/marvin_description`
+- [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
+  → `src/embodiments/robots/marvin/marvin_hardware_interface`
+- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
+  → `src/runtime_resources`
 
 Directories express ownership; only real ROS packages should be added beneath
 them. Empty category directories hold `.gitkeep` until the first package lands.
