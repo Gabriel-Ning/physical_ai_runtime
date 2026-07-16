@@ -3,9 +3,9 @@
 A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems.
 Everyone starts from this shared baseline: install the locked environment, clone
 the necessary packages into `src/`, then optionally pull the Marvin example to
-learn the layout and develop on top. Component code stays in its own
-repositories — this tree only provides Pixi/colcon scaffolding, ownership
-directories, and docs.
+learn the layout and develop on top. Domain and application packages stay in
+their own repositories; this workspace owns the Pixi/colcon scaffolding, docs,
+and small reusable toolbox packages.
 
 Architecture, examples, and migration notes live under [`docs/`](docs/):
 
@@ -18,8 +18,9 @@ Architecture, examples, and migration notes live under [`docs/`](docs/):
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
-- **Empty `src/` layout**: category folders with `.gitkeep`; packages are
-  cloned in (not submodules, not vendored here)
+- **Ownership-based `src/` layout**: external domain/application repositories
+  are imported with `vcstool`; small workspace-level utilities live under
+  `src/toolbox`
 
 ## Prerequisites
 
@@ -80,15 +81,26 @@ eval "$(pixi shell-hook --frozen)"
 `CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
 `pixi.toml` `[activation.env]` via the shell hook.
 
-### 4. Clone necessary packages
+### 4. Clone functional packages and examples
 
-These two packages are part of the baseline stack. Import them with
-[`vcs`](https://github.com/dirk-thomas/vcstool) (already in the Pixi env) into
-the matching ownership paths — **do not** add them as git submodules, and
-**do not** commit those checkouts back into this template.
+Import baseline functional packages from `necessary.repos`. Import the optional
+flat `runtime_resources` application checkout separately from `example.repos`.
+Use [`vcs`](https://github.com/dirk-thomas/vcstool) (already in the Pixi env)
+for both — **do not** add the checkouts as git submodules, and **do not** commit
+them back into this template.
+
+| Manifest | Purpose | Checkout roots |
+|---|---|---|
+| `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
+| `repos/example.repos` | Optional runnable example applications | `src/apps` |
+| `repos/embodiment.repos` | Marvin description and hardware integration | `src/embodiments/robots/marvin` |
 
 ```bash
 vcs import src < repos/necessary.repos
+# Optional example applications
+vcs import src < repos/example.repos
+# Required when running the Marvin example
+vcs import src < repos/embodiment.repos
 pixi run build
 ```
 
@@ -99,7 +111,8 @@ vcs pull src
 ```
 
 See each package README for launches, CloudXR setup, and tests.
-`isaacteleop_toolbox` needs the `main` / GPU Pixi env (not the `cpu` branch).
+`isaacteleop_toolbox` and the motion-planner adapters need the `main` / GPU
+Pixi env (not the `cpu` branch).
 
 ### 5. Build / test / clean
 

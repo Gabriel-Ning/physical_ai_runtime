@@ -7,3 +7,7 @@ repositories:
     type: git
     url: https://github.com/Gabriel-Ning/isaacteleop_toolbox.git
     version: main
+  motion_planning/motion_planners:
+    type: git
+    url: https://github.com/Gabriel-Ning/motion_planners.git
+    version: main

@@ -3,7 +3,8 @@ repositories:
   embodiments/robots/marvin/marvin_description:
     type: git
     url: https://github.com/Gabriel-Ning/marvin_description.git
-    version: main
+    # Site-calibrated geometry (mounts, stand, base mesh). Official CAD lives on main.
+    version: dev
   embodiments/robots/marvin/marvin_hardware_interface:
     type: git
     url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
