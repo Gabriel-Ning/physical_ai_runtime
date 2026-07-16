@@ -11801,8 +11801,8 @@ packages:
   size: 218938
   timestamp: 1782304089896
 - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
-  sha256: 3dfca81066b22403b5eca911b77da0136bb0baebe30af2ce7acff165bdd9b40a
-  md5: 103a202e0a79fe289e7981f5d4ba920e
+  sha256: eeca95d1a00e0ca2549d403d61da851549d3fc4ae07e20d27111c4c727ca7a7e
+  md5: 6424af35c99898abecc33f2f218fd9b8
   depends:
   - libosqp
   - osqp-eigen
@@ -11822,11 +11822,11 @@ packages:
   - ros-jazzy-trajectory-msgs
   - libstdcxx >=15
   - libgcc >=15
-  - libosqp >=1.0.0,<1.0.1.0a0
   - osqp-eigen >=0.11.0,<0.12.0a0
+  - libosqp >=1.0.0,<1.0.1.0a0
   license: Apache-2.0
-  size: 539573
-  timestamp: 1783929495995
+  size: 543584
+  timestamp: 1784109798551
 - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-map-msgs-2.4.1-np2py312h2ed9cc7_18.conda
   sha256: 0669b179b281c7a8c896c097c67cde1aaf5f2412e6ca7c058f54e33e19bfda3f
   md5: aaf3b4a14bace9fe528dd1ada074587d
