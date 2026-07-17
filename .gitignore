@@ -29,6 +29,7 @@ venv/
 .config/*
 !.config/
 !.config/cyclonedds_template.xml
+!.config/cyclonedds_default.xml
 
 # Runtime data and machine-local state
 .cloudxr/*
@@ -54,3 +55,6 @@ ref/
 src/**/*
 !src/**/
 !src/**/.gitkeep
+# Repository-owned Hikrobot sensor packages.
+!src/embodiments/sensors/hik_camera/**
+!src/embodiments/sensors/hik_camera_msg/**

@@ -9,3 +9,8 @@ repositories:
     type: git
     url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
     version: main
+  embodiments/sensors/hikvision_ros2:
+    type: git
+    url: https://github.com/Gabriel-Ning/hikvision_ros2.git
+    # Validated two-package release from PR #1; use master after it is merged.
+    version: 33b0c2a
