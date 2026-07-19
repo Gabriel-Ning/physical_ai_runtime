@@ -1,0 +1,8 @@
+<library path="rviz_topic_button_panel">
+  <class
+    name="rviz_topic_button_panel/EmptyTopicButtonPanel"
+    type="rviz_topic_button_panel::EmptyTopicButtonPanel"
+    base_class_type="rviz_common::Panel">
+    <description>Two configurable buttons that publish std_msgs/Empty.</description>
+  </class>
+</library>
