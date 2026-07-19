@@ -10,6 +10,7 @@ and small reusable toolbox packages.
 Architecture, examples, and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
 - [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
 - [Migration](docs/MIGRATION.md)
 
@@ -90,16 +91,16 @@ for both — **do not** add the checkouts as git submodules, and **do not** comm
 them back into this template.
 
 | Manifest | Purpose | Checkout roots |
-|---|---|---|
+| --- | --- | --- |
 | `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
 | `repos/example.repos` | Optional runnable example applications | `src/apps` |
-| `repos/embodiment.repos` | Marvin description and hardware integration | `src/embodiments/robots/marvin` |
+| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin and Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/sensors/hikvision_ros2` |
 
 ```bash
 vcs import src < repos/necessary.repos
 # Optional example applications
 vcs import src < repos/example.repos
-# Required when running the Marvin example
+# Required for the Marvin and Hikvision embodiments
 vcs import src < repos/embodiment.repos
 pixi run build
 ```

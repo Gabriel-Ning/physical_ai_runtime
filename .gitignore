@@ -50,11 +50,6 @@ Thumbs.db
 # Reference checkouts are development inputs, not runtime source packages.
 ref/
 
-# Local ROS package clones under src/ stay on each developer's machine.
-# Keep only ownership scaffolding (.gitkeep); do not vendor packages here.
-src/**/*
-!src/**/
-!src/**/.gitkeep
-# Repository-owned Hikrobot sensor packages.
-!src/embodiments/sensors/hik_camera/**
-!src/embodiments/sensors/hik_camera_msg/**
+# ROS package checkouts under src/ are managed as independent repositories.
+# The workspace repository must not vendor or track anything below this path.
+/src/

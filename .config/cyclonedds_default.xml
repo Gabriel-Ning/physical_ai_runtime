@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Default single-host/multi-interface profile. Large ROS image samples need
+     more than Linux's typical 212 KiB UDP socket buffer. Site-specific
+     cross-machine profiles may additionally bind an interface and peers. -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <Internal>
+      <SocketReceiveBufferSize min="10MiB" max="10MiB" />
+      <SocketSendBufferSize min="10MiB" max="10MiB" />
+    </Internal>
+  </Domain>
+</CycloneDDS>

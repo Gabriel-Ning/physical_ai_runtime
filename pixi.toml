@@ -135,6 +135,9 @@ pyroki = { git = "https://github.com/Gabriel-Ning/pyroki.git", rev = "388e43e1fc
 # Bump curobo: git ls-remote https://github.com/Gabriel-Ning/curobo.git main
 # then `pixi update nvidia-curobo` with PIXI_FROZEN unset.
 nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3", extras = ["cu13-torch"] }
+# Runtime orchestration HTTP/WebSocket transport.
+fastapi = ">=0.139.2, <0.140"
+uvicorn = ">=0.51.0, <0.52"
 
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
@@ -142,6 +145,7 @@ nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
 CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
+CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
 # Cross-machine DDS is optional. Leave these commented for single-host use.
 # For a camera LAN (or any multi-host domain), copy
 # .config/cyclonedds_template.xml → a local filled XML under .config/, then
@@ -150,7 +154,7 @@ RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 # Do not commit filled-in host XML (gitignored); only cyclonedds_template.xml
 # is tracked.
 #ROS_DOMAIN_ID = "1"
-#CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_template.xml"
+# Override CYCLONEDDS_URI with the absolute path to the filled site profile.
 
 
 [tasks]
