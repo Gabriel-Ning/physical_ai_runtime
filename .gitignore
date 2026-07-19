@@ -60,3 +60,9 @@ ref/
 !/src/toolbox/
 !/src/toolbox/**/
 !/src/toolbox/**
+
+# Never track Python bytecode or cache directories under src.
+/src/**/__pycache__/
+/src/**/*.py[cod]
+/src/**/*.pyo
+/src/**/*.pyd
