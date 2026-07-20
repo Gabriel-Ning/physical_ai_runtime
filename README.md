@@ -1,36 +1,37 @@
 # Physical AI Runtime
 
-A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems. One
-locked environment covers ROS, native libraries, CUDA/PyTorch, and
-teleop/planning Python dependencies. This repository does **not** vendor ROS
-packages under `src/`; it only provides the Pixi/colcon shell, empty ownership
-directories, and docs.
+A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems.
+Everyone starts from this shared baseline: install the locked environment, clone
+the necessary packages into `src/`, then optionally pull the Marvin example to
+learn the layout and develop on top. Domain and application packages stay in
+their own repositories; this workspace owns the Pixi/colcon scaffolding, docs,
+and small reusable toolbox packages.
 
-Architecture and migration notes live under [`docs/`](docs/):
+Architecture, examples, and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
+- [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
 - [Migration](docs/MIGRATION.md)
-
-Reusable bringup/toolbox packages live in a separate repository:
-[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
 
 ## Features
 
 - **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
-- **Empty `src/` layout**: category folders with `.gitkeep`; add packages via
-  clone/submodule when needed
+- **Ownership-based `src/` layout**: external domain/application repositories
+  are imported with `vcstool`; small workspace-level utilities live under
+  `src/toolbox`
 
 ## Prerequisites
 
 - [Pixi](https://pixi.sh/latest/#installation)
 - [Direnv](https://direnv.net/) (recommended; install steps under Activate)
-- Git (submodules optional, only if you pull external packages that way)
+- Git
 
 ## Getting Started
 
-### 1. Clone
+### 1. Clone the workspace template
 
 ```bash
 git clone git@github.com:Gabriel-Ning/physical_ai_runtime.git
@@ -81,26 +82,51 @@ eval "$(pixi shell-hook --frozen)"
 `CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
 `pixi.toml` `[activation.env]` via the shell hook.
 
-### Add ROS packages (optional)
+### 4. Clone functional packages and examples
 
-This template ships with empty `src/` categories only. Pull packages you need,
-for example:
+Import baseline functional packages from `necessary.repos`. Import the optional
+flat `runtime_resources` application checkout separately from `example.repos`.
+Use [`vcs`](https://github.com/dirk-thomas/vcstool) (already in the Pixi env)
+for both — **do not** add the checkouts as git submodules, and **do not** commit
+them back into this template.
+
+| Manifest | Purpose | Checkout roots |
+| --- | --- | --- |
+| `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
+| `repos/example.repos` | Optional runnable example applications | `src/apps` |
+| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin and Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/sensors/hikvision_ros2` |
 
 ```bash
-# Bringups + RViz marker teleop
-git submodule add git@github.com:Gabriel-Ning/runtime_resources.git \
-  src/runtime_resources
-
-# Other component repos (examples)
-# git submodule add git@github.com:Gabriel-Ning/manipulation_execution_manager.git \
-#   src/execution/manipulation_execution_manager
-# git submodule add git@github.com:Gabriel-Ning/isaacteleop_toolbox.git \
-#   src/teleop/isaacteleop_toolbox
+vcs import src < repos/necessary.repos
+# Optional example applications
+vcs import src < repos/example.repos
+# Required for the Marvin and Hikvision embodiments
+vcs import src < repos/embodiment.repos
+pixi run build
 ```
 
-`colcon` discovers packages recursively under `src/`.
+Safe to run again: missing entries are added; to refresh existing checkouts:
 
-### Cross-machine DDS (optional)
+```bash
+vcs pull src
+```
+
+See each package README for launches, CloudXR setup, and tests.
+`isaacteleop_toolbox` and the motion-planner adapters need the `main` / GPU
+Pixi env (not the `cpu` branch).
+
+### 5. Build / test / clean
+
+```bash
+pixi run build
+pixi run test
+pixi run clean   # removes colcon build/ install/ log/
+```
+
+Default build type is `Release`. After the first successful build,
+`install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
+
+## Cross-machine DDS (optional)
 
 Same-machine ROS needs no extra CycloneDDS file. When nodes run on **different
 machines** over a dedicated LAN (for example camera hosts publishing large
@@ -123,29 +149,6 @@ Use jumbo frames (MTU 9000) on that LAN when shipping uncompressed camera
 frames. Commit only `.config/cyclonedds_template.xml`; filled-in host XML stays
 local (gitignored).
 
-### 4. Build
-
-```bash
-pixi run build
-```
-
-Default build type is `Release`. After the first successful build,
-`install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
-
-### 5. Test
-
-```bash
-pixi run test
-```
-
-### 6. Clean
-
-Remove colcon `build/`, `install/`, and `log/`:
-
-```bash
-pixi run clean
-```
-
 ## Adding Dependencies
 
 - **Conda / ROS / native packages**: edit `pixi.toml` `[dependencies]`, then
@@ -160,6 +163,10 @@ owns those ABIs.
 
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
-- Default ROS distro is **Jazzy**.
-- Application launches stay in ROS packages pulled into `src/`; Pixi tasks stay
-  limited to workspace lifecycle (`setup` / `build` / `test` / `clean` / `stop`).
+- Default ROS distro is **Jazzy**. Use branch `cpu` when you need a
+  conda-only env without NVIDIA / Isaac Teleop / cuRobo.
+- Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
+  `test` / `clean` / `stop`). For Marvin Example 1, see
+  [docs/EXAMPLE1.md](docs/EXAMPLE1.md).
+- Contribute Pixi/docs/template changes here; contribute package changes in
+  each package's own repository.

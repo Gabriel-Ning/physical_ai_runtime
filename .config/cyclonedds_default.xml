@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Default CycloneDDS profile for the Hik camera LAN.
+
+     Local interface: enp132s0 (192.168.10.13/24)
+     Camera host peer: 192.168.10.100
+     ROS domain: configured as ROS_DOMAIN_ID=1 in pixi.toml
+-->
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface address="192.168.10.13" />
+      </Interfaces>
+      <AllowMulticast>true</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers>
+        <Peer address="192.168.10.100" />
+      </Peers>
+    </Discovery>
+    <Internal>
+      <SocketReceiveBufferSize min="10MiB" max="10MiB" />
+      <SocketSendBufferSize min="10MiB" max="10MiB" />
+    </Internal>
+  </Domain>
+</CycloneDDS>

@@ -4,15 +4,13 @@ version = "0.1.0"
 description = "CPU / realtime-kernel ROS 2 Jazzy runtime (no NVIDIA GPU / Isaac Teleop / cuRobo stack)"
 authors = ["Gabriel-Ning <guomning@gmail.com>"]
 channels = ["robostack-jazzy", "conda-forge", "https://prefix.dev/gabriel-robotics"]
-platforms = ["linux-64"]
+# Robostack realsense / libudev need a declared glibc floor or the solver
+# reports "__glibc ... no candidates".
+platforms = [{ platform = "linux-64", glibc = "2.35" }]
 
 # cpu branch: conda-only. No [pypi-dependencies] (torch, isaacteleop, pyroki,
 # nvidia-curobo, and their NVIDIA wheel indexes live on main only).
 # One supported Pixi environment. No [feature.*] / multi-env split.
-# Robostack realsense / libudev need a declared glibc floor or the solver
-# reports "__glibc ... no candidates".
-[system-requirements]
-libc = "2.35"
 
 [dependencies]
 python = "3.12.*"
@@ -102,16 +100,9 @@ ros-jazzy-launch-pytest = "*"
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
-# Cross-machine DDS is optional. Leave these commented for single-host use.
-# For a camera LAN (or any multi-host domain), copy
-# .config/cyclonedds_template.xml → a local filled XML under .config/, then
-# point CYCLONEDDS_URI at that file (template itself has placeholders).
-# Prefer file:// + an absolute path; $PIXI_PROJECT_ROOT expands on activation.
-# Do not commit filled-in host XML (gitignored); only cyclonedds_template.xml
-# is tracked.
-#ROS_DOMAIN_ID = "1"
-#CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_template.xml"
-
+CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
+ROS_DOMAIN_ID = "1"
+CMAKE_GENERATOR = "Ninja"
 
 [tasks]
 setup = "bash scripts/setup.sh"

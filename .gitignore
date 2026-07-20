@@ -29,6 +29,7 @@ venv/
 .config/*
 !.config/
 !.config/cyclonedds_template.xml
+!.config/cyclonedds_default.xml
 
 # Runtime data and machine-local state
 .cloudxr/*
@@ -48,3 +49,20 @@ Thumbs.db
 
 # Reference checkouts are development inputs, not runtime source packages.
 ref/
+
+# ROS package checkouts under src/ are managed as independent repositories.
+# Keep structural placeholders so the workspace tree is present in git.
+/src/**/
+/src/**
+!/src/
+!/src/**/
+!/src/**/.gitkeep
+!/src/toolbox/
+!/src/toolbox/**/
+!/src/toolbox/**
+
+# Never track Python bytecode or cache directories under src.
+/src/**/__pycache__/
+/src/**/*.py[cod]
+/src/**/*.pyo
+/src/**/*.pyd

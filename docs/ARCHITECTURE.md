@@ -3,7 +3,7 @@
 ## Workspace layout
 
 ```text
-src/                       empty ownership dirs only (.gitkeep); no vendored packages
+src/                       ownership-oriented ROS 2 source tree
   interfaces/              shared custom ROS msg/srv/action packages, when justified
   execution/               source arbitration and execution contracts
   controller/              reusable ros2_control controllers
@@ -14,21 +14,59 @@ src/                       empty ownership dirs only (.gitkeep); no vendored pac
   motion_planning/         planner contracts and backend adapters
   recording/               raw episode recording and replay tools
   visualization/           runtime inspection and debug sources
-  toolbox/                 uncategorized reusable runtime tools
-  apps/                    robot/application launch and configuration
-  runtime_resources/       optional submodule: Gabriel-Ning/runtime_resources
+  toolbox/                 small reusable tools owned by this workspace
+  apps/                    application checkout root (optional examples)
 docs/                      architecture, contracts, validation, migration
 scripts/                   idempotent workspace setup and diagnostics
 .config/                   checked-in templates (e.g. CycloneDDS)
 ```
 
-This repository is a **workspace template**: Pixi + colcon + docs + empty
-`src/` categories. ROS packages are added by the user (clone or submodule), not
-committed here. Shared bringup/toolbox content for Marvin debug pipelines lives
-in [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources).
+This repository is a **shared workspace template**: Pixi + colcon + docs and
+workspace-owned tools. Teams import reusable functional modules through
+`repos/necessary.repos`; optional runnable examples use `repos/example.repos`;
+robot-specific descriptions and hardware integrations use
+`repos/embodiment.repos`.
 
-Directories express ownership; only real ROS packages should be added beneath
-them. Empty category directories hold `.gitkeep` until the first package lands.
+[`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) is a
+flat ROS-package repository imported once at `src/apps` through
+`repos/example.repos`. Marvin embodiment packages stay in their own repos
+under `src/embodiments/robots/marvin/`. Reusable marker teleop remains a
+workspace-owned package at `src/toolbox/rviz_interactive_marker_teleop`.
+
+Reusable functional modules (`repos/necessary.repos`):
+
+- [`manipulation_execution_manager`](https://github.com/Gabriel-Ning/manipulation_execution_manager)
+  → `src/execution/manipulation_execution_manager` (`vcs import src < repos/necessary.repos`)
+- [`isaacteleop_toolbox`](https://github.com/Gabriel-Ning/isaacteleop_toolbox)
+  → `src/teleop/isaacteleop_toolbox` (`repos/necessary.repos`)
+- [`motion_planners`](https://github.com/Gabriel-Ning/motion_planners)
+  → `src/motion_planning/motion_planners` (`repos/necessary.repos`; contains
+  `manipulation_motion_planning`, `pyroki_planner_adapter`,
+  `curobo_planner_adapter`)
+
+Optional example applications (`repos/example.repos`):
+
+- [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
+  → `src/apps` (`repos/example.repos`; flat Marvin app packages)
+
+Robot embodiment (`repos/embodiment.repos`):
+
+- [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
+  → `src/embodiments/robots/marvin/marvin_description` (`repos/embodiment.repos`,
+  branch `dev` = site-calibrated geometry; `main` = official CAD)
+- [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
+  → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/embodiment.repos`)
+
+Example 1 (Marvin apps from `runtime_resources`) — fetch/build steps and
+package map: [EXAMPLE1.md](EXAMPLE1.md).
+
+- `runtime_resources` → `src/apps` (`repos/example.repos`)
+- `rviz_interactive_marker_teleop` → `src/toolbox/` (workspace-owned)
+
+Directories express ownership. External repositories are imported at the roots
+declared by the manifests; workspace-owned reusable utilities remain directly
+under `src/toolbox`. Empty category directories use `.gitkeep` until their
+first package arrives.
 
 `interfaces/` is not a mandate to invent a universal Physical AI message
 layer. Prefer standard ROS messages (`PoseStamped`, `TwistStamped`,
