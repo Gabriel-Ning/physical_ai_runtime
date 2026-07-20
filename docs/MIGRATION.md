@@ -25,8 +25,8 @@ Dedup notes applied when merging the old workspace:
   already supplies `pinocchio` (via `placo`), `pyyaml`, `scipy`, and
   `msgpack-python`. Import path is `import pinocchio` / `import pink`
   (`pin-pink`), not bare `import pin`.
-- `[system-requirements] libc = "2.35"` matches the IsaacTeleop
-  `manylinux_2_35` wheel so `pixi install --locked` stays consistent.
+- `platforms = [{ platform = "linux-64", glibc = "2.35" }]` matches the
+  IsaacTeleop `manylinux_2_35` wheel so `pixi install --locked` stays consistent.
 - RealSense uses robostack `ros-jazzy-realsense2-camera` (+ msgs/description).
   The old `librealsense` + colcon-overlay workaround is obsolete: current
   channels solve `librealsense 2.57.7` with `realsense2-camera 4.57.7`.

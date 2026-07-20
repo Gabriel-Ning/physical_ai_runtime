@@ -4,12 +4,9 @@ version = "0.1.0"
 description = "Release-first ROS 2 Jazzy runtime for Physical AI systems"
 authors = ["Gabriel-Ning <guomning@gmail.com>"]
 channels = ["robostack-jazzy", "conda-forge", "https://prefix.dev/gabriel-robotics"]
-platforms = ["linux-64"]
-
 # Match isaacteleop manylinux_2_35 so `pixi install --locked` does not treat the
 # lock as stale relative to the direct wheel URL.
-[system-requirements]
-libc = "2.35"
+platforms = [{ platform = "linux-64", glibc = "2.35" }]
 
 # One supported Pixi environment. No [feature.*] / multi-env split.
 # Conda owns numpy + opencv; never add them under [pypi-dependencies].
@@ -146,16 +143,8 @@ WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
 CLOUDXR_DIR = "$PIXI_PROJECT_ROOT/.cloudxr"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
-# Cross-machine DDS is optional. Leave these commented for single-host use.
-# For a camera LAN (or any multi-host domain), copy
-# .config/cyclonedds_template.xml → a local filled XML under .config/, then
-# point CYCLONEDDS_URI at that file (template itself has placeholders).
-# Prefer file:// + an absolute path; $PIXI_PROJECT_ROOT expands on activation.
-# Do not commit filled-in host XML (gitignored); only cyclonedds_template.xml
-# is tracked.
-#ROS_DOMAIN_ID = "1"
-# Override CYCLONEDDS_URI with the absolute path to the filled site profile.
-
+ROS_DOMAIN_ID = "1"
+CMAKE_GENERATOR = "Ninja"
 
 [tasks]
 setup = "bash scripts/setup.sh"
