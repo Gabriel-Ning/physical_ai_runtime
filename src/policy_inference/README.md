@@ -1,0 +1,82 @@
+# Policy Inference Examples
+
+These are ordinary Python scripts, not ROS packages. Source the workspace and
+run them directly; no additional `colcon build` is needed.
+
+## 1. VLA / ACT / diffusion / flow-matching example
+
+[`examples/vla_policy_example.py`](examples/vla_policy_example.py) keeps the
+whole path visible in one file:
+
+```text
+JointState + RGB Image + task
+  -> NumPy observation dictionary
+  -> optional PyTorch tensor conversion
+  -> model action [T,D]
+  -> JointTrajectory
+  -> /action_sources/policy/joint_chunk
+```
+
+Run the safe hold example:
+
+```bash
+source install/setup.bash
+python src/policy_inference/examples/vla_policy_example.py --ros-args \
+  -p joint_names:="[joint1,joint2,joint3]" \
+  -p image_topic:=/camera/color/image_raw
+```
+
+These policy families share the same runtime shape: state, images, and optional
+language enter the model; the model returns a short receding-horizon action
+chunk `[T,D]`. Users replace `ExampleChunkPolicy.predict()` and adjust the
+observation keys required by their model.
+
+## 2. Complete trajectory example
+
+[`examples/trajectory_policy_example.py`](examples/trajectory_policy_example.py)
+shows a learning-based planner that returns:
+
+```python
+positions, times = policy.predict(observation)
+# positions: [T,D]
+# times:     [T], strictly increasing
+```
+
+Run it directly:
+
+```bash
+python src/policy_inference/examples/trajectory_policy_example.py --ros-args \
+  -p joint_names:="[joint1,joint2,joint3]"
+```
+
+The example publishes one complete trajectory and then waits.
+
+## Execution Manager inputs
+
+VLA chunks publish to:
+
+```text
+/action_sources/policy/joint_chunk
+```
+
+Complete learned trajectories publish to:
+
+```text
+/action_sources/policy/joint_trajectory_goal
+```
+
+The complete-trajectory input is opt-in. The application-owned Execution
+Manager configuration must enable it:
+
+```yaml
+execution_manager:
+  ros__parameters:
+    sources: >-
+      {"policy":{"priority":50,
+                  "inactive_timeout_s":1.0,
+                  "goal_contracts":["joint_trajectory_goal"]}}
+```
+
+EM forwards accepted complete trajectories to its configured
+`FollowJointTrajectory` action server. Both examples default to hold outputs;
+validate model-specific motion first with fake hardware.
