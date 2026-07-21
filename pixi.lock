@@ -955,7 +955,7 @@ environments:
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-zstd-vendor-0.26.10-np2py312h2ed9cc7_18.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros2-distro-mutex-0.15.0-jazzy_18.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmarvin-0.1.0-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_1.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
@@ -17614,18 +17614,20 @@ packages:
   license: Apache-2.0
   size: 65582
   timestamp: 1781945969204
-- conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_1.conda
-  sha256: f49e8fcc0c0778992c1c48271a0297322694f1d9ac00dd4d428d713d4db95c54
-  md5: 96e1b9556cf5451d123736aa631ea911
+- conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
+  sha256: e0f80a7acac4add3b3a9ae5485e02045cb985b4c9af47d67e91df1f5830673f6
+  md5: f6b59bc181b9ab3375db27587d3a6641
   depends:
   - libgcc >=14
   - libstdcxx >=14
   - libdrm >=2.4
   - libzlib >=1.3
   - bzip2 >=1.0.8
+  - libusb >=1.0.29
   license: LicenseRef-Hikrobot-MVS
-  size: 22642674
-  timestamp: 1783009154520
+  run_exports: {}
+  size: 22018688
+  timestamp: 1784210042593
 - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
   sha256: 799c5f452cae72a5a9212a7a8871c1f26537a3bb428541fac69992e8f76792ed
   md5: cc69c57f681fc6075ae888e745ece771
