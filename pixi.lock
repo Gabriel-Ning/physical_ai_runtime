@@ -958,6 +958,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.2.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
@@ -17653,9 +17654,34 @@ packages:
   license: MIT
   size: 731111
   timestamp: 1782804885894
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.2.0-hb0f4dca_0.conda
+  sha256: 333d86dca93363001b359de25fe40c38b394015f24beb90fc6bb5af8d3fcf618
+  md5: a024270f4f9346c2d1e506a4a03d5d0c
+  depends:
+  - ros-jazzy-lifecycle-msgs
+  - ros-jazzy-launch-ros
+  - ros-jazzy-rclcpp
+  - ros-jazzy-rclcpp-lifecycle
+  - ros-jazzy-rclpy
+  - ros-jazzy-ros2run
+  - ros-jazzy-rosbag2-cpp
+  - ros-jazzy-rosbag2-py
+  - ros-jazzy-rosbag2-storage
+  - ros-jazzy-rosbag2-storage-mcap
+  - ros-jazzy-rosidl-runtime-py
+  - ros-jazzy-sensor-msgs
+  - ros-jazzy-std-srvs
+  - yaml-cpp
+  - libstdcxx >=15
+  - libgcc >=15
+  - yaml-cpp >=0.8.0,<0.9.0a0
+  license: Apache-2.0
+  run_exports: {}
+  size: 305139
+  timestamp: 1784645691448
 - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
-  sha256: 3dfca81066b22403b5eca911b77da0136bb0baebe30af2ce7acff165bdd9b40a
-  md5: 103a202e0a79fe289e7981f5d4ba920e
+  sha256: eeca95d1a00e0ca2549d403d61da851549d3fc4ae07e20d27111c4c727ca7a7e
+  md5: 6424af35c99898abecc33f2f218fd9b8
   depends:
   - libosqp
   - osqp-eigen
@@ -17675,8 +17701,9 @@ packages:
   - ros-jazzy-trajectory-msgs
   - libstdcxx >=15
   - libgcc >=15
-  - libosqp >=1.0.0,<1.0.1.0a0
   - osqp-eigen >=0.11.0,<0.12.0a0
+  - libosqp >=1.0.0,<1.0.1.0a0
   license: Apache-2.0
-  size: 539573
-  timestamp: 1783929495995
+  run_exports: {}
+  size: 543584
+  timestamp: 1784109798551
