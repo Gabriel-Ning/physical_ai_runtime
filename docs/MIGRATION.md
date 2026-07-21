@@ -184,7 +184,7 @@ Current evidence:
   swaps to the real plugin with `robot_ip` param wired through, verified by
   xacro expansion only (no real hardware connection attempted from this
   session);
-- first closed loop composed in `src/apps/marvin_rviz_debug_bringup`, made
+- first closed loop composed in `src/apps/marvin_controller_bringup`, made
   bimanual: two independent chains, one per arm --
   `rviz_interactive_marker_teleop` (`target_marker_left`/`_right`) ->
   `manipulation_execution_manager` (`em_left`/`em_right`) ->
@@ -279,6 +279,15 @@ Current evidence (partial):
 - default output topic aligned to the EM pose contract
   (`/action_sources/marker/pose_target`);
 - Release build succeeds; no unit tests in the upstream package yet.
+
+Site co-location validation on the RT host (8× Hik Bayer + Marvin +
+`episode_recorder`) is tracked in
+[COLOCATION_VALIDATION.md](COLOCATION_VALIDATION.md). As of 2026-07-21,
+Gate0–5 stage validation passed on this PC, including 9/9 full multimodal
+episodes with `incomplete_bursts=0` and recorder drops=0. Multi-hour burn-in,
+the camera burst-pool redesign, Marvin staging-WARN cleanup, and cross-PC
+clock-offset logging remain open; this evidence is not a production
+certification.
 
 ## Gate 6 — release acceptance
 

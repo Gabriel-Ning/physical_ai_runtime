@@ -28,7 +28,7 @@ pixi run build
 ```
 
 Then follow `src/apps/marvin_motion_planning_bringup` or
-`src/apps/marvin_rviz_debug_bringup`.
+`src/apps/marvin_controller_bringup`.
 
 Application launches live under `src/apps/`; Pixi
 tasks stay limited to workspace lifecycle (`setup` / `build` / `test` /

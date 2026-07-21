@@ -12,6 +12,7 @@ src/                       ownership-oriented ROS 2 source tree
     sensors/               sensor model defaults; no application composition
   teleop/                  device/session adapters and retargeters
   motion_planning/         planner contracts and backend adapters
+  policy_inference/        deployed policy inference and runtime adapters
   recording/               raw episode recording and replay tools
   visualization/           runtime inspection and debug sources
   toolbox/                 small reusable tools owned by this workspace
