@@ -86,6 +86,7 @@ ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
 ros-jazzy-joy-linux = ">=3.3.0,<4"
 
 # ── Recording / visualization / debug ────────────────────────────────────────
+ros-jazzy-episode-recorder = "==0.2.0"
 ros-jazzy-foxglove-bridge = "*"
 ros-jazzy-rqt-action = ">=2.2.0,<3"
 filelock = "*"
