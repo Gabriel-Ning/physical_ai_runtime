@@ -23,7 +23,13 @@ Architecture, examples, and migration notes live under [`docs/`](docs/):
   are imported with `vcstool`; small workspace-level utilities live under
   `src/toolbox`
 
-## Prerequisites
+## Requirements
+
+Python is managed by Pixi (conda-style solver). If you don't have Pixi yet:
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+```
 
 - [Pixi](https://pixi.sh/latest/#installation)
 - [Direnv](https://direnv.net/) (recommended; install steps under Activate)
