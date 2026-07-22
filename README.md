@@ -89,6 +89,10 @@ After this, entering the repository directory activates the locked Pixi
 environment and sources `install/setup.bash` when it exists. Leaving the
 directory deactivates it.
 
+`.envrc` follows the env you used for setup: `pixi run setup` writes
+`.pixi/environment` (`default` or `cpu`), and Direnv activates that same
+env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=default` if needed.
+
 Without Direnv:
 
 ```bash
