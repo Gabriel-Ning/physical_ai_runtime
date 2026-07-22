@@ -16,7 +16,8 @@ Architecture, examples, and migration notes live under [`docs/`](docs/):
 
 ## Features
 
-- **Pixi**: single solved environment for ROS 2 Jazzy, system deps, and PyPI
+- **Pixi**: locked multi-env workspace — **default = GPU** (PyPI + CloudXR),
+  optional **`cpu`** env (conda-only)
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
 - **Ownership-based `src/` layout**: external domain/application repositories
@@ -46,9 +47,19 @@ cd physical_ai_runtime
 
 ### 2. Initialize the environment
 
+Default install is the **GPU** environment (former `main` stack):
+
 ```bash
 pixi install --locked
 pixi run setup
+```
+
+For the **CPU** / realtime-kernel stack (former `cpu` branch — no NVIDIA /
+Isaac Teleop / cuRobo / CloudXR):
+
+```bash
+pixi install --locked -e cpu
+pixi run -e cpu setup
 ```
 
 ### 3. Activate (recommended: Direnv)
@@ -81,12 +92,14 @@ directory deactivates it.
 Without Direnv:
 
 ```bash
-eval "$(pixi shell-hook --frozen)"
+eval "$(pixi shell-hook --frozen)"           # GPU (default)
+# eval "$(pixi shell-hook --frozen -e cpu)"  # CPU
 # or: source .envrc
 ```
 
-`CLOUDXR_DIR`, `WORKSPACE_ROOT`, and `RMW_IMPLEMENTATION` come from
-`pixi.toml` `[activation.env]` via the shell hook.
+`WORKSPACE_ROOT` and `RMW_IMPLEMENTATION` come from `pixi.toml`
+`[activation.env]` via the shell hook. `CLOUDXR_DIR` is set only in the
+default (GPU) environment.
 
 ### 4. Clone functional packages and examples
 
@@ -118,8 +131,8 @@ vcs pull src
 ```
 
 See each package README for launches, CloudXR setup, and tests.
-`isaacteleop_toolbox` and the motion-planner adapters need the `main` / GPU
-Pixi env (not the `cpu` branch).
+`isaacteleop_toolbox` and the motion-planner adapters need the default GPU
+Pixi env (`pixi install`, not `-e cpu`).
 
 ### 5. Build / test / clean
 
@@ -157,9 +170,10 @@ local (gitignored).
 
 ## Adding Dependencies
 
-- **Conda / ROS / native packages**: edit `pixi.toml` `[dependencies]`, then
-  `pixi lock` / `pixi install` (with `PIXI_FROZEN` unset)
-- **PyPI packages**: edit `pixi.toml` `[pypi-dependencies]` the same way
+- **Shared conda / ROS / native packages**: edit `pixi.toml` `[dependencies]`,
+  then `pixi lock` / `pixi install` (with `PIXI_FROZEN` unset)
+- **GPU-only PyPI packages**: edit `pixi.toml` `[feature.gpu.pypi-dependencies]`
+  the same way
 - **ROS package deps**: declare in each package's `package.xml`
 
 Do not pip-install `numpy` or `opencv-python` into this prefix; Conda/RoboStack
@@ -169,8 +183,9 @@ owns those ABIs.
 
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
-- Default ROS distro is **Jazzy**. Use branch `cpu` when you need a
-  conda-only env without NVIDIA / Isaac Teleop / cuRobo.
+- Default ROS distro is **Jazzy**. Default Pixi env is **GPU**; use
+  `pixi install -e cpu` for the conda-only stack without NVIDIA / Isaac
+  Teleop / cuRobo.
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
   `test` / `clean` / `stop`). For Marvin Example 1, see
   [docs/EXAMPLE1.md](docs/EXAMPLE1.md).

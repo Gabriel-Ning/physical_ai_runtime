@@ -5,6 +5,9 @@ workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${workspace_root}"
 
 mkdir -p build install log/ros data
+if [[ -n "${CLOUDXR_DIR:-}" ]]; then
+  mkdir -p "${CLOUDXR_DIR}"
+fi
 
 for command in python ros2 colcon vcs rosdep cmake ninja; do
   if ! command -v "${command}" >/dev/null 2>&1; then
@@ -18,3 +21,6 @@ echo "  workspace: ${WORKSPACE_ROOT}"
 echo "  python:    $(command -v python)"
 echo "  ros2:      $(command -v ros2)"
 echo "  colcon:    $(command -v colcon)"
+if [[ -n "${CLOUDXR_DIR:-}" ]]; then
+  echo "  cloudxr:   ${CLOUDXR_DIR}"
+fi
