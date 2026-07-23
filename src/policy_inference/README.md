@@ -51,6 +51,28 @@ python src/policy_inference/examples/trajectory_policy_example.py --ros-args \
 
 The example publishes one complete trajectory and then waits.
 
+## 3. Diffusion planner (start/goal -> full trajectory)
+
+[`examples/diffusion_planner_example.py`](examples/diffusion_planner_example.py)
+is the migration template for a diffusion planner with this contract:
+
+```text
+q_pos/vel/acc start+goal  ->  DiffusionPlanner.plan(request)
+                          ->  positions/velocities/accelerations [T,D]
+                              time_from_start [T]
+                          ->  /action_sources/policy/joint_trajectory_goal
+```
+
+`T` is the number of points in the trajectory (chosen by the model).
+Only replace `DiffusionPlanner.plan()`. Keep request/result keys; shapes must
+be `[T,D]` / `[T]` with matching `joint_names`.
+
+```bash
+python src/policy_inference/examples/diffusion_planner_example.py --ros-args \
+  -p joint_names:="[panda_joint1,panda_joint2,panda_joint3,panda_joint4,panda_joint5,panda_joint6,panda_joint7]" \
+  -p q_pos_goal:="[0.2,-0.3,0.1,-1.8,0.2,1.6,0.1]"
+```
+
 ## Execution Manager inputs
 
 VLA chunks publish to:
@@ -78,5 +100,5 @@ execution_manager:
 ```
 
 EM forwards accepted complete trajectories to its configured
-`FollowJointTrajectory` action server. Both examples default to hold outputs;
-validate model-specific motion first with fake hardware.
+`FollowJointTrajectory` action server. The examples default to hold or linear
+interpolation; validate model-specific motion first with fake hardware.

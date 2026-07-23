@@ -10,6 +10,7 @@ src/                       ownership-oriented ROS 2 source tree
   embodiments/
     robots/                robot descriptions and hardware interfaces
     sensors/               sensor model defaults; no application composition
+    end_effectors/         gripper/hand packages (see docs/END_EFFECTOR_CONVENTIONS.md)
   teleop/                  device/session adapters and retargeters
   motion_planning/         planner contracts and backend adapters
   policy_inference/        deployed policy inference and runtime adapters
