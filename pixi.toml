@@ -138,6 +138,8 @@ stop = "bash scripts/stop_ros.sh"
 #   pyyaml       -> conda pyyaml (ROS stack)
 #   scipy        -> conda scipy
 #   msgpack      -> conda msgpack-python
+#   cmeel-urdfdom / cmeel-tinyxml2 -> conda urdfdom (ROS/pinocchio);
+#     keeping both only overwrites check_urdf / urdf_to_graphviz etc.
 # Do not add numpy, opencv-python, or opencv-python-headless here.
 
 [feature.gpu.pypi-options]
@@ -155,8 +157,6 @@ msgpack-numpy = "*"
 nlopt = ">=2.8.0"
 viser = ">=0.2.0"
 websockets = ">=14.0"
-cmeel-tinyxml2 = "*"
-cmeel-urdfdom = "*"
 daqp = "*"
 loop-rate-limiters = "*"
 pin-pink = "*"
