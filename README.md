@@ -96,8 +96,9 @@ env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=default` if needed.
 Pixi selects the dependency environment before `setup.sh` starts. Use
 `pixi run setup` for GPU or `pixi run -e cpu setup` for CPU; the setup script
 then applies environment-specific resources. Currently that means creating
-`CLOUDXR_DIR` only for GPU. Future environment-specific setup should follow
-the same activation-variable pattern.
+`CLOUDXR_DIR` only for GPU and explicitly clearing it when Direnv selects CPU.
+Future environment-specific setup should follow the same environment-name and
+activation-variable pattern.
 
 Without Direnv:
 

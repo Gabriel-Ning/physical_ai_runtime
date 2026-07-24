@@ -5,14 +5,19 @@ workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${workspace_root}"
 
 mkdir -p build install log/ros data .pixi
-if [[ -n "${CLOUDXR_DIR:-}" ]]; then
-  mkdir -p "${CLOUDXR_DIR}"
-fi
 
 # Record which Pixi env ran setup so .envrc activates the same one
 # (e.g. `pixi run -e cpu setup` → cpu; plain `pixi run setup` → default).
 pixi_env="${PIXI_ENVIRONMENT_NAME:-default}"
 printf '%s\n' "${pixi_env}" > .pixi/environment
+
+if [[ "${pixi_env}" == "default" ]]; then
+  if [[ -z "${CLOUDXR_DIR:-}" ]]; then
+    echo "Missing CLOUDXR_DIR in the default GPU environment" >&2
+    exit 1
+  fi
+  mkdir -p "${CLOUDXR_DIR}"
+fi
 
 for command in python ros2 colcon vcs rosdep cmake ninja; do
   if ! command -v "${command}" >/dev/null 2>&1; then
@@ -27,6 +32,6 @@ echo "  pixi env:  ${pixi_env}"
 echo "  python:    $(command -v python)"
 echo "  ros2:      $(command -v ros2)"
 echo "  colcon:    $(command -v colcon)"
-if [[ -n "${CLOUDXR_DIR:-}" ]]; then
+if [[ "${pixi_env}" == "default" ]]; then
   echo "  cloudxr:   ${CLOUDXR_DIR}"
 fi
