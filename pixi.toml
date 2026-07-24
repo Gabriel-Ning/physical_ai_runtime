@@ -3,7 +3,9 @@ name = "physical-ai-runtime"
 version = "0.1.0"
 description = "Release-first ROS 2 Jazzy runtime for Physical AI systems"
 authors = ["Gabriel-Ning <guomning@gmail.com>"]
-channels = ["robostack-jazzy", "conda-forge", "https://prefix.dev/gabriel-robotics"]
+# gabriel-robotics before conda-forge so Pixi-ABI libfranka (pixi1_*) wins over
+# conda-forge's urdfdom-.5.1 build of the same name.
+channels = ["robostack-jazzy", "https://prefix.dev/gabriel-robotics", "conda-forge"]
 # Match isaacteleop manylinux_2_35 so `pixi install --locked` does not treat the
 # lock as stale relative to the direct wheel URL. Also satisfies Robostack
 # realsense / libudev glibc floor on the cpu environment.
@@ -59,6 +61,11 @@ ros-jazzy-mujoco-vendor = "*"
 libpiper = ">=0.1.0,<0.2"
 libmarvin = "==0.1.0"
 libmvs = "4.7.0.3.*"
+# Franka: Pixi/robostack ABI (fmt 12 + pinocchio 4.0 + urdfdom 6). Not the
+# official Ubuntu noble .deb (fmt v9 / Poco .80) and not conda-forge's
+# urdfdom-.5.1 build. build=pixi1_* matches physical_ai_runtime pinocchio 4.0.
+libfranka = { version = "==0.21.2", build = "pixi1_*" }
+poco = ">=1.15.3,<1.15.4"
 
 # ── Sensors / calibration ────────────────────────────────────────────────────
 ros-jazzy-orbbec-camera = "*"

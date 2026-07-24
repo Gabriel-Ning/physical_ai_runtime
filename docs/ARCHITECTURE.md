@@ -58,6 +58,37 @@ Robot embodiment (`repos/embodiment.repos`):
   branch `dev` = site-calibrated geometry; `main` = official CAD)
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
   → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/embodiment.repos`)
+- [`franka_ros2`](https://github.com/frankarobotics/franka_ros2/tree/jazzy)
+  → `src/embodiments/robots/franka/franka_ros2` (branch `jazzy`; after import run
+  `scripts/franka_colcon_ignore.sh` for core-arm-only builds)
+- [`franka_description`](https://github.com/frankarobotics/franka_description)
+  → `src/embodiments/robots/franka/franka_description` (tag `2.8.1`)
+- `libfranka` is **not** under `src/`; it is the gabriel-robotics Pixi package
+  (`libfranka` `pixi1_*` + `poco` in `pixi.toml`)
+
+**Franka maintenance stance (current vs target):**
+
+- **ros2_control minimum** for an embodiment is two packages: robot
+  `*_description` (URDF + `ros2_control` tags) and a
+  `*_hardware_interface` (SystemInterface plugin). Marvin already follows
+  that shape.
+- **Today** we vendor upstream `franka_ros2` (jazzy monorepo) and apply
+  [`scripts/franka_colcon_ignore.sh`](../scripts/franka_colcon_ignore.sh) as a
+  **pragmatic compromise**: keep arm core packages (msgs, hardware, gripper,
+  bringup, example controllers, MoveIt config, …) while ignoring Gazebo,
+  mobile, vision kit, the meta `franka_ros2` package, and the vendored
+  `realtime_tools` copy (Pixi already provides `ros-jazzy-realtime-tools`).
+  We do **not** import official `dependency.repos` overlays for
+  `libfranka` / `ros2_control` source.
+- **Future:** prefer maintaining Franka like Marvin — a workspace-owned
+  minimal two-package embodiment (`franka_description` +
+  `franka_hardware_interface`, plus Pixi `libfranka`) instead of the
+  monorepo + `COLCON_IGNORE` filter. The ignore script is interim, not the
+  long-term ownership model.
+- Do **not** install the Ubuntu noble `libfranka_*.deb` into this Pixi env
+  (fmt v9 / Poco `.80`); use gabriel-robotics `pixi1_*` only.
+- Fake-hardware smoke (unset cross-machine `CYCLONEDDS_URI` if needed):
+  `ros2 launch franka_bringup franka.launch.py robot_type:=fr3 use_fake_hardware:=true`
 
 Example 1 (Marvin apps from `runtime_resources`) — fetch/build steps and
 package map: [EXAMPLE1.md](EXAMPLE1.md).

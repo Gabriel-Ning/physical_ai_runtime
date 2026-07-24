@@ -124,14 +124,15 @@ them back into this template.
 | --- | --- | --- |
 | `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
 | `repos/example.repos` | Optional runnable example applications | `src/apps` |
-| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin and Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/sensors/hikvision_ros2` |
+| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin, Franka, Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/robots/franka`, `src/embodiments/sensors/hikvision_ros2` |
 
 ```bash
 vcs import src < repos/necessary.repos
 # Optional example applications
 vcs import src < repos/example.repos
-# Required for the Marvin and Hikvision embodiments
+# Marvin, Franka, Hikvision embodiments
 vcs import src < repos/embodiment.repos
+bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter; see docs/ARCHITECTURE.md
 pixi run build
 ```
 

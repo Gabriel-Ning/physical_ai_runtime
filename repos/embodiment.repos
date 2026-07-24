@@ -1,4 +1,5 @@
-# Marvin embodiment packages (full Git repos).
+# Robot and sensor embodiment packages (full Git repos).
+# Binary SDKs (libmarvin, libfranka, …) stay in pixi.toml, not here.
 repositories:
   embodiments/robots/marvin/marvin_description:
     type: git
@@ -9,8 +10,21 @@ repositories:
     type: git
     url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
     version: main
+  # Franka: franka_ros2 monorepo (jazzy) + description pin matching upstream
+  # dependency.repos. After import, run scripts/franka_colcon_ignore.sh so
+  # Gazebo/mobile/vision packages and vendored realtime_tools are skipped.
+  # Interim: monorepo + COLCON_IGNORE. Target: minimal description +
+  # hardware_interface embodiment (see docs/ARCHITECTURE.md).
+  # libfranka comes from gabriel-robotics conda (pixi1_*), not source.
+  embodiments/robots/franka/franka_ros2:
+    type: git
+    url: https://github.com/frankarobotics/franka_ros2.git
+    version: jazzy
+  embodiments/robots/franka/franka_description:
+    type: git
+    url: https://github.com/frankarobotics/franka_description.git
+    version: 2.8.1
   embodiments/sensors/hikvision_ros2:
     type: git
     url: https://github.com/Gabriel-Ning/hikvision_ros2.git
-    # Validated two-package release from PR #1; use master after it is merged.
-    version: master
+    version: main
