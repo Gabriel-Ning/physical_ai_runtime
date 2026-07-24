@@ -104,6 +104,8 @@ filelock = "*"
 # ── Launch testing ───────────────────────────────────────────────────────────
 ros-jazzy-launch-testing = "*"
 ros-jazzy-launch-pytest = "*"
+# franka_gripper (and similar) find_package this under BUILD_TESTING=ON.
+ros-jazzy-ament-cmake-clang-format = "*"
 
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
