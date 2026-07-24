@@ -10,8 +10,10 @@ src/                       ownership-oriented ROS 2 source tree
   embodiments/
     robots/                robot descriptions and hardware interfaces
     sensors/               sensor model defaults; no application composition
+    end_effectors/         gripper/hand packages (see docs/END_EFFECTOR_CONVENTIONS.md)
   teleop/                  device/session adapters and retargeters
   motion_planning/         planner contracts and backend adapters
+  policy_inference/        deployed policy inference and runtime adapters
   recording/               raw episode recording and replay tools
   visualization/           runtime inspection and debug sources
   toolbox/                 small reusable tools owned by this workspace
@@ -94,8 +96,8 @@ dependencies.
 
 | Layer | Responsibility |
 |---|---|
-| `pixi.toml` | Direct integrated runtime dependencies and three public tasks |
-| `pixi.lock` | Exact Conda, PyPI, CUDA, ROS, Git, and transitive versions |
+| `pixi.toml` | Shared dependencies, GPU-only feature dependencies, environments, and public tasks |
+| `pixi.lock` | Exact CPU/GPU Conda, PyPI, CUDA, ROS, Git, and transitive versions |
 | `.envrc` | Frozen Pixi activation, colcon overlay, lightweight ROS defaults |
 | `package.xml` | ROS package dependency and release contract |
 | CMake/setup.py | Build and install one ROS package |
@@ -107,8 +109,8 @@ hard-coded by packages:
 
 ```text
 WORKSPACE_ROOT = $PIXI_PROJECT_ROOT
-CLOUDXR_DIR    = $PIXI_PROJECT_ROOT/.cloudxr
 RMW_IMPLEMENTATION = rmw_cyclonedds_cpp
+CLOUDXR_DIR    = $PIXI_PROJECT_ROOT/.cloudxr  # default/GPU only
 ```
 
 Packages consume these as defaults and retain explicit arguments for
@@ -120,10 +122,17 @@ optional and configured via `CYCLONEDDS_URI` from
 [`.config/cyclonedds_template.xml`](../.config/cyclonedds_template.xml); see
 the README.
 
-There is one supported Pixi environment. CUDA-enabled PyTorch, IsaacTeleop,
-planning backends, ROS, camera dependencies, and robot SDK dependencies share
-the same solved runtime. A new environment is introduced only after a concrete
-incompatibility or deployment boundary is demonstrated.
+One manifest provides two supported environments in one solve group:
+
+- `default` adds the `gpu` feature (CUDA PyTorch, IsaacTeleop, cuRobo,
+  CloudXR, and related PyPI dependencies);
+- `cpu` contains only the shared Conda/ROS runtime.
+
+Both environments use the same shared ROS, camera, robot SDK, and recorder
+versions. Pixi selects the environment before `scripts/setup.sh` runs; setup
+records that choice for Direnv and creates resources such as `CLOUDXR_DIR`
+only when their activation variable is present. Add another environment only
+after a concrete dependency or deployment boundary is demonstrated.
 
 ## Package dependency direction
 

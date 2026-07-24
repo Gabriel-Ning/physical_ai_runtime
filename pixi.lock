@@ -958,7 +958,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
   default:
     channels:
@@ -1914,7 +1914,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
       - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
       - pypi: git+https://github.com/Gabriel-Ning/curobo.git?rev=77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3#77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3
@@ -18718,10 +18718,12 @@ packages:
   license: MIT
   size: 731111
   timestamp: 1782804885894
-- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.2.0-hb0f4dca_0.conda
-  sha256: 333d86dca93363001b359de25fe40c38b394015f24beb90fc6bb5af8d3fcf618
-  md5: a024270f4f9346c2d1e506a4a03d5d0c
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
+  sha256: 86cb3b4b43d29dfca6bb7940515d4483029ee93429bc23df0fbf9a7a8351420c
+  md5: dcc6c28de083e98c0b3c432a987f7d1f
   depends:
+  - python
+  - pyyaml
   - ros-jazzy-lifecycle-msgs
   - ros-jazzy-launch-ros
   - ros-jazzy-rclcpp
@@ -18741,8 +18743,8 @@ packages:
   - yaml-cpp >=0.8.0,<0.9.0a0
   license: Apache-2.0
   run_exports: {}
-  size: 305139
-  timestamp: 1784645691448
+  size: 413998
+  timestamp: 1784819532070
 - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.1.0-hb0f4dca_0.conda
   sha256: eeca95d1a00e0ca2549d403d61da851549d3fc4ae07e20d27111c4c727ca7a7e
   md5: 6424af35c99898abecc33f2f218fd9b8

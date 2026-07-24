@@ -60,9 +60,13 @@ ref/
 !/src/toolbox/
 !/src/toolbox/**/
 !/src/toolbox/**
+!/src/policy_inference/
+!/src/policy_inference/**/
+!/src/policy_inference/**
 
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/
+/src/**/.pytest_cache/
 /src/**/*.py[cod]
 /src/**/*.pyo
 /src/**/*.pyd

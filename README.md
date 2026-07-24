@@ -47,15 +47,15 @@ cd physical_ai_runtime
 
 ### 2. Initialize the environment
 
-Default install is the **GPU** environment (former `main` stack):
+Default install is the **GPU** environment:
 
 ```bash
 pixi install --locked
 pixi run setup
 ```
 
-For the **CPU** / realtime-kernel stack (former `cpu` branch — no NVIDIA /
-Isaac Teleop / cuRobo / CloudXR):
+For the **CPU** / realtime-kernel environment (no NVIDIA / Isaac Teleop /
+cuRobo / CloudXR):
 
 ```bash
 pixi install --locked -e cpu
@@ -92,6 +92,12 @@ directory deactivates it.
 `.envrc` follows the env you used for setup: `pixi run setup` writes
 `.pixi/environment` (`default` or `cpu`), and Direnv activates that same
 env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=default` if needed.
+
+Pixi selects the dependency environment before `setup.sh` starts. Use
+`pixi run setup` for GPU or `pixi run -e cpu setup` for CPU; the setup script
+then applies environment-specific resources. Currently that means creating
+`CLOUDXR_DIR` only for GPU. Future environment-specific setup should follow
+the same activation-variable pattern.
 
 Without Direnv:
 

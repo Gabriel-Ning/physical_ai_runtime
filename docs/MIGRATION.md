@@ -36,7 +36,7 @@ Dedup notes applied when merging the old workspace:
 Current scope:
 
 - establish ownership directories;
-- document the single-environment, Release-first policy;
+- document the single-manifest, Release-first environment policy;
 - define dependency direction and the runtime/data boundary;
 - do not copy packages or claim buildability.
 
@@ -49,8 +49,9 @@ Pass evidence:
 ## Gate 1 — Pixi and ROS shell (completed)
 
 The single `pixi.toml` and `.envrc` provide the ROS 2 Jazzy baseline and
-workspace tools. Full runtime dependency consolidation (control, sensors,
-teleop, planning, CUDA) is tracked under Gate 1b below.
+workspace tools. The default environment adds the GPU feature; the CPU
+environment keeps the same shared Conda/ROS runtime without GPU-only PyPI
+dependencies. Full runtime dependency consolidation is tracked under Gate 1b.
 
 Pass evidence:
 
@@ -61,10 +62,11 @@ which python, ros2, colcon resolve inside .pixi
 ros2 doctor reports the expected Jazzy runtime
 ```
 
-## Gate 1b — single full runtime solve (completed)
+## Gate 1b — shared CPU/GPU runtime solve (completed)
 
-Merge the validated `ros2_workspace` dependency set into one environment with
-no feature tables and no redundant direct pins.
+Merge the validated `ros2_workspace` dependency set into one manifest and one
+solve group. Shared dependencies remain in `[dependencies]`; only the concrete
+GPU boundary lives in `feature.gpu`.
 
 Pass evidence:
 
@@ -78,9 +80,10 @@ python -c "import rclpy, torch, isaacteleop, pyroki, curobo, pink, pinocchio; pr
 
 Validated:
 
-- lock contains only `default`;
+- lock contains `default` (GPU) and `cpu` environments in one solve group;
 - `pixi install --locked` succeeds with `libc = "2.35"`;
-- core imports resolve inside `.pixi/envs/default`.
+- core imports resolve inside `.pixi/envs/default`;
+- `pixi install --locked -e cpu` excludes GPU-only dependencies.
 
 No ROS source package is migrated in this gate.
 
@@ -98,7 +101,7 @@ pixi run test
 
 Tests must cover package installation and fake/reference behavior. No real
 hardware is enabled. Required Pixi packages (`ros2_control`, Eigen,
-launch-testing) are already in the single environment.
+launch-testing) are shared by both environments.
 
 Current evidence:
 
@@ -184,7 +187,7 @@ Current evidence:
   swaps to the real plugin with `robot_ip` param wired through, verified by
   xacro expansion only (no real hardware connection attempted from this
   session);
-- first closed loop composed in `src/apps/marvin_rviz_debug_bringup`, made
+- first closed loop composed in `src/apps/marvin_controller_bringup`, made
   bimanual: two independent chains, one per arm --
   `rviz_interactive_marker_teleop` (`target_marker_left`/`_right`) ->
   `manipulation_execution_manager` (`em_left`/`em_right`) ->
@@ -258,7 +261,8 @@ Remaining gates are source-only MCAP replay, live Quest, fake robot
 integration, and conservative real hardware after their dependent packages are
 migrated.
 
-IsaacTeleop and retargeting PyPI deps are already in the single environment.
+IsaacTeleop and retargeting PyPI dependencies are in the default GPU
+environment; they are intentionally absent from `cpu`.
 
 ## Gate 5 — planners, sensors, and recording
 
@@ -279,6 +283,15 @@ Current evidence (partial):
 - default output topic aligned to the EM pose contract
   (`/action_sources/marker/pose_target`);
 - Release build succeeds; no unit tests in the upstream package yet.
+
+Site co-location validation on the RT host (8× Hik Bayer + Marvin +
+`episode_recorder`) is tracked in
+[COLOCATION_VALIDATION.md](COLOCATION_VALIDATION.md). As of 2026-07-21,
+Gate0–5 stage validation passed on this PC, including 9/9 full multimodal
+episodes with `incomplete_bursts=0` and recorder drops=0. Multi-hour burn-in,
+the camera burst-pool redesign, Marvin staging-WARN cleanup, and cross-PC
+clock-offset logging remain open; this evidence is not a production
+certification.
 
 ## Gate 6 — release acceptance
 
