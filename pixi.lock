@@ -984,7 +984,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
   default:
     channels:
     - url: https://conda.anaconda.org/robostack-jazzy/
@@ -1965,7 +1965,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
       - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
       - pypi: git+https://github.com/Gabriel-Ning/curobo.git?rev=77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3#77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3
       - pypi: git+https://github.com/Gabriel-Ning/pyroki.git?rev=388e43e1fc0d0ee382968d3dd72970fd62a0450c#388e43e1fc0d0ee382968d3dd72970fd62a0450c
@@ -20415,9 +20415,9 @@ packages:
   run_exports: {}
   size: 413998
   timestamp: 1784819532070
-- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.0-hb0f4dca_0.conda
-  sha256: 9fe29d316d7add5317a6ee3f4af5b8fcdd2743c83c74d7b1297ef8aae049b670
-  md5: f78a83ff7e37d0ff9a1a037834077de3
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
+  sha256: a11ae6f77eb9963f5864da2caff93c09abeebc598bed0c9052197557e5b0361c
+  md5: 3bec7eafca52c971f3a5e9ed3343888d
   depends:
   - libosqp
   - osqp-eigen
@@ -20441,8 +20441,8 @@ packages:
   - osqp-eigen >=0.11.2,<0.12.0a0
   license: Apache-2.0
   run_exports: {}
-  size: 608191
-  timestamp: 1785081012494
+  size: 608174
+  timestamp: 1785260634116
 - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
   name: isaacteleop
   version: 1.3.131
