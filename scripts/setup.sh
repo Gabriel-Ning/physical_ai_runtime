@@ -19,6 +19,14 @@ if [[ "${pixi_env}" == "default" ]]; then
   mkdir -p "${CLOUDXR_DIR}"
 fi
 
+# CPU / RT hosts: performance governor at boot (Franka frequency-scaling guidance).
+if [[ "${pixi_env}" == "cpu" ]]; then
+  if ! bash "${workspace_root}/scripts/enable_cpu_performance_governor.sh" --ensure-boot; then
+    echo "WARNING: could not enable CPU performance governor (sudo required)." >&2
+    echo "  Run once: sudo bash scripts/enable_cpu_performance_governor.sh --install" >&2
+  fi
+fi
+
 for command in python ros2 colcon vcs rosdep cmake ninja; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     echo "Missing required command in Pixi environment: ${command}" >&2
@@ -34,4 +42,7 @@ echo "  ros2:      $(command -v ros2)"
 echo "  colcon:    $(command -v colcon)"
 if [[ "${pixi_env}" == "default" ]]; then
   echo "  cloudxr:   ${CLOUDXR_DIR}"
+fi
+if [[ "${pixi_env}" == "cpu" ]]; then
+  echo "  cpu gov:   $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
 fi
