@@ -331,7 +331,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openldap-2.6.13-hbde042b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/orocos-kdl-1.5.3-hd2df1e3_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/osqp-eigen-0.11.2-h37ced84_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/p11-kit-0.26.4-h3435931_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pango-1.56.4-hda50119_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/patchelf-0.17.2-h58526e2_0.conda
@@ -984,7 +983,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.2-hb0f4dca_0.conda
   default:
     channels:
     - url: https://conda.anaconda.org/robostack-jazzy/
@@ -1312,7 +1311,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openldap-2.6.13-hbde042b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/openssl-3.6.3-h35e630c_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/orocos-kdl-1.5.3-hd2df1e3_2.conda
-      - conda: https://conda.anaconda.org/conda-forge/linux-64/osqp-eigen-0.11.2-h37ced84_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/p11-kit-0.26.4-h3435931_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pango-1.56.4-hda50119_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/patchelf-0.17.2-h58526e2_0.conda
@@ -1965,7 +1963,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.2-hb0f4dca_0.conda
       - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
       - pypi: git+https://github.com/Gabriel-Ning/curobo.git?rev=77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3#77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3
       - pypi: git+https://github.com/Gabriel-Ning/pyroki.git?rev=388e43e1fc0d0ee382968d3dd72970fd62a0450c#388e43e1fc0d0ee382968d3dd72970fd62a0450c
@@ -7394,24 +7392,6 @@ packages:
     - orocos-kdl >=1.5.3,<1.6.0a0
   size: 389625
   timestamp: 1778045635055
-- conda: https://conda.anaconda.org/conda-forge/linux-64/osqp-eigen-0.11.2-h37ced84_0.conda
-  sha256: 8ee3335a0fd4536264ec169cba464f1b849cc80af86c7d8c23af102d88f02d14
-  md5: f76cc9ed17ea1e9a2a3415adacb6def2
-  depends:
-  - eigen
-  - libstdcxx >=14
-  - libgcc >=14
-  - __glibc >=2.17,<3.0.a0
-  - libosqp >=1.0.0,<1.0.1.0a0
-  - eigen-abi >=5.0.1.80,<5.0.1.81.0a0
-  license: BSD-3-Clause
-  license_family: BSD
-  purls: []
-  run_exports:
-    weak:
-    - osqp-eigen >=0.11.2,<0.12.0a0
-  size: 40576
-  timestamp: 1784534078138
 - conda: https://conda.anaconda.org/conda-forge/linux-64/p11-kit-0.26.4-h3435931_0.conda
   sha256: ce1c79a0ae1301aa1f94f3afe1075e4cbb86656767011fde8995b9b1efc46516
   md5: 9980feddc5ad41bac53f7396376e6a2f
@@ -10143,7 +10123,7 @@ packages:
   license: Apache-2.0
   license_family: APACHE
   purls:
-  - pkg:pypi/importlib-metadata?source=compressed-mapping
+  - pkg:pypi/importlib-metadata?source=hash-mapping
   run_exports: {}
   size: 34766
   timestamp: 1779714582554
@@ -10372,7 +10352,7 @@ packages:
   license: BSD-3-Clause
   license_family: BSD
   purls:
-  - pkg:pypi/pycparser?source=compressed-mapping
+  - pkg:pypi/pycparser?source=hash-mapping
   run_exports: {}
   size: 55886
   timestamp: 1779293633166
@@ -20415,12 +20395,11 @@ packages:
   run_exports: {}
   size: 413998
   timestamp: 1784819532070
-- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.1-hb0f4dca_0.conda
-  sha256: a11ae6f77eb9963f5864da2caff93c09abeebc598bed0c9052197557e5b0361c
-  md5: 3bec7eafca52c971f3a5e9ed3343888d
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.2-hb0f4dca_0.conda
+  sha256: 205784360bed6460055e2d3883f6134e986a72e7f7f247555aad8e21a0d83e4a
+  md5: 7b1e94ca6dc99c562373dfd612e6b093
   depends:
-  - libosqp
-  - osqp-eigen
+  - libqdldl >=0.1.8,<0.1.9
   - placo ==0.9.23
   - ros-jazzy-control-toolbox
   - ros-jazzy-controller-interface
@@ -20437,12 +20416,10 @@ packages:
   - ros-jazzy-trajectory-msgs
   - libstdcxx >=15
   - libgcc >=15
-  - libosqp >=1.0.0,<1.0.1.0a0
-  - osqp-eigen >=0.11.2,<0.12.0a0
   license: Apache-2.0
   run_exports: {}
-  size: 608174
-  timestamp: 1785260634116
+  size: 680084
+  timestamp: 1785307930590
 - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
   name: isaacteleop
   version: 1.3.131
