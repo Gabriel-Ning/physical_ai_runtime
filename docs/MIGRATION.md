@@ -187,7 +187,8 @@ Current evidence:
   swaps to the real plugin with `robot_ip` param wired through, verified by
   xacro expansion only (no real hardware connection attempted from this
   session);
-- first closed loop composed in `src/apps/marvin_controller_bringup`, made
+- first closed loop composed in
+  `src/apps/marvin_manipulation_controller_bringup`, made
   bimanual: two independent chains, one per arm --
   `rviz_interactive_marker_pose_source` (`target_marker_left`/`_right`) ->
   `manipulation_execution_manager` (`em_left`/`em_right`) ->
