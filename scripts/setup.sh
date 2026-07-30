@@ -19,11 +19,15 @@ if [[ "${pixi_env}" == "default" ]]; then
   mkdir -p "${CLOUDXR_DIR}"
 fi
 
-# CPU / RT hosts: performance governor at boot (Franka frequency-scaling guidance).
+# CPU / RT hosts: performance governor, isolcpus GRUB, affinity profile.
+# See docs/CPU_HOST_SETUP.md. Exit 3 from the helper means reboot required.
+cpu_rt_rc=0
 if [[ "${pixi_env}" == "cpu" ]]; then
-  if ! bash "${workspace_root}/scripts/enable_cpu_performance_governor.sh" --ensure-boot; then
-    echo "WARNING: could not enable CPU performance governor (sudo required)." >&2
-    echo "  Run once: sudo bash scripts/enable_cpu_performance_governor.sh --install" >&2
+  bash "${workspace_root}/scripts/setup_cpu_rt_host.sh" || cpu_rt_rc=$?
+  if [[ "${cpu_rt_rc}" -ne 0 && "${cpu_rt_rc}" -ne 3 ]]; then
+    echo "WARNING: CPU RT host setup reported errors (rc=${cpu_rt_rc})." >&2
+    echo "  See docs/CPU_HOST_SETUP.md" >&2
+    cpu_rt_rc=0
   fi
 fi
 
@@ -44,5 +48,17 @@ if [[ "${pixi_env}" == "default" ]]; then
   echo "  cloudxr:   ${CLOUDXR_DIR}"
 fi
 if [[ "${pixi_env}" == "cpu" ]]; then
+  # shellcheck disable=SC1091
+  source "${workspace_root}/scripts/rt_cpu_profile.env"
   echo "  cpu gov:   $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
+  echo "  isolated:  $(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || echo none)"
+  echo "  cm_aff:    ${RT_CM_CPU_AFFINITY}"
+fi
+
+if [[ "${cpu_rt_rc}" -eq 3 ]]; then
+  echo
+  echo "Setup finished, but a reboot is required for CPU isolation."
+  echo "  sudo reboot"
+  echo "After reboot: pixi run -e cpu setup"
+  exit 3
 fi

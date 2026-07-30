@@ -56,12 +56,14 @@ pixi install --locked
 pixi run setup
 ```
 
-For the **CPU** / realtime-kernel environment (no NVIDIA / Isaac Teleop /
-cuRobo / CloudXR):
+For a **CPU** / realtime-kernel control host (performance governor, `isolcpus`,
+`ros2_control` affinity), follow
+[docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md):
 
 ```bash
 pixi install --locked -e cpu
 pixi run -e cpu setup
+# if setup exits 3: sudo reboot && pixi run -e cpu setup
 ```
 
 ### 3. Activate (recommended: Direnv)
@@ -97,10 +99,8 @@ env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=default` if needed.
 
 Pixi selects the dependency environment before `setup.sh` starts. Use
 `pixi run setup` for GPU or `pixi run -e cpu setup` for CPU; the setup script
-then applies environment-specific resources. Currently that means creating
-`CLOUDXR_DIR` only for GPU and explicitly clearing it when Direnv selects CPU.
-Future environment-specific setup should follow the same environment-name and
-activation-variable pattern.
+then applies environment-specific resources (GPU: `CLOUDXR_DIR`; CPU: RT host
+governor / isolcpus — [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 
 Without Direnv:
 
@@ -198,8 +198,8 @@ owns those ABIs.
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**. Default Pixi env is **GPU**; use
-  `pixi install -e cpu` for the conda-only stack without NVIDIA / Isaac
-  Teleop / cuRobo.
+  `pixi install -e cpu` for the conda-only RT control host (see
+  [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
   `test` / `clean` / `stop`). For Marvin Example 1, see
   [docs/EXAMPLE1.md](docs/EXAMPLE1.md).
