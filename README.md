@@ -155,7 +155,20 @@ pixi run build
 pixi run test
 pixi run clean   # removes colcon build/ install/ log/
 ```
-
+pixi run 会激活这个配置：
+```
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+CYCLONEDDS_URI=file://.../.config/cyclonedds_default.xml
+```
+而 .config/cyclonedds_default.xml 绑定了网卡地址：
+```
+<NetworkInterface address="192.168.10.13" />
+```
+在没有 192.168.10.13 这块网卡的情况下，跑测试要临时取消 CYCLONEDDS_URI
+```
+/home/hanyu/.pixi/bin/pixi run bash -c \
+'unset CYCLONEDDS_URI; export ROS_LOCALHOST_ONLY=1; colcon test --executor sequential --python-testing pytest && colcon test-result --verbose'
+```
 Default build type is `Release`. After the first successful build,
 `install/setup.bash` is sourced automatically when Direnv / `.envrc` is active.
 
