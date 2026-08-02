@@ -57,7 +57,7 @@ ros-jazzy-joint-state-publisher-gui = "*"
 ros-jazzy-mujoco-vendor = "*"
 
 # ── Robot SDKs (gabriel-robotics channel) ────────────────────────────────────
-libpiper = ">=0.1.0,<0.2"
+libpiper = "0.3.0.*"
 libmarvin = "==0.1.0"
 libmvs = "4.7.0.3.*"
 # Franka: Pixi/robostack ABI (fmt 12 + pinocchio 4.0 + urdfdom 6). Not the
@@ -68,6 +68,7 @@ poco = ">=1.15.3,<1.15.4"
 
 # ── Sensors / calibration ────────────────────────────────────────────────────
 ros-jazzy-orbbec-camera = "*"
+ros-jazzy-usb-cam = "*"
 # RealSense: robostack packages (librealsense comes via ros-jazzy-librealsense2).
 # Historical note: an older workspace used a colcon overlay of realsense-ros
 # because of a then-unsolvable pin against ros-jazzy-realsense2-camera. With

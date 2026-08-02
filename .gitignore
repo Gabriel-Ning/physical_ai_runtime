@@ -63,6 +63,15 @@ ref/
 !/src/policy_inference/
 !/src/policy_inference/**/
 !/src/policy_inference/**
+!/src/embodiments/sensors/orbbec_camera_config/
+!/src/embodiments/sensors/orbbec_camera_config/**/
+!/src/embodiments/sensors/orbbec_camera_config/**
+!/src/embodiments/sensors/realsense_camera_config/
+!/src/embodiments/sensors/realsense_camera_config/**/
+!/src/embodiments/sensors/realsense_camera_config/**
+!/src/embodiments/sensors/usb_cam_camera_config/
+!/src/embodiments/sensors/usb_cam_camera_config/**/
+!/src/embodiments/sensors/usb_cam_camera_config/**
 
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/
