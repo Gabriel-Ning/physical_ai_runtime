@@ -1,5 +1,5 @@
 # Robot and sensor embodiment packages (full Git repos).
-# Binary SDKs (libmarvin, libfranka, …) stay in pixi.toml, not here.
+# Binary SDKs (libmarvin, libfranka, libpiper, …) stay in pixi.toml, not here.
 repositories:
   embodiments/robots/marvin/marvin_description:
     type: git
@@ -9,6 +9,14 @@ repositories:
   embodiments/robots/marvin/marvin_hardware_interface:
     type: git
     url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
+    version: main
+  embodiments/robots/piper/piper_description:
+    type: git
+    url: https://github.com/Gabriel-Ning/piper_description.git
+    version: main
+  embodiments/robots/piper/piper_hardware_interface:
+    type: git
+    url: https://github.com/Gabriel-Ning/piper_hardware_interface.git
     version: main
   # Franka: franka_ros2 monorepo (jazzy) + description pin matching upstream
   # dependency.repos. After import, run scripts/franka_colcon_ignore.sh so
