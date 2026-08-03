@@ -22,7 +22,7 @@ RViz InteractiveMarker
 
 Default output topic matches the EM pose contract:
 
-`/action_sources/marker/pose_target`
+`/action_sources/marker/cartesian_pose`
 
 ## Launch
 
@@ -34,7 +34,7 @@ Common overrides:
 
 ```bash
 ros2 launch rviz_interactive_marker_pose_source teleop.launch.py \
-  pose_topic:=/action_sources/marker/pose_target \
+  pose_topic:=/action_sources/marker/cartesian_pose \
   base_frame:=base_link \
   target_frame:=flange_link \
   publish_frequency:=50.0
@@ -48,7 +48,7 @@ current EE pose.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `pose_topic` | `/action_sources/marker/pose_target` | Output `PoseStamped` |
+| `pose_topic` | `/action_sources/marker/cartesian_pose` | Output `PoseStamped` |
 | `publish_frequency` | `50.0` | Publish rate (Hz) |
 | `base_frame` | `base_link` | Marker / pose frame |
 | `target_frame` | `flange_link` | TF frame used to seed the marker |

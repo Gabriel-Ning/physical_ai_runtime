@@ -57,7 +57,7 @@ ros-jazzy-joint-state-publisher-gui = "*"
 ros-jazzy-mujoco-vendor = "*"
 
 # ── Robot SDKs (gabriel-robotics channel) ────────────────────────────────────
-libpiper = "0.3.0.*"
+libpiper = "0.5.0.*"
 libmarvin = "==0.1.0"
 libmvs = "4.7.0.3.*"
 # Franka: Pixi/robostack ABI (fmt 12 + pinocchio 4.0 + urdfdom 6). Not the

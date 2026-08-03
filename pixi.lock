@@ -986,7 +986,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libfranka-0.21.2-pixi1_hb0f4dca.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmarvin-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.3.0-hb0f4dca_1.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.5.0-hb0f4dca_1.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.3-hb0f4dca_0.conda
@@ -1972,7 +1972,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libfranka-0.21.2-pixi1_hb0f4dca.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmarvin-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libmvs-4.7.0.3-hb0f4dca_2.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.3.0-hb0f4dca_1.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.5.0-hb0f4dca_1.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.3.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.2.3-hb0f4dca_0.conda
@@ -20488,9 +20488,9 @@ packages:
   run_exports: {}
   size: 22018688
   timestamp: 1784210042593
-- conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.3.0-hb0f4dca_1.conda
-  sha256: 6f687f5c6fa619f6d1864d079e28b920b27f6e609935402b24087c082a51141f
-  md5: e927d678aebc766ec10e0232249cf146
+- conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.5.0-hb0f4dca_1.conda
+  sha256: 1bb92268b30ad2dbc7b2221c34d18dad8c08ba4526e6e0e40fc341f887817a73
+  md5: 4e7edc3a8b2b616910b215ccc7a79684
   depends:
   - libgomp
   - ros-jazzy-pinocchio
@@ -20498,8 +20498,8 @@ packages:
   - libgcc >=16
   license: Apache-2.0
   run_exports: {}
-  size: 9504346
-  timestamp: 1785569193956
+  size: 9522124
+  timestamp: 1785741778900
 - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
   sha256: f0e605df2172da5ced9c85cd6d2741aa6727b013bd1c43d7e56756eab55922fa
   md5: 66088adacaba1aa59c6ba8276df7d7bd

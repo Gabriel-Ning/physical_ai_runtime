@@ -28,7 +28,7 @@ class TargetMarkerNode(Node):
     ROS 2 Node that provides an interactive marker in RViz to specify target Cartesian poses.
     Subscribes to robot transforms to initialize the marker pose at the current end-effector pose,
     and publishes the target pose to a configurable PoseStamped topic
-    (default: /action_sources/marker/pose_target).
+    (default: /action_sources/marker/cartesian_pose).
     """
 
     def __init__(self):
@@ -40,7 +40,7 @@ class TargetMarkerNode(Node):
         self.base_frame = self.declare_parameter("base_frame", "base_link").value
         self.target_frame = self.declare_parameter("target_frame", "flange_link").value
         self.pose_topic = self.declare_parameter(
-            "pose_topic", "/action_sources/marker/pose_target"
+            "pose_topic", "/action_sources/marker/cartesian_pose"
         ).value
         self.server_namespace = self.declare_parameter(
             "server_namespace", "target_marker").value

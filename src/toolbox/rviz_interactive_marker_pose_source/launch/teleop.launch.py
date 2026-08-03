@@ -9,13 +9,13 @@ a controller, robot, or RViz config; apps own that composition.
 # Usage:
 #   ros2 launch rviz_interactive_marker_pose_source teleop.launch.py
 #   ros2 launch rviz_interactive_marker_pose_source teleop.launch.py \
-#       pose_topic:=/action_sources/marker/pose_target \
+#       pose_topic:=/action_sources/marker/cartesian_pose \
 #       publish_frequency:=100.0 \
 #       base_frame:=base_link \
 #       target_frame:=flange_link
 #
 # Typical integration:
-#   - marker → EM pose_target → TaskSpaceKinematicPositionController
+#   - marker → EM cartesian_pose → TaskSpaceKinematicPositionController
 #   - marker → planner/IK → EM → JointSpacePositionController
 
 from launch import LaunchDescription
@@ -29,9 +29,9 @@ def generate_launch_description() -> LaunchDescription:
     """Declare source parameters and start the interactive-marker node."""
     pose_topic = DeclareLaunchArgument(
         'pose_topic',
-        default_value='/action_sources/marker/pose_target',
+        default_value='/action_sources/marker/cartesian_pose',
         description=(
-            'Output PoseStamped topic (EM pose_target contract by default).'
+            'Output PoseStamped topic (EM cartesian_pose contract by default).'
         ),
     )
     publish_frequency = DeclareLaunchArgument(

@@ -14,7 +14,7 @@ JointState + RGB Image + task
   -> optional PyTorch tensor conversion
   -> model action [T,D]
   -> JointTrajectory
-  -> /action_sources/policy/joint_chunk
+  -> /action_sources/policy/joint_reference
 ```
 
 Run the safe hold example:
@@ -49,7 +49,8 @@ python src/policy_inference/examples/trajectory_policy_example.py --ros-args \
   -p joint_names:="[joint1,joint2,joint3]"
 ```
 
-The example publishes one complete trajectory and then waits.
+The example submits one complete trajectory to EM and waits for its action
+result.
 
 ## 3. Diffusion planner (start/goal -> full trajectory)
 
@@ -60,7 +61,7 @@ is the migration template for a diffusion planner with this contract:
 q_pos/vel/acc start+goal  ->  DiffusionPlanner.plan(request)
                           ->  positions/velocities/accelerations [T,D]
                               time_from_start [T]
-                          ->  /action_sources/policy/joint_trajectory_goal
+                          ->  /action_sources/policy/joint_trajectory action
 ```
 
 `T` is the number of points in the trajectory (chosen by the model).
@@ -78,13 +79,13 @@ python src/policy_inference/examples/diffusion_planner_example.py --ros-args \
 VLA chunks publish to:
 
 ```text
-/action_sources/policy/joint_chunk
+/action_sources/policy/joint_reference
 ```
 
-Complete learned trajectories publish to:
+Complete learned trajectories are submitted to:
 
 ```text
-/action_sources/policy/joint_trajectory_goal
+/action_sources/policy/joint_trajectory
 ```
 
 The complete-trajectory input is opt-in. The application-owned Execution
@@ -94,11 +95,13 @@ Manager configuration must enable it:
 execution_manager:
   ros__parameters:
     sources: >-
-      {"policy":{"priority":50,
+      {"policy":{"producer_class":"policy",
+                  "priority":50,
                   "inactive_timeout_s":1.0,
-                  "goal_contracts":["joint_trajectory_goal"]}}
+                  "contracts":["joint_trajectory"]}}
 ```
 
-EM forwards accepted complete trajectories to its configured
-`FollowJointTrajectory` action server. The examples default to hold or linear
+EM proxies accepted complete trajectories to its configured downstream
+`FollowJointTrajectory` action and returns feedback and the terminal result.
+The examples default to hold or linear
 interpolation; validate model-specific motion first with fake hardware.

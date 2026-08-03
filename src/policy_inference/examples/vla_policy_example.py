@@ -65,7 +65,7 @@ class VlaPolicyExample(Node):
             qos_profile_sensor_data,
         )
         self.publisher = self.create_publisher(
-            JointTrajectory, '/action_sources/policy/joint_chunk', 1
+            JointTrajectory, '/action_sources/policy/joint_reference', 1
         )
         self.timer = self.create_timer(1.0 / rate_hz, self.infer)
 

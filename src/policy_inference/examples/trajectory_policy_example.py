@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import numpy as np
 import rclpy
+from action_msgs.msg import GoalStatus
+from control_msgs.action import FollowJointTrajectory
+from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
@@ -44,7 +47,7 @@ class TrajectoryPolicyNode(Node):
         self.joint_names = list(self.get_parameter('joint_names').value)
         self.policy = ExampleTrajectoryPolicy()
         self.state: np.ndarray | None = None
-        self.published = False
+        self.submitted = False
 
         self.create_subscription(
             JointState,
@@ -52,10 +55,10 @@ class TrajectoryPolicyNode(Node):
             self.on_joint_state,
             qos_profile_sensor_data,
         )
-        self.publisher = self.create_publisher(
-            JointTrajectory,
-            '/action_sources/policy/joint_trajectory_goal',
-            1,
+        self.trajectory_client = ActionClient(
+            self,
+            FollowJointTrajectory,
+            '/action_sources/policy/joint_trajectory',
         )
         self.timer = self.create_timer(0.1, self.plan_once)
 
@@ -68,13 +71,45 @@ class TrajectoryPolicyNode(Node):
         )
 
     def plan_once(self) -> None:
-        if self.published or self.state is None:
+        if (
+            self.submitted
+            or self.state is None
+            or not self.trajectory_client.server_is_ready()
+        ):
             return
 
         observation = {'observation.state': self.state.copy()}
         positions, times = self.policy.predict(observation)
-        self.publisher.publish(self.trajectory_to_ros(positions, times))
-        self.published = True
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory = self.trajectory_to_ros(positions, times)
+        self.trajectory_client.send_goal_async(
+            goal,
+            feedback_callback=self.on_feedback,
+        ).add_done_callback(self.on_goal_response)
+        self.submitted = True
+
+    def on_feedback(self, _feedback) -> None:
+        """Hook for recording policy execution progress."""
+
+    def on_goal_response(self, future) -> None:
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error('EM rejected the trajectory')
+            return
+        goal_handle.get_result_async().add_done_callback(self.on_result)
+
+    def on_result(self, future) -> None:
+        wrapped = future.result()
+        result = wrapped.result
+        succeeded = (
+            wrapped.status == GoalStatus.STATUS_SUCCEEDED
+            and result.error_code == FollowJointTrajectory.Result.SUCCESSFUL
+        )
+        log = self.get_logger().info if succeeded else self.get_logger().error
+        log(
+            f'trajectory completed: status={wrapped.status}, '
+            f'error_code={result.error_code}'
+        )
 
     def trajectory_to_ros(
         self, positions: np.ndarray, times: np.ndarray
