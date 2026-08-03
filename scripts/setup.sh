@@ -53,12 +53,13 @@ if [[ "${pixi_env}" == "cpu" ]]; then
   echo "  cpu gov:   $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
   echo "  isolated:  $(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || echo none)"
   echo "  cm_aff:    ${RT_CM_CPU_AFFINITY}"
+  echo "  ulimit -r: $(ulimit -r 2>/dev/null || echo unknown)"
 fi
 
 if [[ "${cpu_rt_rc}" -eq 3 ]]; then
   echo
-  echo "Setup finished, but a reboot is required for CPU isolation."
+  echo "Setup finished, but a reboot (or re-login) is required for RT host changes."
   echo "  sudo reboot"
-  echo "After reboot: pixi run -e cpu setup"
+  echo "After reboot: pixi run -e cpu setup && ulimit -r   # expect 99"
   exit 3
 fi

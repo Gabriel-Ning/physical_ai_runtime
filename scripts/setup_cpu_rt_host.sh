@@ -3,8 +3,9 @@
 #
 # Called from `pixi run -e cpu setup`. Applies:
 #   1. CPU frequency governor → performance (now + boot service)
-#   2. Kernel CPU isolation from scripts/rt_cpu_profile.env (GRUB; reboot if needed)
-#   3. Raise min frequency on isolated CPUs when isolation is already active
+#   2. PAM realtime limits + `realtime` group (SCHED_FIFO / mlock)
+#   3. Kernel CPU isolation from scripts/rt_cpu_profile.env (GRUB; reboot if needed)
+#   4. Raise min frequency on isolated CPUs when isolation is already active
 #
 # Process affinity for ros2_control is NOT applied here — bringups read
 # RT_CM_CPU_AFFINITY and prefix ros2_control_node with taskset.
@@ -12,7 +13,7 @@
 # Exit codes:
 #   0  host ready (or soft warnings only)
 #   1  hard failure (e.g. missing profile)
-#   3  GRUB updated / isolation pending — reboot required before real-robot RT
+#   3  GRUB/limits updated — reboot (or re-login for limits-only) required
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -63,17 +64,19 @@ raise_isol_min_freq() {
 }
 
 print_status() {
-  local isolated expected affinity gov
+  local isolated expected affinity gov rtprio
   isolated="$(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || true)"
   expected="$(expand_cpu_list "$RT_ISOL_CPUS")"
   affinity="${RT_CM_CPU_AFFINITY}"
   gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
+  rtprio="$(ulimit -r 2>/dev/null || echo unknown)"
   echo "CPU RT host status:"
   echo "  profile:     ${RT_CPU_PROFILE_NAME}"
   echo "  governor:    ${gov}"
   echo "  isolated:    ${isolated:-"(none)"}"
   echo "  expected:    ${expected}"
   echo "  cm_affinity: ${affinity}"
+  echo "  ulimit -r:   ${rtprio}"
   if [[ -f /sys/kernel/realtime ]]; then
     echo "  realtime:    $(cat /sys/kernel/realtime)"
   else
@@ -89,8 +92,25 @@ if ! bash "$ROOT/scripts/enable_cpu_performance_governor.sh" --ensure-boot; then
   echo "  Run once: sudo bash scripts/enable_cpu_performance_governor.sh --install" >&2
 fi
 
-# ── 2. Kernel isolation (isolcpus / nohz_full / rcu_nocbs) ─────────────────
+# ── 2. SCHED_FIFO / mlock PAM limits ───────────────────────────────────────
 reboot_needed=0
+limits_rc=0
+bash "$ROOT/scripts/ensure_realtime_limits.sh" --ensure || limits_rc=$?
+case "$limits_rc" in
+  0) ;;
+  3)
+    # Re-login is enough for PAM; if isolcpus also needs a reboot, one reboot
+    # covers both. Track as action-required either way.
+    reboot_needed=1
+    ;;
+  *)
+    echo "WARNING: could not ensure realtime limits (sudo required?)." >&2
+    echo "  Run once: sudo bash scripts/ensure_realtime_limits.sh --apply" >&2
+    echo "  Then re-login and verify: ulimit -r" >&2
+    ;;
+esac
+
+# ── 3. Kernel isolation (isolcpus / nohz_full / rcu_nocbs) ─────────────────
 expected="$(expand_cpu_list "$RT_ISOL_CPUS")"
 active="$(expand_cpu_list "$(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || true)")"
 
@@ -125,9 +145,12 @@ print_status
 
 if ((reboot_needed)); then
   echo
-  echo "REBOOT REQUIRED for CPU isolation to take effect:"
+  echo "REBOOT (or re-login) REQUIRED for RT host changes to take effect:"
+  echo "  - isolcpus / nohz_full / rcu_nocbs → need reboot"
+  echo "  - realtime group + rtprio PAM limits → need re-login (reboot also works)"
   echo "  sudo reboot"
   echo "After reboot, re-run: pixi run -e cpu setup"
+  echo "Verify: ulimit -r   # expect 99"
   echo "Then launch controllers without manual taskset (bringup reads RT_CM_CPU_AFFINITY)."
   exit 3
 fi

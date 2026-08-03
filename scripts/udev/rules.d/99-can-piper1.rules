@@ -1,0 +1,5 @@
+# Site USB-CAN name for right Piper follower (piper1).
+# Identity is USB serial, not USB port.
+# gs_usb (candleLight) idVendor=1d50 idProduct=606f serial=004500424148570C20343133
+
+SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", ATTRS{serial}=="004500424148570C20343133", NAME="piper1", RUN+="/bin/sh -c '/sbin/ip link set piper1 down; /sbin/ip link set piper1 type can bitrate 1000000; /sbin/ip link set piper1 txqueuelen 1000; /sbin/ip link set piper1 up'"
