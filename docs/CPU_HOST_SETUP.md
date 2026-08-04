@@ -160,6 +160,7 @@ edit `/etc/default/grub` by hand, `sudo update-grub`, reboot.
 - Realtime PAM limits: [`scripts/ensure_realtime_limits.sh`](../scripts/ensure_realtime_limits.sh)
 - CPU RT host orchestrator: [`scripts/setup_cpu_rt_host.sh`](../scripts/setup_cpu_rt_host.sh)
 - Host udev / USB-CAN (hardware, not RT): [`UDEV_HOST_SETUP.md`](UDEV_HOST_SETUP.md)
+- Cross-host chrony / EM stamp skew: [`CLOCK_SYNC.md`](CLOCK_SYNC.md)
 - Colocation evidence (Marvin + Hik on this class of host):
   [COLOCATION_VALIDATION.md](COLOCATION_VALIDATION.md)
 - Bringups:

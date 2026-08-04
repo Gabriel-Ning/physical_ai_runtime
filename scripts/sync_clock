@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Clock sync on the robot / RT host (e.g. delta). No SSH back to the workstation.
+#
+# Workstation must serve NTP on the LAN once:
+#   echo 'allow 192.168.1.0/24' | sudo tee /etc/chrony/conf.d/allow-lan.conf
+#   sudo systemctl restart chrony
+#   ss -ulnp | grep ':123'
+#
+# One-shot (set once, then disable NTP):
+#   sudo scripts/sync_clock --ip 192.168.1.13
+#
+# Self-converging chrony client (the old "watch until synced" style):
+#   sudo scripts/sync_clock --ip 192.168.1.13 --follow
+# Prints chronyc tracking until Leap=Normal / synchronized: yes, and LEAVES
+# chrony running against that peer (public fake-ip pools are overridden by prefer).
+#
+# Manual paste fallback:
+#   sudo scripts/sync_clock --utc '2026-08-04 03:25:10'
+set -euo pipefail
+
+MODE=""
+VALUE=""
+FOLLOW=0
+WAIT_S="${SYNC_CLOCK_WAIT_S:-120}"
+
+usage() {
+  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ip)
+      MODE=ip
+      VALUE="${2:-}"
+      ARGS+=(--ip "$VALUE")
+      shift 2
+      ;;
+    --utc)
+      MODE=utc
+      VALUE="${2:-}"
+      ARGS+=(--utc "$VALUE")
+      shift 2
+      ;;
+    --follow)
+      FOLLOW=1
+      ARGS+=(--follow)
+      shift
+      ;;
+    -h|--help) usage 0 ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage 1
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" || -z "$VALUE" ]]; then
+  echo "Need --ip <addr> or --utc '<YYYY-mm-dd HH:MM:SS>'." >&2
+  usage 1
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Re-exec with sudo ..."
+  exec sudo -- "$0" "${ARGS[@]}"
+fi
+
+SOURCES_FILE="/etc/chrony/sources.d/pai-peer.sources"
+
+follow_ip() {
+  local ip="$1"
+  if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "--ip needs an IPv4 address, got: ${ip}" >&2
+    exit 1
+  fi
+  if ! command -v chronyd >/dev/null 2>&1; then
+    echo "chronyd required for --follow" >&2
+    exit 1
+  fi
+
+  mkdir -p /etc/chrony/sources.d
+  cat >"$SOURCES_FILE" <<EOF
+# Managed by scripts/sync_clock --follow
+server ${ip} iburst prefer
+EOF
+  echo "Wrote ${SOURCES_FILE} -> server ${ip} iburst prefer"
+
+  timedatectl set-ntp true || true
+  systemctl enable --now chrony
+  systemctl restart chrony
+  sleep 1
+  chronyc -a makestep || chronyc makestep || true
+
+  echo "Waiting up to ${WAIT_S}s for chrony to converge (Ctrl-C to stop waiting) ..."
+  local i sync leap offset
+  for i in $(seq 1 "$WAIT_S"); do
+    sync="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo no)"
+    leap="$(chronyc tracking 2>/dev/null | awk -F': ' '/Leap status/ {print $2}')"
+    offset="$(chronyc tracking 2>/dev/null | awk -F': ' '/System time/ {print $2}')"
+    printf '[%3ds] synchronized=%-3s  leap=%-16s  %s\n' "$i" "$sync" "${leap:-?}" "${offset:-}"
+    if [[ "$sync" == "yes" ]] || [[ "${leap}" == "Normal" ]]; then
+      echo "Converged."
+      break
+    fi
+    sleep 1
+  done
+
+  echo
+  chronyc -n sources -v || true
+  echo
+  chronyc tracking || true
+  echo
+  timedatectl | sed -n '1,8p' || true
+  echo
+  echo "chrony left RUNNING against ${ip}. Verify from workstation:"
+  echo "  scripts/sync_remote_clock.sh --status"
+}
+
+oneshot_ip() {
+  local ip="$1"
+  if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "--ip needs an IPv4 address, got: ${ip}" >&2
+    exit 1
+  fi
+  timedatectl set-ntp false || true
+  echo "One-shot NTP sync from ${ip} ..."
+  if command -v chronyd >/dev/null 2>&1; then
+    chronyd -q "server ${ip} iburst"
+  elif command -v ntpdate >/dev/null 2>&1; then
+    ntpdate -u "$ip"
+  else
+    echo "Need chronyd or ntpdate on this host." >&2
+    exit 1
+  fi
+  if command -v hwclock >/dev/null 2>&1; then
+    hwclock -w || true
+  fi
+  echo
+  date -u
+  timedatectl | sed -n '1,8p' || true
+  echo
+  echo "NTP left disabled. Workstation: scripts/sync_remote_clock.sh --status"
+}
+
+case "$MODE" in
+  ip)
+    if [[ "$FOLLOW" -eq 1 ]]; then
+      follow_ip "$VALUE"
+    else
+      oneshot_ip "$VALUE"
+    fi
+    ;;
+  utc)
+    if [[ "$FOLLOW" -eq 1 ]]; then
+      echo "--follow only applies with --ip" >&2
+      exit 1
+    fi
+    timedatectl set-ntp false || true
+    echo "Setting UTC to: ${VALUE}"
+    date -u -s "${VALUE}"
+    if command -v hwclock >/dev/null 2>&1; then
+      hwclock -w || true
+    fi
+    date -u
+    timedatectl | sed -n '1,8p' || true
+    ;;
+esac

@@ -4,6 +4,7 @@ Host device naming and access for Physical AI Runtime. This is **hardware
 provisioning**, not realtime-kernel tuning.
 
 - Realtime / isolcpus / SCHED_FIFO → [`CPU_HOST_SETUP.md`](CPU_HOST_SETUP.md)
+- Cross-host chrony / marker stamp skew → [`CLOCK_SYNC.md`](CLOCK_SYNC.md)
 - USB-CAN names, future camera permissions, similar rules → **this doc**
 
 udev rules are host configuration, not ROS parameters and not application
