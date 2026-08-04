@@ -1,5 +1,13 @@
 # Runtime Architecture
 
+Camera driver release, application configuration, and host udev/CAN ownership
+are defined in [CAMERA_DEPLOYMENT.md](CAMERA_DEPLOYMENT.md).
+Manipulation Execution Manager (EM) v1 — side-wide arm and end-effector
+ownership, contracts, and routes — is recorded in
+[MANIPULATION_EXECUTION_ARCHITECTURE.md](MANIPULATION_EXECUTION_ARCHITECTURE.md).
+Package wire contracts live under
+`src/execution/manipulation_execution_manager/docs/`.
+
 ## Workspace layout
 
 ```text

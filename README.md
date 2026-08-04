@@ -11,6 +11,7 @@ Architecture, examples, and migration notes live under [`docs/`](docs/):
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Camera driver, configuration, and host provisioning](docs/CAMERA_DEPLOYMENT.md)
+- [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
 - [Manipulation Execution Manager architecture (v1)](docs/MANIPULATION_EXECUTION_ARCHITECTURE.md)
 - [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
 - [Example 1 — Marvin bringup](docs/EXAMPLE1.md)

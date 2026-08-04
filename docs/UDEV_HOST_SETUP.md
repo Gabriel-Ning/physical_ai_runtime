@@ -41,6 +41,7 @@ not change yet, unplug/replug it or reboot.
 | `99-can-piper1.rules` | gs_usb serial → **`piper1`** (right Piper follower), 1 Mbps, `txqueuelen=1000` |
 | `99-obsensor-libusb.rules` | Orbbec (obsensor) USB permissions / vendor symlinks |
 | `99-realsense-libusb.rules` | Intel RealSense USB permissions |
+| `99-pika-fisheye.rules` | Pika UVC fisheye camera → **`fisheye0`** (single-camera default / multi-port template) |
 
 Serials in the CAN rules are site-specific identities of the USB-CAN dongles
 used with this workspace. Applications select `piper0` / `piper1` by name; they

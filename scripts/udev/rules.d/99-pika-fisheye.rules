@@ -1,0 +1,12 @@
+# Template udev rule for Pika UVC Fisheye camera (Sunplus DECXIN 1bcf:2cd1).
+#
+# Single-camera setup:
+#   Creates persistent symlink /dev/fisheye0 for any connected Pika fisheye camera.
+KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", SYMLINK+="fisheye0", MODE="0666"
+
+# Multi-camera setup (example):
+#   For workstations with multiple Pika devices connected simultaneously, pin KERNELS
+#   to specific physical USB port paths. See docs/UDEV_HOST_SETUP.md for details.
+#
+# KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", KERNELS=="3-4.1*", SYMLINK+="fisheye0", MODE="0666"
+# KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", KERNELS=="3-9.3*", SYMLINK+="fisheye1", MODE="0666"
