@@ -38,10 +38,14 @@ not change yet, unplug/replug it or reboot.
 |---|---|
 | `99-can-piper0.rules` | gs_usb serial → **`piper0`** (left Piper follower), 1 Mbps, `txqueuelen=1000` |
 | `99-can-piper1.rules` | gs_usb serial → **`piper1`** (right Piper follower), 1 Mbps, `txqueuelen=1000` |
+| `99-obsensor-libusb.rules` | Orbbec (obsensor) USB permissions / vendor symlinks |
+| `99-realsense-libusb.rules` | Intel RealSense USB permissions |
 
-Serials are site-specific identities of the USB-CAN dongles used with this
-workspace. Applications select `piper0` / `piper1` by name; they do not own
-the host mechanism that creates those names.
+Serials in the CAN rules are site-specific identities of the USB-CAN dongles
+used with this workspace. Applications select `piper0` / `piper1` by name; they
+do not own the host mechanism that creates those names. Camera rules grant
+device access for the Pixi/prefix drivers; physical serials and namespaces stay
+in application config.
 
 ### Piper bringup example (after udev)
 
