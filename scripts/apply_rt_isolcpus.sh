@@ -6,13 +6,13 @@
 #
 # Usage:
 #   scripts/apply_rt_isolcpus.sh              # dry-run (print fragment)
-#   sudo scripts/apply_rt_isolcpus.sh --apply # write GRUB if missing isolcpus=
+#   sudo scripts/apply_rt_isolcpus.sh --apply # write/update GRUB isolcpus=
 #   scripts/apply_rt_isolcpus.sh --ensure     # idempotent for setup_cpu_rt_host.sh
 #
-# --ensure exit codes:
+# --ensure / --apply exit codes:
 #   0  GRUB already contains the profile fragment (caller checks /proc)
 #   3  GRUB was updated this run — reboot required
-#   1  failure / needs manual edit
+#   1  failure
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck disable=SC1091
@@ -20,6 +20,7 @@ source "$ROOT/scripts/rt_cpu_profile.env"
 
 CPUS="$RT_ISOL_CPUS"
 FRAGMENT="isolcpus=${CPUS} nohz_full=${CPUS} rcu_nocbs=${CPUS}"
+GRUB_FILE="/etc/default/grub"
 
 expand_cpu_list() {
   local spec="${1// /}" part a b i
@@ -45,7 +46,7 @@ expand_cpu_list() {
 }
 
 grub_has_profile_fragment() {
-  local grub="/etc/default/grub"
+  local grub="$GRUB_FILE"
   [[ -f "$grub" ]] || return 1
   grep -Eq "isolcpus=${CPUS}([[:space:]\"]|\$)" "$grub" \
     && grep -Eq "nohz_full=${CPUS}([[:space:]\"]|\$)" "$grub" \
@@ -66,10 +67,37 @@ print_dry_run() {
   echo "Expected isolcpus:           $(expand_cpu_list "$CPUS")"
 }
 
+# Rewrite GRUB_CMDLINE_LINUX_DEFAULT: drop prior isolcpus/nohz_full/rcu_nocbs, append FRAGMENT.
+write_grub_fragment() {
+  local grub="$GRUB_FILE"
+  local content
+  if ! grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="' "$grub"; then
+    echo "Expected GRUB_CMDLINE_LINUX_DEFAULT=\"...\" in $grub" >&2
+    return 1
+  fi
+  content="$(sed -n 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/\1/p' "$grub" | head -n1)"
+  content="$(printf '%s\n' "$content" | sed -E 's/[[:space:]]*(isolcpus|nohz_full|rcu_nocbs)=[^[:space:]]*//g')"
+  content="$(printf '%s\n' "$content" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+  if [[ -n "$content" ]]; then
+    content="${content} ${FRAGMENT}"
+  else
+    content="${FRAGMENT}"
+  fi
+  sed -i -E "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"|GRUB_CMDLINE_LINUX_DEFAULT=\"${content}\"|" "$grub"
+  if ! grub_has_profile_fragment; then
+    echo "Failed to write isolation fragment into $grub" >&2
+    return 1
+  fi
+  update-grub
+  echo "Updated GRUB with: ${FRAGMENT}"
+  echo "Reboot required: sudo reboot"
+  return 0
+}
+
 apply_grub() {
-  # Prints status. Exit codes: 0 already OK, 3 updated (reboot), 1 error.
-  if [[ ! -w /etc/default/grub ]]; then
-    echo "Need write access to /etc/default/grub (use sudo)." >&2
+  # Exit codes: 0 already OK, 3 updated (reboot), 1 error.
+  if [[ ! -e "$GRUB_FILE" ]]; then
+    echo "Missing $GRUB_FILE" >&2
     exit 1
   fi
 
@@ -78,19 +106,19 @@ apply_grub() {
     exit 0
   fi
 
-  if grep -q 'isolcpus=' /etc/default/grub; then
-    echo "/etc/default/grub already contains isolcpus= but not the profile fragment:" >&2
-    echo "  want: $FRAGMENT" >&2
-    echo "Edit manually, then: sudo update-grub && sudo reboot" >&2
-    exit 1
+  if [[ ! -w "$GRUB_FILE" ]]; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      echo "Need write access to $GRUB_FILE." >&2
+      exit 1
+    fi
+    echo "Elevating privileges to update GRUB isolation…"
+    exec sudo bash "$ROOT/scripts/apply_rt_isolcpus.sh" --apply-root
   fi
 
-  # shellcheck disable=SC2016
-  sed -i -E "s|^(GRUB_CMDLINE_LINUX_DEFAULT=\"[^\"]*)\"|\1 ${FRAGMENT}\"|" /etc/default/grub
-  update-grub
-  echo "Updated GRUB with: ${FRAGMENT}"
-  echo "Reboot required: sudo reboot"
-  exit 3
+  if write_grub_fragment; then
+    exit 3
+  fi
+  exit 1
 }
 
 cmd="${1:-}"
@@ -103,6 +131,10 @@ case "$cmd" in
     ;;
   --apply | apply)
     print_dry_run
+    apply_grub
+    ;;
+  --apply-root)
+    # Internal: already elevated (or writable); no dry-run banner.
     apply_grub
     ;;
   --ensure | ensure)

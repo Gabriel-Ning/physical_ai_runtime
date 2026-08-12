@@ -32,8 +32,9 @@ pixi run -e cpu setup
    - writes `/etc/security/limits.d/99-pai-realtime.conf`
      (`rtprio 99`, `memlock unlimited`)
 3. **Isolation** — reads [`scripts/rt_cpu_profile.env`](../scripts/rt_cpu_profile.env)
-   (`RT_ISOL_CPUS`, default `14,15`) and ensures the matching GRUB fragment via
-   [`scripts/apply_rt_isolcpus.sh --ensure`](../scripts/apply_rt_isolcpus.sh).
+   (`RT_ISOL_CPUS`, default `12,13,14,15`) and ensures the matching GRUB fragment via
+   [`scripts/apply_rt_isolcpus.sh --ensure`](../scripts/apply_rt_isolcpus.sh)
+   (rewrites an existing `isolcpus=` when the profile changes).
 4. **Isolated-core clocks** — when isolation is already active, raises
    `scaling_min_freq` on those CPUs to `scaling_max_freq` so idle isolcpus
    do not sit at 800 MHz.
@@ -151,8 +152,9 @@ pixi run -e cpu setup
 ulimit -r               # expect 99
 ```
 
-If GRUB already has a different `isolcpus=`, the helper refuses to clobber it;
-edit `/etc/default/grub` by hand, `sudo update-grub`, reboot.
+`setup` / `apply_rt_isolcpus.sh --ensure` rewrites an existing `isolcpus=` /
+`nohz_full=` / `rcu_nocbs=` in `/etc/default/grub` to match the profile
+(sudo once), then exits 3 until you reboot.
 
 ## Related
 

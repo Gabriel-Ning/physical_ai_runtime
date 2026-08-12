@@ -114,21 +114,15 @@ esac
 expected="$(expand_cpu_list "$RT_ISOL_CPUS")"
 active="$(expand_cpu_list "$(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || true)")"
 
-if [[ -n "$active" && "$active" == "$expected" ]]; then
-  echo "CPU isolation already active: ${active}"
-  raise_isol_min_freq "$active"
-elif [[ -n "$active" && "$active" != "$expected" ]]; then
-  echo "WARNING: active isolcpus=${active} differs from profile expected=${expected}." >&2
-  echo "  Edit scripts/rt_cpu_profile.env or GRUB manually; reboot if you change GRUB." >&2
-  raise_isol_min_freq "$active"
-else
-  # Not active in this boot — ensure GRUB has the fragment, then require reboot.
-  ensure_rc=0
+ensure_isol_grub() {
+  # Sync GRUB to RT_ISOL_CPUS; set reboot_needed when GRUB is OK but /proc is not,
+  # or when GRUB was rewritten this run.
+  local ensure_rc=0
   bash "$ROOT/scripts/apply_rt_isolcpus.sh" --ensure || ensure_rc=$?
   case "$ensure_rc" in
     0)
-      # GRUB already correct but cmdline not active → reboot pending
-      echo "GRUB isolation configured for ${expected}, but this boot has no matching isolcpus."
+      echo "GRUB isolation configured for ${expected}, but this boot has isolcpus=${active:-"(none)"}."
+      echo "  Reboot required for kernel cmdline to pick up the new set."
       reboot_needed=1
       ;;
     3)
@@ -139,6 +133,18 @@ else
       echo "  Run once: sudo bash scripts/apply_rt_isolcpus.sh --apply && sudo reboot" >&2
       ;;
   esac
+}
+
+if [[ -n "$active" && "$active" == "$expected" ]]; then
+  echo "CPU isolation already active: ${active}"
+  raise_isol_min_freq "$active"
+elif [[ -n "$active" && "$active" != "$expected" ]]; then
+  echo "WARNING: active isolcpus=${active} differs from profile expected=${expected}." >&2
+  ensure_isol_grub
+  raise_isol_min_freq "$active"
+else
+  # Not active in this boot — ensure GRUB has the fragment, then require reboot.
+  ensure_isol_grub
 fi
 
 print_status
