@@ -1,23 +1,9 @@
-# Robot and sensor embodiment packages (full Git repos).
+# Vendor embodiment checkouts that are not in phy_ai_runtime_embodiments.
+# Owned Marvin / Piper / Pika description+hardware packages come from
+# https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments.git
+# (src/embodiments submodule; git submodule update --init --recursive).
 # Binary SDKs (libmarvin, libfranka, libpiper, …) stay in pixi.toml, not here.
 repositories:
-  embodiments/robots/marvin/marvin_description:
-    type: git
-    url: https://github.com/Gabriel-Ning/marvin_description.git
-    # Site-calibrated geometry (mounts, stand, base mesh). Official CAD lives on main.
-    version: dev
-  embodiments/robots/marvin/marvin_hardware_interface:
-    type: git
-    url: https://github.com/Gabriel-Ning/marvin_hardware_interface.git
-    version: main
-  embodiments/robots/piper/piper_description:
-    type: git
-    url: https://github.com/Gabriel-Ning/piper_description.git
-    version: main
-  embodiments/robots/piper/piper_hardware_interface:
-    type: git
-    url: https://github.com/Gabriel-Ning/piper_hardware_interface.git
-    version: main
   # Franka: franka_ros2 monorepo (jazzy) + description pin matching upstream
   # dependency.repos. After import, run scripts/franka_colcon_ignore.sh so
   # Gazebo/mobile/vision packages and vendored realtime_tools are skipped.

@@ -14,6 +14,7 @@ Architecture, examples, and migration notes live under [`docs/`](docs/):
 - [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
 - [Manipulation Execution Manager architecture (v1)](docs/MANIPULATION_EXECUTION_ARCHITECTURE.md)
 - [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
+- [Runtime orchestration SDK master plan](docs/RUNTIME_ORCHESTRATION_SDK_MASTER_PLAN.md)
 - [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
 - [Migration](docs/MIGRATION.md)
 
@@ -129,13 +130,16 @@ them back into this template.
 | --- | --- | --- |
 | `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
 | `repos/example.repos` | Optional runnable example applications | `src/apps` |
-| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin, Franka, Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/robots/franka`, `src/embodiments/sensors/hikvision_ros2` |
+| `src/embodiments` submodule | Owned Marvin / Piper / Pika description+hardware | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
+| `repos/embodiment.repos` | Vendor Franka + Hikvision | `src/embodiments/robots/franka`, `src/embodiments/sensors/hikvision_ros2` |
 
 ```bash
 vcs import src < repos/necessary.repos
 # Optional example applications
 vcs import src < repos/example.repos
-# Marvin, Franka, Hikvision embodiments
+# Owned embodiments (HTTPS submodules)
+git submodule update --init --recursive -- src/embodiments
+# Vendor Franka + Hikvision
 vcs import src < repos/embodiment.repos
 bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter; see docs/ARCHITECTURE.md
 pixi run build

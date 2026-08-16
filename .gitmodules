@@ -1,0 +1,4 @@
+[submodule "src/embodiments"]
+	path = src/embodiments
+	url = https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments.git
+	branch = main
