@@ -1,0 +1,281 @@
+metadata:
+  name: "marvin_bimanual"
+  embodiment_type: "bimanual_humanoid"
+  vendor: "marvin"
+  version: "1.0"
+
+host_roles:
+  rt_host:
+    bringup:
+      package: "marvin_manipulation_controller_bringup"
+      launch_file: "rt_stack.launch.py"
+      arguments:
+        use_fake_hardware: true
+        use_rviz: false
+    owns: ["ros2_control", "local_safety"]
+  policy_host:
+    owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
+
+groups:
+  left_arm:
+    type: "arm"
+    joint_names: ["Joint1_L", "Joint2_L", "Joint3_L", "Joint4_L", "Joint5_L", "Joint6_L", "Joint7_L"]
+    base_frame: "Base_L"
+    flange_frame: "flange_L"
+    tcp_frame: "left_pika_gripper_tcp"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_trajectory"
+    controllers:
+      joint_trajectory:
+        name: "left_arm_jtc"
+        implementation: "joint_trajectory_controller/JointTrajectoryController"
+        command_interface: "position"
+        ros_actions:
+          follow_joint_trajectory: "/execution/left_arm/follow_joint_trajectory"
+        ros_topics:
+          trajectory_guard_heartbeat: "/execution/left_arm/trajectory_guard_heartbeat"
+      joint_space_reference:
+        name: "left_arm_jspc"
+        implementation: "manipulation_position_controllers/JointSpacePositionController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/execution/left_arm/joint_reference"
+      task_space_reference:
+        name: "left_arm_tskpc"
+        implementation: "manipulation_position_controllers/TaskSpaceKinematicPositionController"
+        command_interface: "position"
+        ros_topics:
+          pose_reference: "/execution/left_arm/pose_reference"
+          twist_reference: "/execution/left_arm/twist_reference"
+
+  left_gripper:
+    type: "parallel_gripper"
+    joint_names: ["left_gripper_left_joint"]
+    parent_group: "left_arm"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_space_reference"
+    controllers:
+      joint_space_reference:
+        name: "left_pika_gripper_fwd"
+        implementation: "forward_command_controller/ForwardCommandController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/left_pika_gripper_fwd/commands"
+
+  right_arm:
+    type: "arm"
+    joint_names: ["Joint1_R", "Joint2_R", "Joint3_R", "Joint4_R", "Joint5_R", "Joint6_R", "Joint7_R"]
+    base_frame: "Base_R"
+    flange_frame: "flange_R"
+    tcp_frame: "right_pika_gripper_tcp"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_trajectory"
+    controllers:
+      joint_trajectory:
+        name: "right_arm_jtc"
+        implementation: "joint_trajectory_controller/JointTrajectoryController"
+        command_interface: "position"
+        ros_actions:
+          follow_joint_trajectory: "/execution/right_arm/follow_joint_trajectory"
+        ros_topics:
+          trajectory_guard_heartbeat: "/execution/right_arm/trajectory_guard_heartbeat"
+      joint_space_reference:
+        name: "right_arm_jspc"
+        implementation: "manipulation_position_controllers/JointSpacePositionController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/execution/right_arm/joint_reference"
+      task_space_reference:
+        name: "right_arm_tskpc"
+        implementation: "manipulation_position_controllers/TaskSpaceKinematicPositionController"
+        command_interface: "position"
+        ros_topics:
+          pose_reference: "/execution/right_arm/pose_reference"
+          twist_reference: "/execution/right_arm/twist_reference"
+
+  right_gripper:
+    type: "parallel_gripper"
+    joint_names: ["right_gripper_left_joint"]
+    parent_group: "right_arm"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_space_reference"
+    controllers:
+      joint_space_reference:
+        name: "right_pika_gripper_fwd"
+        implementation: "forward_command_controller/ForwardCommandController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/right_pika_gripper_fwd/commands"
+
+compound_groups:
+  left_manipulator:
+    included_groups: ["left_arm", "left_gripper"]
+  right_manipulator:
+    included_groups: ["right_arm", "right_gripper"]
+  # Kinematic compound for coordinated dual-arm motion; excludes grippers.
+  dual_arm:
+    included_groups: ["left_arm", "right_arm"]
+  # Complete bimanual embodiment view for ownership, policy, and recording.
+  dual_manipulator:
+    included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
+
+execution_manager:
+  providers:
+    Policy:
+      priority: 10
+      controllers:
+        left_arm: joint_space_reference
+        right_arm: joint_space_reference
+        left_gripper: joint_space_reference
+        right_gripper: joint_space_reference
+    Planner:
+      priority: 15
+      controllers:
+        left_arm: joint_trajectory
+        right_arm: joint_trajectory
+    TeleopJoint_Left:
+      priority: 100
+      controllers:
+        left_arm: joint_space_reference
+        left_gripper: joint_space_reference
+    TeleopJoint_Right:
+      priority: 100
+      controllers:
+        right_arm: joint_space_reference
+        right_gripper: joint_space_reference
+    TeleopCartesian_Left:
+      priority: 100
+      controllers:
+        left_arm: task_space_reference
+    TeleopCartesian_Right:
+      priority: 100
+      controllers:
+        right_arm: task_space_reference
+    TeleopTwist_Left:
+      priority: 100
+      controllers:
+        left_arm: task_space_reference
+    TeleopTwist_Right:
+      priority: 100
+      controllers:
+        right_arm: task_space_reference
+  sources:
+    - provider: Policy
+      part: left_arm
+      command: joint_reference
+      topic: "/execution/left_arm/joint_reference"
+    - provider: Policy
+      part: right_arm
+      command: joint_reference
+      topic: "/execution/right_arm/joint_reference"
+    - provider: Policy
+      part: left_gripper
+      command: joint_reference
+      topic: "/left_pika_gripper_fwd/commands"
+    - provider: Policy
+      part: right_gripper
+      command: joint_reference
+      topic: "/right_pika_gripper_fwd/commands"
+    - provider: Planner
+      part: left_arm
+      command: joint_trajectory
+      action: "/execution/left_arm/follow_joint_trajectory"
+    - provider: Planner
+      part: right_arm
+      command: joint_trajectory
+      action: "/execution/right_arm/follow_joint_trajectory"
+    - provider: TeleopJoint_Left
+      part: left_arm
+      command: joint_reference
+      topic: "/execution/left_arm/joint_reference"
+    - provider: TeleopJoint_Left
+      part: left_gripper
+      command: joint_reference
+      topic: "/left_pika_gripper_fwd/commands"
+    - provider: TeleopJoint_Right
+      part: right_arm
+      command: joint_reference
+      topic: "/execution/right_arm/joint_reference"
+    - provider: TeleopJoint_Right
+      part: right_gripper
+      command: joint_reference
+      topic: "/right_pika_gripper_fwd/commands"
+    - provider: TeleopCartesian_Left
+      part: left_arm
+      command: pose_reference
+      topic: "/execution/left_arm/pose_reference"
+    - provider: TeleopCartesian_Right
+      part: right_arm
+      command: pose_reference
+      topic: "/execution/right_arm/pose_reference"
+    - provider: TeleopTwist_Left
+      part: left_arm
+      command: twist_reference
+      topic: "/execution/left_arm/twist_reference"
+    - provider: TeleopTwist_Right
+      part: right_arm
+      command: twist_reference
+      topic: "/execution/right_arm/twist_reference"
+
+agents:
+  Policy:
+    provider: Policy
+    frequency: 30.0
+  Planner:
+    provider: Planner
+    frequency: 30.0
+  TeleopJoint_Left:
+    provider: TeleopJoint_Left
+    frequency: 30.0
+  TeleopJoint_Right:
+    provider: TeleopJoint_Right
+    frequency: 30.0
+  TeleopCartesian_Left:
+    provider: TeleopCartesian_Left
+    frequency: 30.0
+  TeleopCartesian_Right:
+    provider: TeleopCartesian_Right
+    frequency: 30.0
+  TeleopTwist_Left:
+    provider: TeleopTwist_Left
+    frequency: 30.0
+  TeleopTwist_Right:
+    provider: TeleopTwist_Right
+    frequency: 30.0
+
+sensors:
+  cameras:
+    head_cam:
+      ros_topic: "/sensors/head_cam/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    left_wrist_cam:
+      ros_topic: "/sensors/left_wrist_cam/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    right_wrist_cam:
+      ros_topic: "/sensors/right_wrist_cam/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+
+features:
+  observation:
+    "observation.images.head_cam":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.head_cam"
+    "observation.state":
+      type: "vector"
+      shape: [16]
+      units: "rad"
+  action:
+    "action":
+      type: "vector"
+      shape: [16]
+      command_contract: "joint_reference"

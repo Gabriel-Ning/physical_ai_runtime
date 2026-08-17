@@ -24,8 +24,8 @@ class ArucoDetectorNode(Node):
 
         self.declare_parameter("image_topic", "/observation/color/image_raw")
         self.declare_parameter("camera_info_topic", "/observation/color/camera_info")
-        self.declare_parameter("marker_size", 0.05)     # 5cm physical size
-        self.declare_parameter("marker_id", 0)           # Target ArUco marker ID
+        self.declare_parameter("marker_size", 0.05)  # 5cm physical size
+        self.declare_parameter("marker_id", 0)  # Target ArUco marker ID
         self.declare_parameter("dictionary_id", cv2.aruco.DICT_5X5_250)
         self.declare_parameter("target_frame_id", "aruco_marker")
         self.declare_parameter("publish_debug_image", True)
@@ -42,7 +42,9 @@ class ArucoDetectorNode(Node):
 
         self.dictionary = cv2.aruco.getPredefinedDictionary(self.dict_id)
         self.detector_params = cv2.aruco.DetectorParameters()
-        self.aruco_detector = cv2.aruco.ArucoDetector(self.dictionary, self.detector_params)
+        self.aruco_detector = cv2.aruco.ArucoDetector(
+            self.dictionary, self.detector_params
+        )
 
         self.bridge = CvBridge()
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
@@ -94,18 +96,27 @@ class ArucoDetectorNode(Node):
             m_corners = corners[idx]
 
             if self.pub_debug:
-                cv2.aruco.drawDetectedMarkers(cv_image, [m_corners], np.array([[self.marker_id]]))
+                cv2.aruco.drawDetectedMarkers(
+                    cv_image, [m_corners], np.array([[self.marker_id]])
+                )
 
             # Estimate pose for target marker using solvePnP
-            obj_points = np.array([
-                [-self.marker_size / 2.0, self.marker_size / 2.0, 0],
-                [self.marker_size / 2.0, self.marker_size / 2.0, 0],
-                [self.marker_size / 2.0, -self.marker_size / 2.0, 0],
-                [-self.marker_size / 2.0, -self.marker_size / 2.0, 0]
-            ], dtype=np.float32)
+            obj_points = np.array(
+                [
+                    [-self.marker_size / 2.0, self.marker_size / 2.0, 0],
+                    [self.marker_size / 2.0, self.marker_size / 2.0, 0],
+                    [self.marker_size / 2.0, -self.marker_size / 2.0, 0],
+                    [-self.marker_size / 2.0, -self.marker_size / 2.0, 0],
+                ],
+                dtype=np.float32,
+            )
 
             success, rvec, tvec = cv2.solvePnP(
-                obj_points, m_corners.reshape(4, 2), K, D, flags=cv2.SOLVEPNP_IPPE_SQUARE
+                obj_points,
+                m_corners.reshape(4, 2),
+                K,
+                D,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE,
             )
 
             if success:

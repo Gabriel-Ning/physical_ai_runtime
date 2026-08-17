@@ -1,12 +1,12 @@
 # rviz_interactive_marker_pose_source
 
 Low-level, embodiment-independent interactive-marker implementation. It owns
-one configurable marker node and its `PoseStamped` publishing behavior; it
+one configurable marker node and its CartesianTrajectory publishing behavior; it
 does not own robot profiles or RViz composition. Use the higher-level
 `rviz_marker_teleop` app for Marvin/Franka profile-based operation.
 
 RViz interactive-marker teleop **source**: drag a 6-DoF marker and publish
-`geometry_msgs/PoseStamped` targets. ROS 2 Jazzy.
+1-point `moveit_msgs/CartesianTrajectory` targets. ROS 2 Jazzy.
 
 This package does **not** own robots, controllers, RViz configs, or safety
 limits. Apps compose those around it.
@@ -16,13 +16,13 @@ limits. Apps compose those around it.
 ```text
 RViz InteractiveMarker
   -> target_marker_node
-  -> PoseStamped (configurable topic)
+  -> CartesianTrajectory (1 point; configurable topic)
   -> execution manager / planner / controller
 ```
 
 Default output topic matches the EM pose contract:
 
-`/action_sources/marker/cartesian_pose`
+`/action_sources/marker/pose_reference`
 
 ## Launch
 
@@ -34,7 +34,7 @@ Common overrides:
 
 ```bash
 ros2 launch rviz_interactive_marker_pose_source teleop.launch.py \
-  pose_topic:=/action_sources/marker/cartesian_pose \
+  pose_topic:=/action_sources/marker/pose_reference \
   base_frame:=base_link \
   target_frame:=flange_link \
   publish_frequency:=50.0
@@ -48,7 +48,8 @@ current EE pose.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `pose_topic` | `/action_sources/marker/cartesian_pose` | Output `PoseStamped` |
+| `pose_topic` | `/action_sources/marker/pose_reference` | Output `moveit_msgs/CartesianTrajectory` (1 point) |
+
 | `publish_frequency` | `50.0` | Publish rate (Hz) |
 | `base_frame` | `base_link` | Marker / pose frame |
 | `target_frame` | `flange_link` | TF frame used to seed the marker |

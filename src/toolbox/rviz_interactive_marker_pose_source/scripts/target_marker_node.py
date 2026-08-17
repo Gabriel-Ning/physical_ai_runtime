@@ -10,6 +10,11 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from geometry_msgs.msg import PoseStamped
+from moveit_msgs.msg import (
+    CartesianPoint,
+    CartesianTrajectory,
+    CartesianTrajectoryPoint,
+)
 from sensor_msgs.msg import JointState
 from interactive_markers.interactive_marker_server import InteractiveMarkerServer
 from visualization_msgs.msg import (
@@ -27,7 +32,7 @@ class TargetMarkerNode(Node):
     """
     ROS 2 Node that provides an interactive marker in RViz to specify target Cartesian poses.
     Subscribes to robot transforms to initialize the marker pose at the current end-effector pose,
-    and publishes the target pose to a configurable PoseStamped topic
+    and publishes the target as a 1-point CartesianTrajectory on a configurable topic
     (default: /action_sources/marker/cartesian_pose).
     """
 
@@ -43,11 +48,12 @@ class TargetMarkerNode(Node):
             "pose_topic", "/action_sources/marker/cartesian_pose"
         ).value
         self.server_namespace = self.declare_parameter(
-            "server_namespace", "target_marker").value
-        self.marker_name = self.declare_parameter(
-            "marker_name", "target_marker").value
+            "server_namespace", "target_marker"
+        ).value
+        self.marker_name = self.declare_parameter("marker_name", "target_marker").value
         self.marker_description = self.declare_parameter(
-            "marker_description", "Target Pose").value
+            "marker_description", "Target Pose"
+        ).value
         self.publish_before_first_feedback = bool(
             self.declare_parameter("publish_before_first_feedback", False).value
         )
@@ -80,12 +86,16 @@ class TargetMarkerNode(Node):
                 f"{self.required_joint_state_topic} before marker initialization."
             )
 
-        # Publisher
-        self.pose_publisher = self.create_publisher(PoseStamped, self.pose_topic, 10)
+        # Publisher — EM cartesian_pose contract (1-pt CartesianTrajectory).
+        self.pose_publisher = self.create_publisher(
+            CartesianTrajectory, self.pose_topic, 10
+        )
 
         # Timer for publishing target pose and checking initialization
         self.timer = self.create_timer(1.0 / self.publish_rate_hz, self.timer_callback)
-        self.get_logger().info("TargetMarkerNode initialized. Waiting for TF to align marker...")
+        self.get_logger().info(
+            "TargetMarkerNode initialized. Waiting for TF to align marker..."
+        )
 
     def joint_state_callback(self, message: JointState):
         """Latch the first real joint-state timestamp used for TF alignment."""
@@ -97,10 +107,7 @@ class TargetMarkerNode(Node):
 
     def get_latest_ee_pose(self) -> PoseStamped:
         """Lookup an end-effector transform backed by the required joint state."""
-        if (
-            self.required_joint_state_topic
-            and not self.received_required_joint_state
-        ):
+        if self.required_joint_state_topic and not self.received_required_joint_state:
             return None
 
         try:
@@ -118,7 +125,7 @@ class TargetMarkerNode(Node):
         except TransformException as ex:
             self.get_logger().warn(
                 f"Could not transform {self.base_frame} to {self.target_frame}: {ex}",
-                throttle_duration_sec=2.0
+                throttle_duration_sec=2.0,
             )
             return None
 
@@ -256,10 +263,7 @@ class TargetMarkerNode(Node):
         """Periodic timer callback to initialize or publish target pose."""
         if self.target_pose_stamped is None:
             current_pose = self.get_latest_ee_pose()
-            if (
-                current_pose is not None
-                and self.initial_pose_is_stable(current_pose)
-            ):
+            if current_pose is not None and self.initial_pose_is_stable(current_pose):
                 self.setup_interactive_marker(current_pose)
                 self.target_pose_stamped = current_pose
                 if not self.publish_before_first_feedback:
@@ -269,11 +273,20 @@ class TargetMarkerNode(Node):
                     )
         else:
             # We are initialized. Publish the current target pose.
-            if not self.publish_before_first_feedback and not self.user_has_moved_marker:
+            if (
+                not self.publish_before_first_feedback
+                and not self.user_has_moved_marker
+            ):
                 return
             # Make sure to update the timestamp so downstream nodes know it's fresh.
             self.target_pose_stamped.header.stamp = self.get_clock().now().to_msg()
-            self.pose_publisher.publish(self.target_pose_stamped)
+            traj = CartesianTrajectory()
+            traj.header = self.target_pose_stamped.header
+            pt = CartesianTrajectoryPoint()
+            pt.point = CartesianPoint()
+            pt.point.pose = self.target_pose_stamped.pose
+            traj.points.append(pt)
+            self.pose_publisher.publish(traj)
 
 
 def main(args=None):

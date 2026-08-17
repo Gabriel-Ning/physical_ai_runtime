@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BehaviorTree name="dagger_recovery">
+  <RecordEpisode task="assembly">
+    <Sequence name="Assembly">
+      <RunPolicy name="Pick" policy="Pick_v1" source="PolicyPick" />
+      <Fallback name="AlignOrRecover">
+        <RunPolicy name="Align" policy="Align_v2" source="PolicyAlign" />
+        <ExecuteRecoveryPlan
+          name="Recover"
+          planner="default"
+          planner_source="Planner"
+          part="arm"
+        />
+      </Fallback>
+      <RunPolicy name="Fasten" policy="Fasten_v1" source="PolicyFasten" />
+    </Sequence>
+  </RecordEpisode>
+</BehaviorTree>

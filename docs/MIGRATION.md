@@ -1,5 +1,11 @@
 # Incremental Migration Plan
 
+> **Current execution baseline (2026-08-09):** entries below mentioning
+> `manipulation_execution_manager` are historical gate evidence. That package
+> has been removed from the active workspace; RMI is now the canonical Robot,
+> Action Provider and ExecutionManager implementation. Runtime orchestration is
+> a downstream RMI consumer.
+
 Migration starts from the validated `ros2_workspace` and moves one closed loop
 at a time. The old workspace remains the behavioral reference until the new
 repository passes the equivalent gate.
@@ -107,13 +113,12 @@ Current evidence:
 
 - `manipulation_execution_manager` migrated as a submodule under
   `src/execution/manipulation_execution_manager`, pinned to `main` after the
-  `gracious-heisenberg` arbitration refactor merged (JSPC/TSKPC route
-  exclusion, `joint_trajectory_goal` as an independent path, contract-drift
-  and code-review fixes R-01..R-04/R-12); no Piper-specific launch or package
-  coupling carried over;
-- deps are standard ROS messages + numpy, already resolved by the single
+  `gracious-heisenberg` arbitration refactor merged and subsequently migrated
+  to canonical execution routes plus the transactional `joint_trajectory`
+  Action proxy; no Piper-specific launch or package coupling carried over;
+- dependencies are standard ROS messages, already resolved by the single
   environment; no `pixi.toml` additions required for this package;
-- Release build and 78 deterministic unit tests pass.
+- Release build and deterministic unit tests pass.
 
 Environment fix landed in this gate: Robostack's `ros-jazzy-launch-testing`
 (3.4.10) registers a pytest11 plugin against the pre-9.0
@@ -219,9 +224,9 @@ Current evidence:
 - verified end-to-end with the real controller_manager on fake hardware (not
   a unit test): `joint_state_broadcaster` and both TSKPC instances reach
   `active` with clean spawner exits; a `PoseStamped` streamed on
-  `/action_sources/marker_left/pose_target` and
-  `/action_sources/marker_right/pose_target` is validated/forwarded by each
-  EM instance (`active_streaming_route: tskpc`) and both arms' 7 joints move
+  `/action_sources/marker_left/cartesian_pose` and
+  `/action_sources/marker_right/cartesian_pose` is validated/forwarded by each
+  EM instance (`selected_route: cartesian_servo`) and both arms' 7 joints move
   symmetrically in `/joint_states` toward their mirrored IK solutions;
 - stages 4-5 (real state-only connection, conservative real motion) are not
   attempted; running `use_fake_hardware:=false` requires the physical robot
@@ -282,7 +287,7 @@ Current evidence (partial):
 - Piper-specific RViz bringup removed from the package launch; apps compose
   RViz and embodiment frames;
 - default output topic aligned to the EM pose contract
-  (`/action_sources/marker/pose_target`);
+  (`/action_sources/marker/cartesian_pose`);
 - Release build succeeds; no unit tests in the upstream package yet.
 
 Site co-location validation on the RT host (8× Hik Bayer + Marvin +

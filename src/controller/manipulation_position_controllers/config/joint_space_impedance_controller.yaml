@@ -1,0 +1,50 @@
+# JointSpaceImpedanceController — JointTrajectory → joint impedance → effort.
+# Replace joints / limits / gains for your robot. Franka bringup overrides these.
+
+controller_manager:
+  ros__parameters:
+    joint_space_impedance_controller:
+      type: manipulation_position_controllers/JointSpaceImpedanceController
+
+joint_space_impedance_controller:
+  ros__parameters:
+    joints:
+      - joint1
+      - joint2
+      - joint3
+      - joint4
+      - joint5
+      - joint6
+      - joint7
+
+    input_topic: /execution/joint_reference
+    input_qos_depth: 10
+
+    # Required, size == joints. Example scale inspired by FR3 follower stacks.
+    kp_stiffness: [600.0, 600.0, 600.0, 600.0, 250.0, 150.0, 50.0]
+    kd_damping: [30.0, 30.0, 30.0, 30.0, 10.0, 10.0, 5.0]
+    max_torques: [87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0]
+    # Optional rate limit [Nm/s]; empty → 1000 Nm/s default.
+    max_torque_rates: [1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0]
+
+    # velocity_filter_alpha: measurement weight in (1-α)·prev + α·meas
+    # (1.0 = no filter; smaller α = heavier smoothing). 0.99 ≈ near pass-through.
+    velocity_filter_alpha: 0.99
+
+    trajectory_behavior:
+      mode: limiter
+      max_points: 1
+      stale_timeout_s: 0.5
+      max_velocity_rad_s: 1.5
+      max_acceleration_rad_s2: 5.0
+      ema_alpha: 0.95
+      max_jerk_rad_s3: 80.0
+      ruckig_control_cycle_s: 0.001
+
+    status_rate_hz: 10.0
+    reject_out_of_bounds_targets: true
+    allow_partial_joint_references: false
+    reject_zero_stamped_references: true
+    # Empty → unbounded. Replace with your robot's joint limits.
+    lower_limits: []
+    upper_limits: []

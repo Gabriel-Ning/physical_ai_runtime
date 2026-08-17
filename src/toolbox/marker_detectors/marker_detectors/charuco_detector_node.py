@@ -23,11 +23,15 @@ class CharucoDetectorNode(Node):
         self.get_logger().info("Initializing CharucoDetectorNode...")
 
         # Parameters
-        self.declare_parameter("image_topic", "/observation/hand_realsense/color/image_raw")
-        self.declare_parameter("camera_info_topic", "/observation/hand_realsense/color/camera_info")
+        self.declare_parameter(
+            "image_topic", "/observation/hand_realsense/color/image_raw"
+        )
+        self.declare_parameter(
+            "camera_info_topic", "/observation/hand_realsense/color/camera_info"
+        )
         self.declare_parameter("inner_corners_x", 13)
         self.declare_parameter("inner_corners_y", 8)
-        self.declare_parameter("square_length", 0.02)   # meters (e.g. 0.02m = 20mm)
+        self.declare_parameter("square_length", 0.02)  # meters (e.g. 0.02m = 20mm)
         self.declare_parameter("marker_length", 0.015)  # meters (e.g. 0.015m = 15mm)
         self.declare_parameter("dictionary_id", cv2.aruco.DICT_5X5_250)
         self.declare_parameter("target_frame_id", "charuco_board")
@@ -53,7 +57,9 @@ class CharucoDetectorNode(Node):
         self.target_frame_id = str(self.get_parameter("target_frame_id").value)
         self.pub_debug = bool(self.get_parameter("publish_debug_image").value)
         self.debug_image_topic = str(self.get_parameter("debug_image_topic").value)
-        self.log_detection_changes = bool(self.get_parameter("log_detection_changes").value)
+        self.log_detection_changes = bool(
+            self.get_parameter("log_detection_changes").value
+        )
         self._last_status = None
 
         # OpenCV ArUco/Charuco setup
@@ -62,7 +68,7 @@ class CharucoDetectorNode(Node):
             (self.squares_x, self.squares_y),
             self.square_length,
             self.marker_length,
-            self.dictionary
+            self.dictionary,
         )
         self.detector_params = cv2.aruco.DetectorParameters()
         self.detector_params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
@@ -83,16 +89,10 @@ class CharucoDetectorNode(Node):
 
         # Subscriptions
         self.info_sub = self.create_subscription(
-            CameraInfo,
-            self.camera_info_topic,
-            self.info_callback,
-            10
+            CameraInfo, self.camera_info_topic, self.info_callback, 10
         )
         self.image_sub = self.create_subscription(
-            Image,
-            self.image_topic,
-            self.image_callback,
-            qos_profile_sensor_data
+            Image, self.image_topic, self.image_callback, qos_profile_sensor_data
         )
 
         if self.pub_debug:
@@ -126,7 +126,9 @@ class CharucoDetectorNode(Node):
     def _process_image(self, msg: Image):
         with self.lock:
             if self.camera_matrix is None:
-                self.get_logger().warning("Waiting for CameraInfo...", throttle_duration_sec=2.0)
+                self.get_logger().warning(
+                    "Waiting for CameraInfo...", throttle_duration_sec=2.0
+                )
                 return
             K = self.camera_matrix.copy()
             D = self.dist_coeffs.copy()
@@ -155,9 +157,14 @@ class CharucoDetectorNode(Node):
             detail = [f"ArUco markers: {n_markers}", f"Charuco corners: {n_corners}"]
 
             if charuco_corners is not None and n_corners >= 4 and self.pub_debug:
-                cv2.aruco.drawDetectedCornersCharuco(cv_image, charuco_corners, charuco_ids)
+                cv2.aruco.drawDetectedCornersCharuco(
+                    cv_image, charuco_corners, charuco_ids
+                )
 
-            if charuco_corners is not None and n_corners >= self._min_charuco_corners_pnp:
+            if (
+                charuco_corners is not None
+                and n_corners >= self._min_charuco_corners_pnp
+            ):
                 try:
                     retval, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
                         charuco_corners,
@@ -220,7 +227,9 @@ class CharucoDetectorNode(Node):
         cv2.rectangle(image, (0, 0), (box_w, box_h), color_bgr, 2)
         for i, line in enumerate(lines):
             y = pad + (i + 1) * line_h - 4
-            cv2.putText(image, line, (pad, y), font, scale, color_bgr, thickness, cv2.LINE_AA)
+            cv2.putText(
+                image, line, (pad, y), font, scale, color_bgr, thickness, cv2.LINE_AA
+            )
 
     def publish_tf(self, header, rvec, tvec):
         R, _ = cv2.Rodrigues(rvec)

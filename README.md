@@ -128,18 +128,22 @@ them back into this template.
 
 | Manifest | Purpose | Checkout roots |
 | --- | --- | --- |
-| `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
-| `repos/example.repos` | Optional runnable example applications | `src/apps` |
-| `src/embodiments` submodule | Owned Marvin / Piper / Pika description+hardware | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
-| `repos/embodiment.repos` | Vendor Franka + Hikvision | `src/embodiments/robots/franka`, `src/embodiments/sensors/hikvision_ros2` |
+| this repo | RMI, examples, orchestrator, `src/rt_launch` bringups | `src/interfaces`, `src/execution`, `src/rt_launch`, `examples/` |
+| `repos/necessary.repos` | Workstation teleop / motion-planning / recorder | `src/teleop`, `src/motion_planning`, `src/recording` |
+| `src/embodiments` submodule | Owned Marvin / Piper / Pika, plus pinned Franka vendor trees | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
+| `repos/embodiment.repos` | Vendor Hikvision (not required for RT bringup) | `src/embodiments/sensors/hikvision_ros2` |
+
+RT control host: follow [CPU host setup](docs/CPU_HOST_SETUP.md) — build
+`src/rt_launch` + `src/embodiments`, use Pixi controller binaries, do not
+import `necessary.repos` or Hikvision.
 
 ```bash
 vcs import src < repos/necessary.repos
 # Optional example applications
 vcs import src < repos/example.repos
-# Owned embodiments (HTTPS submodules)
+# Owned embodiments + pinned Franka (HTTPS nested submodules)
 git submodule update --init --recursive -- src/embodiments
-# Vendor Franka + Hikvision
+# Vendor Hikvision
 vcs import src < repos/embodiment.repos
 bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter; see docs/ARCHITECTURE.md
 pixi run build

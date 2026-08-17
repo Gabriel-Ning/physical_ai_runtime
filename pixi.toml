@@ -32,6 +32,7 @@ rosdep = "*"
 # test run fails at plugin load. Pin below the break until robostack ships a
 # launch_testing build compatible with pytest 9.
 pytest = ">=8,<9"
+ruff = ">=0.12,<1"
 
 # ── Native build toolchain ───────────────────────────────────────────────────
 cmake = "*"
@@ -84,10 +85,18 @@ ros-jazzy-apriltag-msgs = ">=2.0.1,<3"
 
 # ── Motion planning / controllers (conda) ────────────────────────────────────
 placo = "==0.9.23"
+# Python ndcurves on gabriel-robotics (robostack-jazzy / pinocchio 4.0).
+# https://prefix.dev/channels/gabriel-robotics/packages/ndcurves
+# Not the PyPI/cmeel wheel (pulls conflicting libpinocchio 4.1).
+ndcurves = "==2.3.0"
 ros-jazzy-ruckig = ">=0.9.2,<0.10"
-# Binary-only controllers from gabriel-robotics. Keep the source checkout
-# outside this workspace so it cannot shadow the installed package.
-ros-jazzy-manipulation-position-controllers = "==0.2.3"
+# RT controller binaries. Source under src/controller is excluded from colcon.
+ros-jazzy-manipulation-position-controllers = "==0.3.1"
+ros-jazzy-joint-trajectory-controller-guard = "==0.1.0"
+# pinocchio's CMake find_dependency(Qhull) requires the CLI tools under
+# $PREFIX/bin (qhull, qconvex, …). Keep an explicit pin so installs that
+# clobber/drop those binaries can be repaired by reinstalling this package.
+qhull = "==2020.2"
 # Meta package pulls planners, plugins (incl. simple-controller-manager),
 # moveit-ros (move-group, visualization), setup-assistant (configs-utils), etc.
 ros-jazzy-moveit = "*"
@@ -98,7 +107,6 @@ ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
 ros-jazzy-joy-linux = ">=3.3.0,<4"
 
 # ── Recording / visualization / debug ────────────────────────────────────────
-ros-jazzy-episode-recorder = "==0.3.0"
 ros-jazzy-foxglove-bridge = "*"
 # Time-series debug outside RViz (ROS topic streaming plugins included).
 ros-jazzy-plotjuggler-ros = "*"
@@ -115,9 +123,11 @@ ros-jazzy-ament-cmake-clang-format = "*"
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
+
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
 ROS_DOMAIN_ID = "1"
+MPLCONFIGDIR = "/tmp/physical_ai_matplotlib"
 CMAKE_GENERATOR = "Ninja"
 
 [tasks]
@@ -132,12 +142,14 @@ build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 # ament_python test suites are actually collected and run.
 test = "bash -c 'colcon test --python-testing pytest && colcon test-result --verbose'"
 clean = "rm -rf build install log"
-# Kill leftover background ROS 2 processes (nodes, spawners,
-# controller_manager, rviz, ...) from a `ros2 launch` that wasn't cleanly
-# Ctrl-C'd. Safe to run with nothing running.
+# Kill leftover ROS 2 processes locally and on the RT host (beta), including
+# orphan robot_state_publisher / joint_state_publisher that steal /joint_states.
+# STOP_ROS_REMOTE=0 → local only. STOP_ROS_REMOTE_HOST overrides beta SSH target.
 stop = "bash scripts/stop_ros.sh"
 # Time-series inspector (alongside / instead of RViz). Same ROS_DOMAIN_ID.
 pj = "ros2 run plotjuggler plotjuggler"
+format = "ruff format --no-cache src"
+lint = "ruff check --no-cache src"
 
 # ── GPU feature (default environment) ────────────────────────────────────────
 #
@@ -157,6 +169,8 @@ index-strategy = "unsafe-best-match"
 
 [feature.gpu.pypi-dependencies]
 torch = { version = ">=2.9", index = "https://download.pytorch.org/whl/cu130" }
+jax = { version = ">=0.11.0", extras = ["cuda13"] }
+jax-cuda13-plugin = { version = ">=0.11.0", extras = ["with-cuda"] }
 
 # Isaac Teleop (wheel URL avoids manylinux_2_28 vs NVIDIA manylinux_2_35 mismatch)
 isaacteleop = { url = "https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl" }
@@ -169,6 +183,8 @@ daqp = "*"
 loop-rate-limiters = "*"
 pin-pink = "*"
 dex-retargeting = "*"
+toppra = "*"
+
 
 # Motion planning backends (git-pinned; never live-query upstream HEAD)
 # Bump pyroki: git ls-remote https://github.com/Gabriel-Ning/pyroki.git main

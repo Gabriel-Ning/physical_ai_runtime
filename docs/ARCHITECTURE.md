@@ -34,8 +34,9 @@ scripts/                   idempotent workspace setup and diagnostics
 This repository is a **shared workspace template**: Pixi + colcon + docs and
 workspace-owned tools. Teams import reusable functional modules through
 `repos/necessary.repos`; optional runnable examples use `repos/example.repos`;
-robot-specific descriptions and hardware integrations use
-`repos/embodiment.repos`.
+robot-specific descriptions and hardware integrations use the
+`src/embodiments` submodule (`phy_ai_runtime_embodiments`), with remaining
+vendor sensor checkouts in `repos/embodiment.repos`.
 
 [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources) is a
 flat ROS-package repository imported once at `src/apps` through
@@ -51,7 +52,7 @@ Reusable functional modules (`repos/necessary.repos`):
   → `src/teleop/isaacteleop_toolbox` (`repos/necessary.repos`)
 - [`motion_planners`](https://github.com/Gabriel-Ning/motion_planners)
   → `src/motion_planning/motion_planners` (`repos/necessary.repos`; contains
-  `manipulation_motion_planning`, `pyroki_planner_adapter`,
+  `motion_planner_core`, `pyroki_planner_adapter`,
   `curobo_planner_adapter`)
 
 Optional example applications (`repos/example.repos`):
@@ -59,18 +60,21 @@ Optional example applications (`repos/example.repos`):
 - [`runtime_resources`](https://github.com/Gabriel-Ning/runtime_resources)
   → `src/apps` (`repos/example.repos`; flat Marvin app packages)
 
-Robot embodiment (`repos/embodiment.repos`):
+Robot embodiment (`src/embodiments` submodule →
+[`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments)):
 
 - [`marvin_description`](https://github.com/Gabriel-Ning/marvin_description)
-  → `src/embodiments/robots/marvin/marvin_description` (`repos/embodiment.repos`,
-  branch `dev` = site-calibrated geometry; `main` = official CAD)
+  → `src/embodiments/robots/marvin/marvin_description`
+  (branch `dev` = site-calibrated geometry; `main` = official CAD)
 - [`marvin_hardware_interface`](https://github.com/Gabriel-Ning/marvin_hardware_interface)
-  → `src/embodiments/robots/marvin/marvin_hardware_interface` (`repos/embodiment.repos`)
+  → `src/embodiments/robots/marvin/marvin_hardware_interface`
 - [`franka_ros2`](https://github.com/frankarobotics/franka_ros2/tree/jazzy)
-  → `src/embodiments/robots/franka/franka_ros2` (branch `jazzy`; after import run
+  → `src/embodiments/robots/franka/franka_ros2` (nested submodule, pinned
+  `73a1501` on branch `jazzy`; after checkout run
   `scripts/franka_colcon_ignore.sh` for core-arm-only builds)
 - [`franka_description`](https://github.com/frankarobotics/franka_description)
-  → `src/embodiments/robots/franka/franka_description` (tag `2.8.1`)
+  → `src/embodiments/robots/franka/franka_description` (nested submodule,
+  tag `2.8.1`)
 - `libfranka` is **not** under `src/`; it is the gabriel-robotics Pixi package
   (`libfranka` `pixi1_*` + `poco` in `pixi.toml`)
 
@@ -80,7 +84,10 @@ Robot embodiment (`repos/embodiment.repos`):
   `*_description` (URDF + `ros2_control` tags) and a
   `*_hardware_interface` (SystemInterface plugin). Marvin already follows
   that shape.
-- **Today** we vendor upstream `franka_ros2` (jazzy monorepo) and apply
+- **Today** Franka is a pair of nested submodules on
+  `phy_ai_runtime_embodiments`, pointing at upstream
+  `frankarobotics/franka_ros2` (`jazzy` @ `73a1501`) and
+  `frankarobotics/franka_description` (`2.8.1`). After checkout, apply
   [`scripts/franka_colcon_ignore.sh`](../scripts/franka_colcon_ignore.sh) as a
   **pragmatic compromise**: keep arm core packages (msgs, hardware, gripper,
   bringup, example controllers, MoveIt config, …) while ignoring Gazebo,

@@ -1,5 +1,11 @@
 # Recording Architecture
 
+> **RMI integration boundary (2026-08-09):** `episode_recorder` remains the
+> independent recording authority and supplies the Recorder facade. RMI
+> supplies raw ExecutionManager status/events used by applications and offline
+> dataset compilation; Robot and ExecutionManager do not own recording
+> sessions.
+
 ## Product boundary
 
 The runtime records independently timed ROS streams and the evidence needed to
@@ -293,4 +299,3 @@ changing or recapturing the physical experience.
 - Online multimodal frame assembly.
 - Online calibration drift models.
 - Distributed multi-host transaction coordination.
-

@@ -21,9 +21,9 @@ class ExampleChunkPolicy:
 
     def predict(self, observation: dict) -> np.ndarray:
         """Return a receding-horizon joint-position action with shape [T,D]."""
-        state = observation['observation.state']
-        image = observation['observation.images.camera']
-        task = observation['task']
+        state = observation["observation.state"]
+        image = observation["observation.images.camera"]
+        task = observation["task"]
 
         # Typical frameworks differ only inside this method:
         # action = self.model.select_action(...)  # ACT / VLA
@@ -34,38 +34,38 @@ class ExampleChunkPolicy:
 
 class VlaPolicyExample(Node):
     def __init__(self) -> None:
-        super().__init__('vla_policy_example')
-        self.declare_parameter('joint_names', ['joint1', 'joint2', 'joint3'])
-        self.declare_parameter('joint_state_topic', '/joint_states')
-        self.declare_parameter('image_topic', '/camera/color/image_raw')
-        self.declare_parameter('task', 'hold position')
-        self.declare_parameter('rate_hz', 10.0)
-        self.declare_parameter('horizon', 5)
-        self.declare_parameter('action_dt_s', 0.1)
+        super().__init__("vla_policy_example")
+        self.declare_parameter("joint_names", ["joint1", "joint2", "joint3"])
+        self.declare_parameter("joint_state_topic", "/joint_states")
+        self.declare_parameter("image_topic", "/camera/color/image_raw")
+        self.declare_parameter("task", "hold position")
+        self.declare_parameter("rate_hz", 10.0)
+        self.declare_parameter("horizon", 5)
+        self.declare_parameter("action_dt_s", 0.1)
 
-        self.joint_names = list(self.get_parameter('joint_names').value)
-        self.task = str(self.get_parameter('task').value)
-        self.horizon = int(self.get_parameter('horizon').value)
-        self.action_dt_s = float(self.get_parameter('action_dt_s').value)
-        rate_hz = float(self.get_parameter('rate_hz').value)
+        self.joint_names = list(self.get_parameter("joint_names").value)
+        self.task = str(self.get_parameter("task").value)
+        self.horizon = int(self.get_parameter("horizon").value)
+        self.action_dt_s = float(self.get_parameter("action_dt_s").value)
+        rate_hz = float(self.get_parameter("rate_hz").value)
         self.policy = ExampleChunkPolicy(self.horizon, self.action_dt_s)
 
         self.state: np.ndarray | None = None
         self.image: np.ndarray | None = None
         self.create_subscription(
             JointState,
-            str(self.get_parameter('joint_state_topic').value),
+            str(self.get_parameter("joint_state_topic").value),
             self.on_joint_state,
             qos_profile_sensor_data,
         )
         self.create_subscription(
             Image,
-            str(self.get_parameter('image_topic').value),
+            str(self.get_parameter("image_topic").value),
             self.on_image,
             qos_profile_sensor_data,
         )
         self.publisher = self.create_publisher(
-            JointTrajectory, '/action_sources/policy/joint_reference', 1
+            JointTrajectory, "/action_sources/policy/joint_reference", 1
         )
         self.timer = self.create_timer(1.0 / rate_hz, self.infer)
 
@@ -78,12 +78,12 @@ class VlaPolicyExample(Node):
         )
 
     def on_image(self, msg: Image) -> None:
-        if msg.encoding.lower() not in {'rgb8', 'bgr8'}:
-            self.get_logger().warning(f'Expected rgb8/bgr8, got {msg.encoding}')
+        if msg.encoding.lower() not in {"rgb8", "bgr8"}:
+            self.get_logger().warning(f"Expected rgb8/bgr8, got {msg.encoding}")
             return
         rows = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.step)
         image = rows[:, : msg.width * 3].reshape(msg.height, msg.width, 3)
-        if msg.encoding.lower() == 'bgr8':
+        if msg.encoding.lower() == "bgr8":
             image = image[..., ::-1]
         self.image = image.copy()
 
@@ -93,9 +93,9 @@ class VlaPolicyExample(Node):
 
         # A common VLA input structure: proprioception, RGB image, language task.
         observation = {
-            'observation.state': self.state.copy(),                 # [D], float32
-            'observation.images.camera': self.image.copy(),         # [H,W,3], uint8
-            'task': self.task,
+            "observation.state": self.state.copy(),  # [D], float32
+            "observation.images.camera": self.image.copy(),  # [H,W,3], uint8
+            "task": self.task,
         }
 
         # Optional PyTorch conversion used by many VLA models:
@@ -116,9 +116,9 @@ class VlaPolicyExample(Node):
 
     def action_chunk_to_ros(self, action: np.ndarray) -> JointTrajectory:
         if action.shape != (self.horizon, len(self.joint_names)):
-            raise ValueError(f'Expected action shape [T,D], got {action.shape}')
+            raise ValueError(f"Expected action shape [T,D], got {action.shape}")
         if not np.isfinite(action).all():
-            raise ValueError('Action contains NaN or Inf')
+            raise ValueError("Action contains NaN or Inf")
         msg = JointTrajectory()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.joint_names = self.joint_names
@@ -144,5 +144,5 @@ def main() -> None:
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

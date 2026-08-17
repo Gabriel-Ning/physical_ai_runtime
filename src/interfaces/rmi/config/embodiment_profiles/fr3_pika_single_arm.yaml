@@ -1,0 +1,179 @@
+metadata:
+  name: "fr3_pika_single_arm"
+  embodiment_type: "single_arm"
+  vendor: "franka"
+  version: "1.0"
+
+host_roles:
+  rt_host:
+    bringup:
+      package: "franka_manipulation_controller_bringup"
+      launch_file: "rt_stack.launch.py"
+      arguments:
+        use_fake_hardware: true
+        use_rviz: false
+    owns: ["ros2_control", "local_safety"]
+  policy_host:
+    owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
+
+groups:
+  arm:
+    type: "arm"
+    joint_names: ["fr3_joint1", "fr3_joint2", "fr3_joint3", "fr3_joint4", "fr3_joint5", "fr3_joint6", "fr3_joint7"]
+    base_frame: "fr3_link0"
+    flange_frame: "fr3_link8"
+    tcp_frame: "pika_gripper_tcp"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_trajectory"
+    controllers:
+      joint_trajectory:
+        name: "franka_arm_jtc"
+        implementation: "joint_trajectory_controller/JointTrajectoryController"
+        command_interface: "effort"
+        ros_actions:
+          follow_joint_trajectory: "/execution/arm/follow_joint_trajectory"
+        ros_topics:
+          trajectory_guard_heartbeat: "/execution/arm/trajectory_guard_heartbeat"
+      joint_space_reference:
+        name: "franka_arm_jsic"
+        implementation: "manipulation_position_controllers/JointSpaceImpedanceController"
+        command_interface: "effort"
+        ros_topics:
+          joint_reference: "/execution/arm/joint_reference"
+      task_space_reference:
+        name: "franka_arm_tsjic"
+        implementation: "manipulation_position_controllers/TaskSpaceJointImpedanceController"
+        command_interface: "effort"
+        ros_topics:
+          pose_reference: "/execution/arm/pose_reference"
+          twist_reference: "/execution/arm/twist_reference"
+
+  end_effector:
+    type: "parallel_gripper"
+    joint_names: ["gripper_left_joint"]
+    parent_group: "arm"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_space_reference"
+    controllers:
+      joint_space_reference:
+        name: "pika_gripper_fwd"
+        implementation: "forward_command_controller/ForwardCommandController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/pika_gripper_fwd/commands"
+
+compound_groups:
+  manipulator:
+    included_groups: ["arm", "end_effector"]
+
+execution_manager:
+  providers:
+    Policy:
+      priority: 10
+      controllers:
+        arm: joint_space_reference
+        end_effector: joint_space_reference
+    Planner:
+      priority: 15
+      controllers:
+        arm: joint_trajectory
+    TeleopJoint:
+      priority: 100
+      controllers:
+        arm: joint_space_reference
+        end_effector: joint_space_reference
+    TeleopCartesian:
+      priority: 100
+      controllers:
+        arm: task_space_reference
+    TeleopTwist:
+      priority: 100
+      controllers:
+        arm: task_space_reference
+  sources:
+    - provider: Policy
+      part: arm
+      command: joint_reference
+      topic: "/execution/arm/joint_reference"
+    - provider: Policy
+      part: end_effector
+      command: joint_reference
+      topic: "/pika_gripper_fwd/commands"
+    - provider: Planner
+      part: arm
+      command: joint_trajectory
+      action: "/execution/arm/follow_joint_trajectory"
+    - provider: TeleopJoint
+      part: arm
+      command: joint_reference
+      topic: "/execution/arm/joint_reference"
+    - provider: TeleopJoint
+      part: end_effector
+      command: joint_reference
+      topic: "/pika_gripper_fwd/commands"
+    - provider: TeleopCartesian
+      part: arm
+      command: pose_reference
+      topic: "/execution/arm/pose_reference"
+    - provider: TeleopTwist
+      part: arm
+      command: twist_reference
+      topic: "/execution/arm/twist_reference"
+
+agents:
+  Policy:
+    provider: Policy
+    frequency: 30.0
+  Planner:
+    provider: Planner
+    frequency: 30.0
+  TeleopJoint:
+    provider: TeleopJoint
+    frequency: 30.0
+  TeleopCartesian:
+    provider: TeleopCartesian
+    frequency: 30.0
+  TeleopTwist:
+    provider: TeleopTwist
+    frequency: 30.0
+
+sensors:
+  cameras:
+    cam_high:
+      ros_topic: "/sensors/cam_high/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    cam_wrist:
+      ros_topic: "/sensors/cam_wrist/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+
+recorder:
+  profile: "rmi_fr3_policy"
+  root_dir: "data/episodes"
+  experiment_name: "fr3_pika_policy"
+  task: "unspecified_task"
+
+features:
+  observation:
+    "observation.images.cam_high":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.cam_high"
+    "observation.images.cam_wrist":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.cam_wrist"
+    "observation.state":
+      type: "vector"
+      shape: [8]
+      units: "rad"
+  action:
+    "action":
+      type: "vector"
+      shape: [8]
+      command_contract: "joint_reference"

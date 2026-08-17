@@ -1,0 +1,155 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    left_arm_jspc:
+      type: manipulation_position_controllers/JointSpacePositionController
+    right_arm_jspc:
+      type: manipulation_position_controllers/JointSpacePositionController
+    left_arm_tskpc:
+      type: manipulation_position_controllers/TaskSpaceKinematicPositionController
+    right_arm_tskpc:
+      type: manipulation_position_controllers/TaskSpaceKinematicPositionController
+    left_arm_jtc:
+      type: joint_trajectory_controller/JointTrajectoryController
+    right_arm_jtc:
+      type: joint_trajectory_controller/JointTrajectoryController
+    # Native Piper gripper routes. This RT profile intentionally does not offer
+    # a replaceable end-effector contract.
+    left_gripper_fwd:
+      type: forward_command_controller/ForwardCommandController
+    right_gripper_fwd:
+      type: forward_command_controller/ForwardCommandController
+
+joint_state_broadcaster:
+  ros__parameters:
+    publish_rate: 200.0
+
+left_arm_tskpc:
+  ros__parameters:
+    joints: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    base_frame: left_base_link
+    tip_frame: left_gripper_tcp
+    input_topic: /execution/left_arm/pose_reference
+    reject_zero_stamped_references: true
+    trajectory_behavior:
+      max_points: 64
+      untimed_frame_dt_s: 0.02
+    twist_topic: /execution/left_arm/twist_reference
+    stale_timeout_s: 0.2
+    max_joint_velocity_rad_s: 0.5
+    max_linear_velocity_m_s: 0.15
+    max_angular_velocity_rad_s: 0.5
+    max_command_tracking_error_rad: 0.35
+    status_rate_hz: 10.0
+    solver:
+      backend: osqp
+      position_gain: 4.0
+      orientation_gain: 1.0
+      damping: 0.05
+      posture_weight: 1.0e-3
+      max_iterations: 1
+    lower_limits: [-2.6179938, 0.0, -2.9670597, -1.7453292, -1.2217304, -6.2831853]
+    upper_limits: [2.6179938, 3.1415926, 0.0, 1.7453292, 1.2217304, 6.2831853]
+
+right_arm_tskpc:
+  ros__parameters:
+    joints: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    base_frame: right_base_link
+    tip_frame: right_gripper_tcp
+    input_topic: /execution/right_arm/pose_reference
+    reject_zero_stamped_references: true
+    trajectory_behavior:
+      max_points: 64
+      untimed_frame_dt_s: 0.02
+    twist_topic: /execution/right_arm/twist_reference
+    stale_timeout_s: 0.2
+    max_joint_velocity_rad_s: 0.5
+    max_linear_velocity_m_s: 0.15
+    max_angular_velocity_rad_s: 0.5
+    max_command_tracking_error_rad: 0.35
+    status_rate_hz: 10.0
+    solver:
+      backend: osqp
+      position_gain: 4.0
+      orientation_gain: 1.0
+      damping: 0.05
+      posture_weight: 1.0e-3
+      max_iterations: 1
+    lower_limits: [-2.6179938, 0.0, -2.9670597, -1.7453292, -1.2217304, -6.2831853]
+    upper_limits: [2.6179938, 3.1415926, 0.0, 1.7453292, 1.2217304, 6.2831853]
+
+left_arm_jspc:
+  ros__parameters:
+    joints: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    input_topic: /execution/left_arm/joint_reference
+    reject_zero_stamped_references: true
+    trajectory_behavior:
+      mode: ruckig
+      max_points: 1
+      stale_timeout_s: 0.2
+      max_velocity_rad_s: 5.0
+      max_acceleration_rad_s2: 40.0
+      max_jerk_rad_s3: 150.0
+      ruckig_control_cycle_s: 0.002
+    lower_limits: [-2.6179938, 0.0, -2.9670597, -1.7453292, -1.2217304, -6.2831853]
+    upper_limits: [2.6179938, 3.1415926, 0.0, 1.7453292, 1.2217304, 6.2831853]
+
+right_arm_jspc:
+  ros__parameters:
+    joints: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    input_topic: /execution/right_arm/joint_reference
+    reject_zero_stamped_references: true
+    trajectory_behavior:
+      mode: ruckig
+      max_points: 1
+      stale_timeout_s: 0.2
+      max_velocity_rad_s: 5.0
+      max_acceleration_rad_s2: 40.0
+      max_jerk_rad_s3: 150.0
+      ruckig_control_cycle_s: 0.002
+    lower_limits: [-2.6179938, 0.0, -2.9670597, -1.7453292, -1.2217304, -6.2831853]
+    upper_limits: [2.6179938, 3.1415926, 0.0, 1.7453292, 1.2217304, 6.2831853]
+
+left_arm_jtc:
+  ros__parameters:
+    joints: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    action_monitor_rate: 20.0
+    constraints:
+      decelerate_on_cancel: true
+      left_joint1: {max_deceleration_on_cancel: 40.0}
+      left_joint2: {max_deceleration_on_cancel: 40.0}
+      left_joint3: {max_deceleration_on_cancel: 40.0}
+      left_joint4: {max_deceleration_on_cancel: 40.0}
+      left_joint5: {max_deceleration_on_cancel: 40.0}
+      left_joint6: {max_deceleration_on_cancel: 40.0}
+
+right_arm_jtc:
+  ros__parameters:
+    joints: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    allow_partial_joints_goal: false
+    action_monitor_rate: 20.0
+    constraints:
+      decelerate_on_cancel: true
+      right_joint1: {max_deceleration_on_cancel: 40.0}
+      right_joint2: {max_deceleration_on_cancel: 40.0}
+      right_joint3: {max_deceleration_on_cancel: 40.0}
+      right_joint4: {max_deceleration_on_cancel: 40.0}
+      right_joint5: {max_deceleration_on_cancel: 40.0}
+      right_joint6: {max_deceleration_on_cancel: 40.0}
+
+left_gripper_fwd:
+  ros__parameters:
+    joints: [left_gripper_joint1]
+    interface_name: position
+
+right_gripper_fwd:
+  ros__parameters:
+    joints: [right_gripper_joint1]
+    interface_name: position

@@ -1,0 +1,9 @@
+# TCP frame relative to gripper_base_link (meters, radians).
+# Typically near the soft-finger tip / grasp point (not flange).
+# Edit here for this FR3 bringup; defaults match pika_gripper_description.
+# After changing this file, regenerate:
+#   curobo_robot_models → config/fr3_manipulation.yml
+#   (cd .../curobo_robot_models && bash scripts/generate_curobo_robot_model.sh)
+origin:
+  xyz: "0 0 0.21"
+  rpy: "0 0 0"

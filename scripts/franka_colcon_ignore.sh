@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotently COLCON_IGNORE non-core packages inside the franka_ros2 checkout.
 #
-# Interim compromise while this workspace vendors upstream franka_ros2 (jazzy).
+# Interim compromise while franka_ros2 is a pinned nested submodule (jazzy).
 # Target embodiment shape is Marvin-like: description + hardware_interface only
 # (see docs/ARCHITECTURE.md, Franka maintenance stance). Do not treat this
 # filter as the long-term ownership model.
@@ -16,7 +16,7 @@ franka_root="${workspace_root}/src/embodiments/robots/franka/franka_ros2"
 
 if [[ ! -d "${franka_root}" ]]; then
   echo "franka_ros2 checkout missing: ${franka_root}" >&2
-  echo "Run: vcs import src < repos/embodiment.repos" >&2
+  echo "Run: git submodule update --init --recursive -- src/embodiments" >&2
   exit 1
 fi
 

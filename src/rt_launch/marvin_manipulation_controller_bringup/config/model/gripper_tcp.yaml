@@ -1,0 +1,10 @@
+# TCP frame relative to gripper_base_link (meters, radians).
+# Typically near the soft-finger tip / grasp point (not flange).
+# Shared by left_ / right_ Pika mounts in this Marvin bringup.
+# Edit here; defaults match pika_gripper_description.
+# After changing this file, regenerate:
+#   curobo_robot_models → config/marvin_manipulation.yml
+#   (cd .../curobo_robot_models && bash scripts/generate_curobo_robot_model.sh --model marvin)
+origin:
+  xyz: "0 0 0.21"
+  rpy: "0 0 0"

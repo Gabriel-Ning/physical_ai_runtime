@@ -1,23 +1,19 @@
-# Vendor embodiment checkouts that are not in phy_ai_runtime_embodiments.
-# Owned Marvin / Piper / Pika description+hardware packages come from
-# https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments.git
-# (src/embodiments submodule; git submodule update --init --recursive).
-# Binary SDKs (libmarvin, libfranka, libpiper, …) stay in pixi.toml, not here.
+# Remaining vendor checkouts that are not nested submodules of
+# phy_ai_runtime_embodiments.
+#
+# Marvin / Piper / Pika / Franka:
+#   git submodule update --init --recursive -- src/embodiments
+# Franka nested pins (do not vcs-import; upgrading requires an explicit bump):
+#   robots/franka/franka_ros2
+#     https://github.com/frankarobotics/franka_ros2.git
+#     73a1501d76efa2bc4bf09cb2af9c2b72c2c642da  # jazzy, package 3.4.1
+#   robots/franka/franka_description
+#     https://github.com/frankarobotics/franka_description.git
+#     02afaae282d4a8e10d7d2f781b23b3515c303ce5  # tag 2.8.1
+# After Franka checkout: bash scripts/franka_colcon_ignore.sh
+#
+# Binary SDKs (libmarvin, libfranka, libpiper, libmvs) stay in pixi.toml.
 repositories:
-  # Franka: franka_ros2 monorepo (jazzy) + description pin matching upstream
-  # dependency.repos. After import, run scripts/franka_colcon_ignore.sh so
-  # Gazebo/mobile/vision packages and vendored realtime_tools are skipped.
-  # Interim: monorepo + COLCON_IGNORE. Target: minimal description +
-  # hardware_interface embodiment (see docs/ARCHITECTURE.md).
-  # libfranka comes from gabriel-robotics conda (pixi1_*), not source.
-  embodiments/robots/franka/franka_ros2:
-    type: git
-    url: https://github.com/frankarobotics/franka_ros2.git
-    version: jazzy
-  embodiments/robots/franka/franka_description:
-    type: git
-    url: https://github.com/frankarobotics/franka_description.git
-    version: 2.8.1
   embodiments/sensors/hikvision_ros2:
     type: git
     url: https://github.com/Gabriel-Ning/hikvision_ros2.git
