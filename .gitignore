@@ -80,9 +80,10 @@ ref/
 !/src/interfaces/
 !/src/interfaces/**/
 !/src/interfaces/**
+# Controller binaries come from Pixi. Track only the colcon skip marker.
 !/src/controller/
-!/src/controller/**/
-!/src/controller/**
+!/src/controller/COLCON_IGNORE
+!/src/controller/.gitkeep
 !/src/rt_launch/
 !/src/rt_launch/**/
 !/src/rt_launch/**

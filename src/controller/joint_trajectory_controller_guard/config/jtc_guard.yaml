@@ -1,8 +1,0 @@
-jtc_guard:
-  ros__parameters:
-    action_name: ""
-    heartbeat_topic: ~/heartbeat
-    heartbeat_timeout_s: 0.5
-    cancel_response_timeout_s: 0.5
-    watchdog_rate_hz: 50.0
-    diagnostic_period_s: 0.1
