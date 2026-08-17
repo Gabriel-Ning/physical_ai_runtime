@@ -74,12 +74,6 @@ ref/
 !/src/embodiments/sensors/realsense_camera_config/**
 !/src/embodiments/sensors/usb_cam_camera_config/
 !/src/embodiments/sensors/usb_cam_camera_config/**/
-!/src/execution/
-!/src/execution/**/
-!/src/execution/**
-!/src/interfaces/
-!/src/interfaces/**/
-!/src/interfaces/**
 # Controller binaries come from Pixi. Track only the colcon skip marker.
 !/src/controller/
 !/src/controller/COLCON_IGNORE

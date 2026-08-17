@@ -128,7 +128,7 @@ them back into this template.
 
 | Manifest | Purpose | Checkout roots |
 | --- | --- | --- |
-| this repo | RMI, examples, orchestrator, `src/rt_launch` bringups | `src/interfaces`, `src/execution`, `src/rt_launch`, `examples/` |
+| this repo | examples and `src/rt_launch` bringups | `src/rt_launch`, `examples/` |
 | `repos/necessary.repos` | Workstation teleop / motion-planning / recorder | `src/teleop`, `src/motion_planning`, `src/recording` |
 | `src/embodiments` submodule | Owned Marvin / Piper / Pika, plus pinned Franka vendor trees | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
 | `repos/embodiment.repos` | Vendor Hikvision (not required for RT bringup) | `src/embodiments/sensors/hikvision_ros2` |
