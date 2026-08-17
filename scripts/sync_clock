@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Align workstation and RT-host wall clocks (ROS header.stamp / evaluate(now)).
 #
-# Run these on the WORKSTATION (the desk PC). RT host is rt_user@rt_ip.
+# host terminal:
 #   scripts/sync_clock --setup  rt_user@rt_ip
 #   scripts/sync_clock --status rt_user@rt_ip
 #
-# Do not run --setup on the RT host. Only if you are already logged into RT:
+# ssh rt host terminal (after: ssh rt_user@rt_ip):
 #   sudo scripts/sync_clock --ip <workstation_lan_ip> --follow
 #
 # Target: chrony |offset| <= 100 us. SSH date skew is noisier — ignore it.
@@ -225,7 +225,7 @@ ensure_lan_ntp() {
 
 apply_remote() {
   HOST="${HOST:-$DEFAULT_HOST}"
-  local peer ws_ip skew_before skew_after rtt remote_args
+  local peer ws_ip skew_before skew_after rtt remote_args remote_tmp
   peer="$(remote_ipv4 "$HOST")"
   ws_ip="$(detect_local_ip "$peer")"
   if [[ -z "$ws_ip" ]]; then
@@ -239,22 +239,28 @@ apply_remote() {
   echo "NTP peer the RT host will follow: ${ws_ip}"
   ensure_lan_ntp "$ws_ip"
 
-  echo
-  echo "Step 1/2: cache sudo on $HOST (enter password, then this returns)."
-  ssh_tty 'sudo -v && echo SUDO_CACHED_OK'
-
   remote_args=(--ip "$ws_ip")
-  if [[ "$ONESHOT" -eq 1 ]]; then
-    echo "Step 2/2: one-shot NTP on $HOST from ${ws_ip}."
-  else
+  if [[ "$ONESHOT" -ne 1 ]]; then
     remote_args+=(--follow)
-    echo "Step 2/2: chrony --follow on $HOST from ${ws_ip}."
   fi
 
-  # Same high-precision path as a local RT run; stdin is this script.
-  ssh -o ConnectTimeout=15 "$HOST" \
-    "sudo -n env SYNC_CLOCK_WAIT_S=${WAIT_S} bash -s -- ${remote_args[*]}" \
-    <"$SCRIPT_PATH"
+  echo
+  echo "Step 1/2: copy script to $HOST."
+
+  # Do not pipe the script on the same stdin as sudo. A later `sudo -n` SSH
+  # cannot reuse the timestamp from `sudo -v` (new TTY / tty_tickets).
+  remote_tmp="$(
+    ssh -o ConnectTimeout=15 "$HOST" \
+      'tmp=$(mktemp) && cat >"$tmp" && printf %s "$tmp"' \
+      <"$SCRIPT_PATH"
+  )"
+  if [[ -z "$remote_tmp" ]]; then
+    echo "Failed to copy sync_clock to $HOST." >&2
+    exit 1
+  fi
+
+  echo "Step 2/2: sudo on $HOST from ${ws_ip} (enter password if prompted)."
+  ssh_tty "sudo env SYNC_CLOCK_WAIT_S=${WAIT_S} bash ${remote_tmp} ${remote_args[*]}; ec=\$?; rm -f ${remote_tmp}; exit \$ec"
 
   echo
   print_status

@@ -1,73 +1,60 @@
 # 跨机对时（工作站 ↔ RT）
 
-只有一个脚本：[`scripts/sync_clock`](../scripts/sync_clock)。
+脚本：[`scripts/sync_clock`](../scripts/sync_clock)。
 
-两台机器：
-
-| 你站在哪 | 机器 | 例子 |
+| 机器 | 作用 | 例子 |
 |---|---|---|
-| **工作站** | 跑 marker / `new_apps` 的桌面机 | `192.168.1.13` |
-| **RT 主机** | `rt_user@rt_ip`，跑 `ros2_control` / EM | `delta@192.168.1.101` |
+| 工作站 / host | 跑 marker / `new_apps`，给局域网供 NTP | `192.168.1.13` |
+| RT | 跑 `ros2_control` / EM，跟着工作站的钟 | `delta@192.168.1.101` |
 
-看 **chrony offset**。不要看 SSH `date` 的 skew（半个 RTT，抖的是毫秒）。
+看 **chrony offset**。不要看 SSH `date` 的 skew。
 
 目标：**|offset| ≤ 100 us**（GOOD）。≤ 500 us 还能用；> 2 ms 先别开跨机 demo。
 
+命令按终端标。把用户 / IP 换成你的。
+
 ---
 
-## 人在工作站前
+## 对时
 
-仓库根目录。RT 主机不用登录。
-
-```bash
-# 1. SSH 先通
-ssh rt_user@rt_ip
-
-# 2. 同步：本机开 LAN NTP，RT 跟着本机
-scripts/sync_clock --setup rt_user@rt_ip
-```
-
-等待脚本自己结束。它会一直等到 chrony **|offset| ≤ 100 us**，或超时 120 s。
+`--setup` / `--status` 只打在 **host terminal**。脚本自己 SSH 进 RT，不要先 `ssh` 进去再跑这两条。
 
 ```bash
-# 3. 再看一次状态
-scripts/sync_clock --status rt_user@rt_ip
-```
+# host terminal（仓库根目录）
+ssh delta@192.168.1.101
+exit
 
-`verdict: GOOD`（≤ 100 us）之后再跑跨机节点，例如 marker / `new_apps`。
-
-固定主机例子：
-
-```bash
 scripts/sync_clock --setup  delta@192.168.1.101
 scripts/sync_clock --status delta@192.168.1.101
 ```
 
-`--setup` 会问两次密码：工作站 `sudo`（开 NTP），以及 RT 的 sudo（SSH 里输一次）。
+`--setup` 可能问密码：
 
-下次开 demo：先 `--status`。不是 GOOD / OK 再 `--setup`。
+- host `sudo`：本机 NTP 还没开时
+- RT `sudo`：脚本 SSH 上去之后会停在 host terminal 等你输入
+
+等到脚本自己结束。`verdict: GOOD` 再跑跨机节点。下次先 `--status`，不是 GOOD / OK 再 `--setup`。
 
 ---
 
-## 人在 RT 主机上
+## 拆开两步（等价）
 
-不要在 RT 上跑 `--setup` / `--status`（那是工作站命令，会再 SSH 出去）。
-
-工作站必须已经在给局域网供时。若还没有，先让人在工作站执行一次：
+host 先供时，再 SSH 进 RT 让它 follow。
 
 ```bash
-# 在工作站上
+# host terminal（仓库根目录）
 sudo scripts/sync_clock --serve --local-ip 192.168.1.13
+ssh delta@192.168.1.101
 ```
 
-然后**在 RT 主机**、仓库根目录，让本机去跟远程工作站：
-
 ```bash
-# 192.168.1.13 换成工作站在机器人网上的 IP
+# ssh rt host terminal（已经 ssh 进去之后）
 sudo scripts/sync_clock --ip 192.168.1.13 --follow
 ```
 
-等待打印 `Converged (|offset| <= 100 us)`。
+等到打印 `Converged (|offset| <= 100 us)`。
+
+不要在 `ssh rt host terminal` 里跑 `--setup` / `--status`。
 
 ---
 
