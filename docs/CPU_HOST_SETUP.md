@@ -161,8 +161,8 @@ Enough for attended FR3 / Marvin / Piper controller bringup:
 - `src/rt_launch` — owned bringup packages
 - `src/embodiments` — robots + Pika (submodule). Skip Hikvision.
 - Pixi binaries — `ros-jazzy-manipulation-position-controllers`,
-  `ros-jazzy-joint-trajectory-controller-guard` (`src/controller` is
-  `COLCON_IGNORE`)
+  `ros-jazzy-joint-trajectory-controller-guard` (do not colcon-build a
+  local `src/controller` checkout)
 
 Do not import workstation trees on this host:
 

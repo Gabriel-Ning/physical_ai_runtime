@@ -74,9 +74,9 @@ ref/
 !/src/embodiments/sensors/realsense_camera_config/**
 !/src/embodiments/sensors/usb_cam_camera_config/
 !/src/embodiments/sensors/usb_cam_camera_config/**/
-# Controller binaries come from Pixi. Track only the colcon skip marker.
-!/src/controller/
-!/src/controller/COLCON_IGNORE
+# Controller binaries come from Pixi. Track only the directory placeholder.
+# Local checkouts, COLCON_IGNORE, and nested package gitkeeps stay untracked.
+/src/controller/**
 !/src/controller/.gitkeep
 !/src/rt_launch/
 !/src/rt_launch/**/
