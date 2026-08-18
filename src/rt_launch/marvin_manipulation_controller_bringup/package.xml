@@ -20,6 +20,7 @@
   <exec_depend>joint_trajectory_controller</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>libmarvin</exec_depend>
   <exec_depend>manipulation_position_controllers</exec_depend>
   <exec_depend>marvin_description</exec_depend>
   <exec_depend>marvin_hardware_interface</exec_depend>
