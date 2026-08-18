@@ -45,7 +45,9 @@ ros2 run marvin_manipulation_controller_bringup clear_errors
 ## Controllers that are spawned
 
 Serialized: `joint_state_broadcaster` → inactive left/right `*_arm_tskpc` /
-`*_arm_jspc` / `*_arm_jtc` / `*_pika_gripper_fwd`.
+`*_arm_jspc` / `*_arm_jtc`. If `load_pika_hardware:=true`, also
+`*_pika_gripper_fwd`. `load_pika_hardware:=false` skips Pika `ros2_control`
+and the gripper spawners; URDF/TCP stay for planning.
 
 ## Fake vs real
 

@@ -123,6 +123,7 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
     )
     assert "/execution/left_gripper/joint_reference" in launch_source
     assert "/execution/right_gripper/joint_reference" in launch_source
+    assert '"load_pika_hardware"' in launch_source
     for argument in (
         "connected_to",
         "xyz",
@@ -132,6 +133,7 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
         "stale_warn_ms",
         "stale_error_ms",
         "max_joint_velocity",
+        "load_pika_hardware",
     ):
         assert f'LaunchConfiguration("{argument}")' in launch_source
         assert f'"{argument}"' in launch_source
@@ -186,6 +188,34 @@ def test_bimanual_manipulation_dual_pika_control_contract() -> None:
     }
 
 
+def test_load_pika_hardware_false_skips_gripper_ros2_control() -> None:
+    import subprocess
+    import xml.etree.ElementTree as ET
+
+    xacro_path = PACKAGE_ROOT / "urdf" / "marvin_manipulation.urdf.xacro"
+    result = subprocess.run(
+        [
+            "xacro",
+            str(xacro_path),
+            "ros2_control:=true",
+            "use_fake_hardware:=true",
+            "load_pika_hardware:=false",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    root = ET.fromstring(result.stdout)
+    links = {link.get("name") for link in root.findall("link")}
+    controls = root.findall("ros2_control")
+
+    assert {"left_pika_gripper_tcp", "right_pika_gripper_tcp"} <= links
+    assert len(controls) == 1
+    names = {control.get("name") for control in controls}
+    assert "LeftPikaGripperHardware" not in names
+    assert "RightPikaGripperHardware" not in names
+
+
 def test_controller_manager_profile_targets_rt_host() -> None:
     manager = _load_config("controller", "controllers.yaml")["controller_manager"][
         "ros__parameters"
@@ -224,3 +254,4 @@ def test_rt_stack_contains_only_rt_runtime_components() -> None:
     assert "controller_bringup.launch.py" in source
     assert "execution_manager.launch.py" not in source
     assert 'get_package_share_directory("rmi")' not in source
+    assert '"load_pika_hardware"' in source

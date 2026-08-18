@@ -56,22 +56,40 @@ ros2 run marvin_manipulation_controller_bringup clear_errors --ip 10.19.0.191
 
 ## Real hardware (RT host)
 
+### A. Arm Only (No Pika Grippers Attached)
 ```bash
 ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=false \
-  use_rviz:=false \
+  load_pika_hardware:=false \
   robot_ip:=10.19.0.191 \
+  use_rviz:=false \
   cpu_affinity:=none
 ```
 
+### B. Full Manipulation Cell (Bimanual Arms + Dual Pika Grippers)
 ```bash
-ros2 launch marvin_manipulation_controller_bringup controller_bringup.launch.py \
+ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=false \
+  load_pika_hardware:=true \
   left_gripper_serial_port:=/dev/ttyUSB0 \
   right_gripper_serial_port:=/dev/ttyUSB1 \
-  use_rviz:=false \
   robot_ip:=10.19.0.191 \
+  use_rviz:=false \
   cpu_affinity:=none
 ```
+
+---
+
+## Key Launch Arguments
+
+| Argument | Default | Description |
+| :--- | :--- | :--- |
+| `use_fake_hardware` | `true` | `false` for physical Marvin; `true` for mock hardware. |
+| `robot_ip` | `10.19.0.191` | Marvin CCS controller IP address. |
+| `load_pika_hardware` | `true` | Whether to load Pika gripper `ros2_control` hardware drivers. Set `false` when grippers are not attached. |
+| `left_gripper_serial_port` | `/dev/ttyUSB0` | Serial device port for Left Pika gripper. |
+| `right_gripper_serial_port` | `/dev/ttyUSB1` | Serial device port for Right Pika gripper. |
+| `cpu_affinity` | `none` | CPU pinning affinity (e.g. `12,13` or `none`). |
+| `use_rviz` | `false` | Launch RViz2 visualization on local host. |
 
 Details: [docs/BRINGUP.md](docs/BRINGUP.md).

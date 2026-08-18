@@ -55,6 +55,9 @@ def _controller_nodes(context: LaunchContext):
     cancel_response_timeout_s = float(
         LaunchConfiguration("jtc_guard_cancel_response_timeout_s").perform(context)
     )
+    load_pika = LaunchConfiguration("load_pika_hardware").perform(
+        context
+    ).strip().lower() in ("true", "1")
     use_rviz = LaunchConfiguration("use_rviz").perform(context).strip().lower() in (
         "true",
         "1",
@@ -97,6 +100,7 @@ def _controller_nodes(context: LaunchContext):
             "right_gripper_serial_port": context.perform_substitution(
                 LaunchConfiguration("right_gripper_serial_port")
             ),
+            "load_pika_hardware": "true" if load_pika else "false",
         },
     ).toprettyxml(indent="  ")
 
@@ -132,28 +136,39 @@ def _controller_nodes(context: LaunchContext):
         output="screen",
     )
 
+    route_controllers = [
+        "left_arm_tskpc",
+        "left_arm_jspc",
+        "left_arm_jtc",
+        "right_arm_tskpc",
+        "right_arm_jspc",
+        "right_arm_jtc",
+    ]
+    route_remaps = [
+        "--remap left_arm_jtc/follow_joint_trajectory:=/execution/left_arm/follow_joint_trajectory",
+        "--remap right_arm_jtc/follow_joint_trajectory:=/execution/right_arm/follow_joint_trajectory",
+    ]
+    if load_pika:
+        route_controllers.extend(
+            ["left_pika_gripper_fwd", "right_pika_gripper_fwd"]
+        )
+        route_remaps.extend(
+            [
+                "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference",
+                "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference",
+            ]
+        )
+
     route_controller_spawner = Node(
         package="controller_manager",
         executable="spawner",
         arguments=[
-            "left_arm_tskpc",
-            "left_arm_jspc",
-            "left_arm_jtc",
-            "right_arm_tskpc",
-            "right_arm_jspc",
-            "right_arm_jtc",
-            "left_pika_gripper_fwd",
-            "right_pika_gripper_fwd",
+            *route_controllers,
             "--inactive",
             "--controller-manager",
             "/controller_manager",
             "--controller-ros-args",
-            (
-                "--remap left_arm_jtc/follow_joint_trajectory:=/execution/left_arm/follow_joint_trajectory "
-                "--remap right_arm_jtc/follow_joint_trajectory:=/execution/right_arm/follow_joint_trajectory "
-                "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference "
-                "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference"
-            ),
+            " ".join(route_remaps),
         ],
         output="screen",
     )
@@ -292,6 +307,15 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "right_gripper_serial_port", default_value="/dev/ttyUSB1"
+            ),
+            DeclareLaunchArgument(
+                "load_pika_hardware",
+                default_value="true",
+                description=(
+                    "Load Pika ros2_control + left/right_pika_gripper_fwd. "
+                    "Set false when the grippers are not installed; "
+                    "URDF/TCP stay for planning."
+                ),
             ),
             DeclareLaunchArgument(
                 "robot_ip",

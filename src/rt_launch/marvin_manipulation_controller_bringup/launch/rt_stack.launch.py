@@ -22,6 +22,7 @@ def generate_launch_description() -> LaunchDescription:
             "use_rviz": LaunchConfiguration("use_rviz"),
             "cpu_affinity": LaunchConfiguration("cpu_affinity"),
             "robot_ip": LaunchConfiguration("robot_ip"),
+            "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
             "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
                 "jtc_guard_heartbeat_timeout_s"
             ),
@@ -33,6 +34,11 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument("cpu_affinity", default_value="none"),
             DeclareLaunchArgument("robot_ip", default_value="10.19.0.191"),
+            DeclareLaunchArgument(
+                "load_pika_hardware",
+                default_value="true",
+                description="Load Pika ros2_control. Set false when grippers are absent.",
+            ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
             controller,
         ]
