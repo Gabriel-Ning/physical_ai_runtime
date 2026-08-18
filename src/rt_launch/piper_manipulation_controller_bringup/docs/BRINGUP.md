@@ -90,15 +90,16 @@ TSKPC `tip_frame` is `<side>_gripper_tcp` when the native gripper is enabled.
 | --- | --- |
 | `arms` | `left` \| `right` \| `both` (`both`) |
 | `use_fake_hardware` | `true` \| `false` (`true`) |
-| `left_can_interface` / `right_can_interface` | SocketCAN names (`can0` / `can1`). Real dual-arm must differ. |
+| `left_can_interface` / `right_can_interface` | SocketCAN names (`piper0` / `piper1`). Real dual-arm must differ. |
 | `left_end_effector` / `right_end_effector` | `none` \| `piper_gripper` (`piper_gripper`) |
 | `left_xyz` / `right_xyz`, `*_rpy` | Empty defers to `piper_description` (`±0.32 0.29 0.72`, yaw `-π/2`) |
 | `use_rviz` | `true` \| `false` (`false`) |
 | `cpu_affinity` | e.g. `14,15`; empty uses `RT_CM_CPU_AFFINITY`; `none` disables pinning |
 
-`rt_stack.launch.py` currently forwards fake/RViz/affinity only and keeps
-`arms:=both` with native Piper grippers. Pass CAN / end-effector overrides
-through `controller_bringup.launch.py`.
+`rt_stack.launch.py` keeps `arms:=both`, site CAN aliases `piper0` / `piper1`,
+and native Piper grippers. It forwards fake/RViz/affinity. Pass end-effector
+overrides through `controller_bringup.launch.py`. Empty `cpu_affinity` pins
+`ros2_control_node` to `RT_CM_CPU_AFFINITY` from the cpu RT profile.
 
 The hardware components never reconfigure SocketCAN. Bring the links up
 externally before `use_fake_hardware:=false`.

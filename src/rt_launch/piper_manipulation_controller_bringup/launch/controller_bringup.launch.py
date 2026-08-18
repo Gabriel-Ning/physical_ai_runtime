@@ -296,8 +296,16 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("table_xyz", default_value=""),
             DeclareLaunchArgument("table_rpy", default_value=""),
-            DeclareLaunchArgument("left_can_interface", default_value="can0"),
-            DeclareLaunchArgument("right_can_interface", default_value="can1"),
+            DeclareLaunchArgument(
+                "left_can_interface",
+                default_value="piper0",
+                description="SocketCAN name for the left follower (site alias).",
+            ),
+            DeclareLaunchArgument(
+                "right_can_interface",
+                default_value="piper1",
+                description="SocketCAN name for the right follower (site alias).",
+            ),
             DeclareLaunchArgument(
                 "left_mit_kd_effort_damping", default_value="0.0"
             ),

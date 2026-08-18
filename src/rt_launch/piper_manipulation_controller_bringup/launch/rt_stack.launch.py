@@ -17,6 +17,8 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "arms": "both",
+            "left_can_interface": "piper0",
+            "right_can_interface": "piper1",
             "left_end_effector": "piper_gripper",
             "right_end_effector": "piper_gripper",
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
@@ -31,7 +33,14 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
-            DeclareLaunchArgument("cpu_affinity", default_value=""),
+            DeclareLaunchArgument(
+                "cpu_affinity",
+                default_value="",
+                description=(
+                    "Comma-separated CPUs for ros2_control_node. Empty uses "
+                    "RT_CM_CPU_AFFINITY from the cpu RT profile. Pass none to disable."
+                ),
+            ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
             controller,
         ]

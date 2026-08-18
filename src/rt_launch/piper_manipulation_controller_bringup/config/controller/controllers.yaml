@@ -1,6 +1,7 @@
 controller_manager:
   ros__parameters:
     update_rate: 500
+    thread_priority: 98
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
     left_arm_jspc:

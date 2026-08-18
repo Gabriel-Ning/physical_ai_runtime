@@ -10,6 +10,14 @@ def test_controller_config_is_present():
     assert (ROOT / "config" / "controller" / "controllers.yaml").is_file()
 
 
+def test_controller_manager_uses_fifo_priority_98():
+    manager = yaml.safe_load((ROOT / "config" / "controller" / "controllers.yaml").read_text())[
+        "controller_manager"
+    ]["ros__parameters"]
+    assert manager["update_rate"] == 500
+    assert manager["thread_priority"] == 98
+
+
 def test_rt_profile_is_scoped_to_native_piper_grippers():
     controllers = yaml.safe_load((ROOT / "config" / "controller" / "controllers.yaml").read_text())
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
@@ -122,6 +130,8 @@ def test_deployment_choices_are_launch_arguments():
         "cpu_affinity",
     ):
         assert re.search(rf'DeclareLaunchArgument\(\s*"{argument}"', launch)
+    assert 'default_value="piper0"' in launch
+    assert 'default_value="piper1"' in launch
     assert "init_can" not in launch
     assert 'prefix=f"taskset -c {cpu_affinity}" if cpu_affinity else None' in launch
     assert "RT_CM_CPU_AFFINITY" in launch
@@ -167,6 +177,12 @@ def test_rt_stack_contains_only_rt_runtime_components():
     assert "controller_bringup.launch.py" in combo
     assert "execution_manager.launch.py" not in combo
     assert 'get_package_share_directory("rmi")' not in combo
+    assert '"left_can_interface": "piper0"' in combo
+    assert '"right_can_interface": "piper1"' in combo
+    assert re.search(
+        r'DeclareLaunchArgument\(\s*"cpu_affinity",\s*default_value=""', combo
+    )
+    assert "cpu_affinity:=none" not in combo
 
 
 def test_controller_bringup_still_leaves_em_to_rmi_deployment():
