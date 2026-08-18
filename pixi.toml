@@ -111,6 +111,7 @@ ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
 ros-jazzy-joy-linux = ">=3.3.0,<4"
 
 # ── Recording / visualization / debug ────────────────────────────────────────
+ros-jazzy-episode-recorder = "==0.4.0"
 ros-jazzy-foxglove-bridge = "*"
 # Time-series debug outside RViz (ROS topic streaming plugins included).
 ros-jazzy-plotjuggler-ros = "*"

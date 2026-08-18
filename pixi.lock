@@ -441,6 +441,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zfp-1.0.1-h909a3a2_5.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.2-h25fd6f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zziplib-0.13.69-he45264a_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_x86_64-microarch-level-1-4_level1.conda
@@ -505,6 +506,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/lark-parser-0.12.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libgcc-devel_linux-64-14.3.0-hf649bbc_119.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-64-14.3.0-h9f08a49_119.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mcap-1.4.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mccabe-0.7.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/munkres-1.1.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.2-pyhc364b38_0.conda
@@ -990,6 +992,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.5.0-hb0f4dca_1.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ndcurves-2.3.0-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.4.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.3.1-hb0f4dca_0.conda
   default:
@@ -1429,6 +1432,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zfp-1.0.1-h909a3a2_5.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-1.3.2-h25fd6f3_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zziplib-0.13.69-he45264a_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/_x86_64-microarch-level-1-4_level1.conda
@@ -1493,6 +1497,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/lark-parser-0.12.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libgcc-devel_linux-64-14.3.0-hf649bbc_119.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/libstdcxx-devel_linux-64-14.3.0-h9f08a49_119.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mcap-1.4.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mccabe-0.7.0-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/munkres-1.1.4-pyhd8ed1ab_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/packaging-26.2-pyhc364b38_0.conda
@@ -1978,6 +1983,7 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/libpiper-0.5.0-hb0f4dca_1.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ndcurves-2.3.0-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.4.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.1.0-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.3.1-hb0f4dca_0.conda
       - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl
@@ -2014,10 +2020,8 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/41/45/1a4ed80516f02155c51f51e8cedb3c1902296743db0bbc66608a0db2814f/jsonschema_specifications-2025.9.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/45/ec/dbb7e5a6b91f86bfb9eb7d2988a2730907b6a729875b949c7f022e8b88fa/uvicorn-0.51.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/48/14/7e0b2a74b67e16e5f40ab78cc3e5aa4e7bdd55e0aec963d573edc07a15cd/mcap-1.4.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/48/74/c2a0bde01f09402e6ea2e476cf43816f0c58983afb2451077c49d2006cb3/jax_cuda13_plugin-0.11.0-cp312-cp312-manylinux_2_27_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/4a/c9/9a4ca25b505303d5557c98786ac0bf7081c76a7262e1b6c87b899bccc7b8/viser-1.0.30-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/53/60/7be26e610767316c028a2cbedb9a3beabdbe33e2182c373f71a1c0b88f36/zstandard-0.25.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/54/2d/49b9c938d1dfa4861aacadd1ba7eb2d421f27198135686010c51b171961a/jax_dataclasses-1.6.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5d/28/d607636187cf6c18eb72efb5d65c1d1b9e451db03d84676f835dd488fdbd/tyro-1.0.15-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/5f/97/2aab507d3d00ca626e8e57c1eac6a79e4e5fbcc63eb99733ff55d1717f65/pydantic_core-2.46.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -9413,6 +9417,24 @@ packages:
     - zlib-ng >=2.3.3,<2.4.0a0
   size: 122618
   timestamp: 1770167931827
+- conda: https://conda.anaconda.org/conda-forge/linux-64/zstandard-0.25.0-py312h5253ce2_1.conda
+  sha256: c2bcb8aa930d6ea3c9c7a64fc4fab58ad7bcac483a9a45de294f67d2f447f413
+  md5: 02738ff9855946075cbd1b5274399a41
+  depends:
+  - python
+  - cffi >=1.11
+  - zstd >=1.5.7,<1.5.8.0a0
+  - libgcc >=14
+  - __glibc >=2.17,<3.0.a0
+  - zstd >=1.5.7,<1.6.0a0
+  - python_abi 3.12.* *_cp312
+  license: BSD-3-Clause
+  license_family: BSD
+  purls:
+  - pkg:pypi/zstandard?source=hash-mapping
+  run_exports: {}
+  size: 467133
+  timestamp: 1762512686069
 - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
   sha256: 68f0206ca6e98fea941e5717cec780ed2873ffabc0e1ed34428c061e2c6268c7
   md5: 4a13eeac0b5c8e5b8ab496e6c4ddd829
@@ -10245,6 +10267,20 @@ packages:
   run_exports: {}
   size: 20199810
   timestamp: 1778268389428
+- conda: https://conda.anaconda.org/conda-forge/noarch/mcap-1.4.0-pyhd8ed1ab_0.conda
+  sha256: ebe1d542cbdb123ab06e3510f18291ab137109dd8175272351e0dee5197b905c
+  md5: e31659a7db9cbaa3dc5707396b73c4b1
+  depends:
+  - lz4
+  - python >=3.10
+  - zstandard
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/mcap?source=hash-mapping
+  run_exports: {}
+  size: 24192
+  timestamp: 1782642956401
 - conda: https://conda.anaconda.org/conda-forge/noarch/mccabe-0.7.0-pyhd8ed1ab_1.conda
   sha256: 9b0037171dad0100f0296699a11ae7d355237b55f42f9094aebc0f41512d96a1
   md5: 827064ddfe0de2917fb29f1da4f8f533
@@ -20561,6 +20597,34 @@ packages:
   run_exports: {}
   size: 731111
   timestamp: 1782804885894
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.4.0-hb0f4dca_0.conda
+  sha256: 79427593d670d4bff0328d31ff625d1170a936d63ab5de3181889212a85201ab
+  md5: 332274dab5ead38d91e4f1ad25a77052
+  depends:
+  - mcap
+  - python
+  - pyyaml
+  - ros-jazzy-lifecycle-msgs
+  - ros-jazzy-launch-ros
+  - ros-jazzy-rclcpp
+  - ros-jazzy-rclcpp-lifecycle
+  - ros-jazzy-rclpy
+  - ros-jazzy-ros2run
+  - ros-jazzy-rosbag2-cpp
+  - ros-jazzy-rosbag2-py
+  - ros-jazzy-rosbag2-storage
+  - ros-jazzy-rosbag2-storage-mcap
+  - ros-jazzy-rosidl-runtime-py
+  - ros-jazzy-sensor-msgs
+  - ros-jazzy-std-srvs
+  - yaml-cpp
+  - libstdcxx >=16
+  - libgcc >=16
+  - yaml-cpp >=0.8.0,<0.9.0a0
+  license: Apache-2.0
+  run_exports: {}
+  size: 440856
+  timestamp: 1787036492162
 - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.1.0-hb0f4dca_0.conda
   sha256: 382a9f06f7072a17eb4727d1700ed48a279260017d299c89080ab949a99a6a0e
   md5: aec545c11d3835ad28c2247e6d194d4e
@@ -21231,14 +21295,6 @@ packages:
   - watchfiles>=0.20 ; extra == 'standard'
   - websockets>=13.0 ; extra == 'standard'
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/48/14/7e0b2a74b67e16e5f40ab78cc3e5aa4e7bdd55e0aec963d573edc07a15cd/mcap-1.4.0-py3-none-any.whl
-  name: mcap
-  version: 1.4.0
-  sha256: 0b48b1cc951b8d5aabd2599e60d410bae4f1be1819094f54117b7cbf6b3ee2e9
-  requires_dist:
-  - lz4
-  - zstandard
-  requires_python: '>=3.7'
 - pypi: https://files.pythonhosted.org/packages/48/74/c2a0bde01f09402e6ea2e476cf43816f0c58983afb2451077c49d2006cb3/jax_cuda13_plugin-0.11.0-cp312-cp312-manylinux_2_27_x86_64.whl
   name: jax-cuda13-plugin
   version: 0.11.0
@@ -21310,14 +21366,6 @@ packages:
   - yourdfpy>=0.0.53,<1.0.0 ; extra == 'examples'
   - yourdfpy>=0.0.53,<1.0.0 ; extra == 'urdf'
   requires_python: '>=3.8'
-- pypi: https://files.pythonhosted.org/packages/53/60/7be26e610767316c028a2cbedb9a3beabdbe33e2182c373f71a1c0b88f36/zstandard-0.25.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-  name: zstandard
-  version: 0.25.0
-  sha256: 5a56ba0db2d244117ed744dfa8f6f5b366e14148e00de44723413b2f3938a902
-  requires_dist:
-  - cffi~=1.17 ; python_full_version < '3.14' and platform_python_implementation != 'PyPy' and extra == 'cffi'
-  - cffi>=2.0.0b0 ; python_full_version >= '3.14' and platform_python_implementation != 'PyPy' and extra == 'cffi'
-  requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/54/2d/49b9c938d1dfa4861aacadd1ba7eb2d421f27198135686010c51b171961a/jax_dataclasses-1.6.3-py3-none-any.whl
   name: jax-dataclasses
   version: 1.6.3
