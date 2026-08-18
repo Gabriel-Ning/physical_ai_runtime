@@ -50,18 +50,22 @@ def main() -> None:
     # 1. Initialize RMI Context
     print("[1/4] Initializing RMI Context & Agents...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
     arm_part = "arm" if "arm" in ctx.profile.parts else next(iter(ctx.profile.parts.keys()))
+    arm_joints = ctx.profile.parts[arm_part].joint_names if arm_part in ctx.profile.parts else ()
 
-    # Create two competing agents: Policy (Priority 50) and TeleopJoint (Priority 60)
+    p_prio = ctx.profile.execution.get("providers", {}).get("Policy", {}).get("priority", 10)
+    t_prio = ctx.profile.execution.get("providers", {}).get("TeleopJoint", {}).get("priority", 100)
+
+    # Create two competing agents: Policy and TeleopJoint
     policy_agent = ctx.make_agent("Policy", frequency=args.rate_hz)
     teleop_agent = ctx.make_agent("TeleopJoint", frequency=args.rate_hz)
 
     dt = 1.0 / args.rate_hz
 
     # 2. Phase 1: Policy starts running autonomously
-    print(f"\n[2/4] Phase 1: Autonomous Policy starts running (Priority: 50)...")
+    print(f"\n[2/4] Phase 1: Autonomous Policy starts running (Priority: {p_prio})...")
     with policy_agent.run(robot, resume=True) as policy_session:
         gen1 = policy_session.generation_for(arm_part)
         print(f"  -> Policy ACTIVE: generation={gen1}")
@@ -69,7 +73,7 @@ def main() -> None:
         # Run 10 ticks of policy
         for tick in range(10):
             obs = policy_session.observe()
-            q = list(obs.joint_positions)
+            q = list(obs.joint_positions[:len(arm_joints)])
             if q:
                 q[0] += 0.02 * math.sin(tick * 0.3)
             policy_session.act(rmi.Action(part=arm_part, command="joint_reference", value=q))
@@ -78,7 +82,7 @@ def main() -> None:
         print(f"  -> Policy running smoothly. Now simulating Human Teleop takeover...")
 
         # 3. Phase 2: Human Teleop Preemption
-        print(f"\n[3/4] Phase 2: Human Teleop acquires session (Priority: 60 - Preempts Policy)...")
+        print(f"\n[3/4] Phase 2: Human Teleop acquires session (Priority: {t_prio} - Preempts Policy)...")
         with teleop_agent.run(robot) as teleop_session:
             gen2 = teleop_session.generation_for(arm_part)
             print(f"  [!] Teleop ACTIVE: generation={gen2} (Policy preempted/paused)")
@@ -86,9 +90,9 @@ def main() -> None:
             # Teleop sends human joystick/marker reference
             for tick in range(10):
                 obs = teleop_session.observe()
-                q = list(obs.joint_positions)
+                q = list(obs.joint_positions[:len(arm_joints)])
                 if q:
-                    q[0] += 0.05 * math.cos(tick * 0.3)
+                    q[0] += 0.03 * math.cos(tick * 0.3)
                 teleop_session.act(rmi.Action(part=arm_part, command="joint_reference", value=q))
                 if tick % 3 == 0:
                     print(f"      [Teleop Teleoperating] step {tick+1}/10 -> q[0]={q[0]:.3f} rad")
@@ -105,7 +109,7 @@ def main() -> None:
 
         for tick in range(10):
             obs = policy_session.observe()
-            q = list(obs.joint_positions)
+            q = list(obs.joint_positions[:len(arm_joints)])
             policy_session.act(rmi.Action(part=arm_part, command="joint_reference", value=q))
             policy_session.wait()
 

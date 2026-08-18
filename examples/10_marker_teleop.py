@@ -124,8 +124,8 @@ def main() -> None:
     # 1. Initialize RMI Context & Agent
     print("[1/2] Initializing RMI Context & Agent...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
     provider = "TeleopTwist" if args.mode == "twist" else "TeleopCartesian"
     agent = ctx.make_agent(provider, frequency=args.rate_hz)
 

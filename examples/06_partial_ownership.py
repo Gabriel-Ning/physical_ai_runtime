@@ -57,10 +57,11 @@ def main() -> None:
     print(f"=======================================================\n")
 
     # 1. Initialize RMI Context
+    # 1. Initialize RMI Context
     print("[1/3] Initializing RMI Context & Agents...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
 
     # Determine arm and gripper parts
     all_parts = list(ctx.profile.parts.keys())
@@ -95,7 +96,7 @@ def main() -> None:
             # Plan trajectory for arm
             target = CartesianState(
                 position_xyz=tuple(target_pos),
-                orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+                orientation_wxyz=(0.0, 1.0, 0.0, 0.0),
             )
             plan = planner.plan(robot=robot, target=target)
             if not plan.valid:
@@ -120,7 +121,7 @@ def main() -> None:
 
             # Wait for arm trajectory to finish
             result = execution.wait(timeout=10.0)
-            print(f"  [✓] Arm trajectory completed: state={execution.state.value}")
+            print(f"  [✓] Arm trajectory completed: state={execution.state.name}")
 
     print("\n[✓] Concurrent Partial Ownership demo completed successfully.")
     ctx.close()

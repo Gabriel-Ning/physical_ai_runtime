@@ -1,5 +1,5 @@
 # Actuated finger travel [m]. gripper_right_joint mimics gripper_left_joint.
-# 0 = open mount pose; positive closes toward center.
+# 0 = closed pose (fingers touching at center); positive opens outward.
 # ROS command/state use this single-finger travel (same pattern as Piper).
 # Full opening width on the wire ≈ 2 × finger travel (~0.09 m at 0.045).
 # Edit here for this FR3 bringup; defaults match pika_gripper_description.

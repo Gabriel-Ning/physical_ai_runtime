@@ -33,6 +33,7 @@ ros2 launch piper_manipulation_controller_bringup controller_bringup.launch.py u
 | **`05_policy_recovery.py`** | Planner-in-the-loop | Anomaly → cuRobo recovery → resume Policy |
 | **`06_partial_ownership.py`** | Multi-part scope | Planner on `arm`, Policy on `gripper` |
 | **`07_record_episode.py`** | Recording | Synchronized episode capture |
+| **`13_replay_episode.py`** | Replay & JTC homing | Unindexed MCAP replay with smooth zero-shock start |
 
 ### Motion planning, resolvers, and streamers
 
@@ -43,19 +44,35 @@ ros2 launch piper_manipulation_controller_bringup controller_bringup.launch.py u
 | **`09_joint_streamer.py`** | **Streamer** | Receding horizon VLA action chunking or cuRobo MPC joint stream | `JSPC` |
 | **`10_marker_teleop.py`** | **Streamer** | Cartesian 6-DoF RViz Interactive Marker teleop & velocity twist streaming | `TSKPC` |
 | **`11_joint_jog.py`** | **Teleop** | Interactive joint delta jogger with auto-homing | `JSPC` |
+| **`12_gripper_control.py`** | **End-Effector** | Pika gripper opening / closing setpoints & continuous cycles | `pika_gripper_fwd` |
 
 ---
 
 ## 3. Running the Examples
 
 ```bash
-# 01. Context & robot state
+# 01. Context & Robot State Introspection
 python examples/01_context.py --profile fr3_pika_single_arm.yaml
 
-# 04. Segment trajectory planner (cuRobo -> JTC)
+# 02. Policy with Camera Stream
+python examples/02_policy_camera.py --profile fr3_pika_single_arm.yaml
+
+# 03. Teleop Preemption & Arbitration
+python examples/03_teleop_preempt.py --profile fr3_pika_single_arm.yaml
+
+# 04. Segment Trajectory Planner (cuRobo -> JTC)
 python examples/04_plan_execute.py --profile fr3_pika_single_arm.yaml
 
-# 08. Online IK resolver
+# 05. Policy Recovery (DAgger / Planner-in-the-Loop)
+python examples/05_policy_recovery.py --profile fr3_pika_single_arm.yaml
+
+# 06. Multi-Part Partial Ownership (Arm + Gripper)
+python examples/06_partial_ownership.py --profile fr3_pika_single_arm.yaml
+
+# 07. Episode Dataset Recording (LeRobot format)
+python examples/07_record_episode.py --profile fr3_pika_single_arm.yaml --task pick_and_place
+
+# 08. Online IK Resolver (with RViz Interactive Marker or Orbit)
 python examples/08_ik_resolver.py --profile fr3_pika_single_arm.yaml --mode marker
 
 # 09. Joint Streamer & Action Chunking
@@ -66,4 +83,10 @@ python examples/10_marker_teleop.py --profile fr3_pika_single_arm.yaml --mode ma
 
 # 11. Interactive Joint Jogger
 python examples/11_joint_jog.py --profile fr3_pika_single_arm.yaml --joint 4 --delta 0.1
+
+# 12. Gripper Open/Close & Width Control
+python examples/12_gripper_control.py --profile fr3_pika_single_arm.yaml --cycles 3
+
+# 13. Episode Trajectory Replay (Unindexed MCAP + JTC Pre-Homing)
+python examples/13_replay_episode.py --profile fr3_pika_single_arm.yaml
 ```

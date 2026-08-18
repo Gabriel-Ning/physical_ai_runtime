@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Physical AI Runtime controller bringup for one Franka FR3 arm.
 
-Owns FR3 + Pika composition for this runtime:
+Owns FR3 + Pika ros2_control composition:
   robot_state_publisher, ros2_control_node, joint_state_publisher,
-  serialized JSB → inactive route controllers, optional RViz, CPU pin.
+  serialized JSB -> inactive route controllers, optional RViz, CPU pin.
 
 Does not modify vendor ``franka_bringup/franka.launch.py``.
 """
@@ -134,7 +134,6 @@ def _launch_setup(context, *args, **kwargs):
         "on_exit": Shutdown(),
     }
     if cpu_affinity:
-        # Single string: launch concatenates list prefixes without spaces.
         cm_kwargs["prefix"] = f"taskset -c {cpu_affinity}"
 
     actions.extend(

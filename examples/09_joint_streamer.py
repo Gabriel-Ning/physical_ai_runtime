@@ -126,8 +126,8 @@ def main() -> None:
     # 1. Initialize RMI Context & Agent
     print("[1/3] Initializing RMI Context & Agent...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
     agent = ctx.make_agent("Policy", frequency=args.rate_hz)
 
     # 2. Setup chosen backend

@@ -177,5 +177,5 @@ def lookup_tip_pose(
     # Default fallback if TF not ready
     return CartesianState(
         position_xyz=(0.45, 0.0, 0.35),
-        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        orientation_wxyz=(0.0, 1.0, 0.0, 0.0),
     )

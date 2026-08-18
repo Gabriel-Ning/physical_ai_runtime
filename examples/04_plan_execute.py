@@ -63,20 +63,10 @@ def main() -> None:
     # 1. Initialize pure RMI Context
     print("[1/4] Connecting to robot via RMI SDK...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-
-    # Wait for initial observation from RT Host
-    time.sleep(0.5)
     obs = robot.get_observation()
-    if not obs.joint_positions:
-        print("[!] Warning: Waiting for initial joint state from /joint_states...")
-        for _ in range(20):
-            time.sleep(0.1)
-            obs = robot.get_observation()
-            if obs.joint_positions:
-                break
-
-    print(f"    Current joint positions: {obs.joint_positions}")
+    print(f"    Current joint positions: {[round(x, 4) for x in obs.joint_positions]}")
 
     # 2. Build cuRobo Trajectory Planner
     print(f"\n[2/4] Initializing cuRobo Trajectory Planner ({args.device})...")

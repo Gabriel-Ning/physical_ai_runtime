@@ -84,8 +84,8 @@ def main() -> None:
     # 1. Initialize RMI Context & Agent
     print("[1/3] Initializing RMI Context & Agent...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
     agent = ctx.make_agent("Policy", frequency=args.rate_hz)
 
     # 2. Build cuRobo IK Resolver
@@ -135,12 +135,8 @@ def main() -> None:
                     # Step between two target poses
                     offset = 0.08 if int(t) % 2 == 0 else -0.08
                     target = CartesianState(
-                        position_xyz=(
-                            center_pos[0] + offset,
-                            center_pos[1],
-                            center_pos[2],
-                        ),
-                        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+                        position_xyz=(center_pos[0] + offset, center_pos[1], center_pos[2]),
+                        orientation_wxyz=(0.0, 1.0, 0.0, 0.0),
                     )
 
                 # Resolve IK: resolve(current_state, target) -> q*

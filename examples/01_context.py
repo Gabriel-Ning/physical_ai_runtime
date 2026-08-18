@@ -31,6 +31,11 @@ def main() -> None:
         default="fr3_pika_single_arm.yaml",
         help="Embodiment profile name or path (e.g. fr3_pika_single_arm.yaml, marvin_bimanual.yaml)",
     )
+    parser.add_argument(
+        "--check-cameras",
+        action="store_true",
+        help="Also wait for declared cameras and capture sample frames",
+    )
     args = parser.parse_args()
 
     print(f"\n=======================================================")
@@ -48,8 +53,8 @@ def main() -> None:
     print(f"Vendor: {profile.vendor}")
     print(f"Parts Count: {len(profile.parts)}")
 
-    # 2. Inspect Parts and Controllers
-    print(f"\n[2/3] Inspecting Robot Parts ({len(profile.parts)} declared):")
+    # 2. Inspect Parts, Cameras, and Execution Providers
+    print(f"\n[2/3] Inspecting Robot Parts & Perception:")
     for part_name, part in profile.parts.items():
         print(f"  • Part: {part_name!r} (type: {part.part_type})")
         print(f"    - Base Frame: {part.base_frame}")
@@ -60,6 +65,15 @@ def main() -> None:
             for contract, ctrl in part.controllers.items():
                 print(f"        [{contract}]: name={ctrl.name!r} (impl: {ctrl.implementation}, cmd: {ctrl.command_interface})")
 
+    if hasattr(profile, "cameras") and profile.cameras:
+        print(f"\n  Declared Cameras ({len(profile.cameras)}):")
+        for cam_name, cam_cfg in profile.cameras.items():
+            topic = getattr(cam_cfg, "ros_topic", "N/A")
+            enc = getattr(cam_cfg, "encoding", "N/A")
+            fps = getattr(cam_cfg, "fps", 30)
+            res = getattr(cam_cfg, "resolution", (0, 0))
+            print(f"    • Camera: {cam_name!r} -> Topic: {topic!r} ({enc}, {res[0]}x{res[1]} @ {fps}Hz)")
+
     if profile.execution and "providers" in profile.execution:
         print(f"\n  Declared Execution Providers ({len(profile.execution['providers'])}):")
         for prov_name, prov_cfg in profile.execution["providers"].items():
@@ -69,13 +83,13 @@ def main() -> None:
 
     # 3. Connect to Robot & Read Live State
     print(f"\n[3/3] Connecting to Robot & Reading Live State...")
+    ctx.wait_until_ready(timeout=5.0, check_cameras=args.check_cameras)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
 
     agent = ctx.make_agent("Policy", frequency=10.0)
     with agent.run(robot) as session:
         obs = session.observe()
-        print("\n  Live Observation:")
+        print("\n  Live Robot State:")
         print(f"    - Source Time:  {obs.source_time_s:.4f}s")
         print(f"    - Receive Time: {obs.receive_time_s:.4f}s")
         print(f"    - Allocations:  {robot.execution.get_allocations()}")
@@ -83,7 +97,20 @@ def main() -> None:
         print(f"    - Joint Positions (rad): {[round(x, 4) for x in obs.joint_positions]}")
         print(f"    - Joint Velocities:     {[round(x, 4) for x in obs.joint_velocities]}")
 
-    print("\n[✓] Context & Robot state introspection completed successfully.")
+    if args.check_cameras and hasattr(profile, "cameras") and profile.cameras:
+        print("\n  Live Camera Frames:")
+        for cam_name in profile.cameras:
+            cam = ctx.make_camera(cam_name)
+            if cam.is_ready():
+                sample = cam.latest
+                img = sample.value
+                enc = getattr(img, "encoding", "N/A")
+                h, w = getattr(img, "height", 0), getattr(img, "width", 0)
+                print(f"    - Camera {cam_name!r}: Frame received at {sample.source_time_s:.4f}s ({w}x{h}, {enc})")
+            else:
+                print(f"    - Camera {cam_name!r}: [No frames received]")
+
+    print("\n[✓] Context & Embodiment introspection completed successfully.")
     ctx.close()
 
 

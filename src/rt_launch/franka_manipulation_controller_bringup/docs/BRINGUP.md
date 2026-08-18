@@ -96,11 +96,17 @@ That profile still lists the old controller-named command topics; update it
 after this RT topic lock. Keep `use_rviz:=false` on the RT host; open RViz on
 the workstation with Fixed Frame `fr3_link0`.
 
+## Perception Cameras
+
+When `with_cameras:=true`, `rt_stack.launch.py` includes `camera_bringup.launch.py` to stream:
+- **RealSense D405**: `/pika_d405/camera/color/image_raw`, `/pika_d405/camera/aligned_depth_to_color/image_raw`
+- **Sunplus Fisheye**: `/pika_fisheye/camera/image_raw`
+
+Parameters (resolution, framerate, formats) are configured in `config/camera/pika_cameras.yaml`.
+
 ## CPU affinity
 
-`cpu_affinity:=none` disables pinning. Otherwise `cpu_affinity` or
-`RT_CM_CPU_AFFINITY` pins `ros2_control_node` (see
-[docs/CPU_HOST_SETUP.md](../../../../docs/CPU_HOST_SETUP.md)).
+On the **real RT host**, do not disable CPU affinity (`cpu_affinity:=none`). Allow `RT_CM_CPU_AFFINITY` or the real-time profile to pin `ros2_control_node` to dedicated RT isolated cores (see [docs/CPU_HOST_SETUP.md](../../../../docs/CPU_HOST_SETUP.md)). Only use `cpu_affinity:=none` during local fake hardware simulation on developer workstations.
 
 ## Distributed DDS
 

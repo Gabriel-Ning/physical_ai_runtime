@@ -68,8 +68,9 @@ def main() -> None:
     # 1. Initialize RMI Context & Agents
     print("[1/4] Initializing RMI Context, Policy & Planner Agents...")
     ctx = rmi.Context.from_profile(args.profile)
+    ctx.wait_until_ready(timeout=5.0)
     robot = ctx.robot
-    robot.wait_until_ready(timeout=5.0)
+    arm_joints = ctx.profile.parts[arm_part].joint_names if arm_part in ctx.profile.parts else ()
 
     policy_agent = ctx.make_agent("Policy", frequency=args.rate_hz)
     planner_agent = ctx.make_agent("Planner")
@@ -86,10 +87,10 @@ def main() -> None:
 
         for tick in range(1, 15):
             obs = policy_session.observe()
-            q = list(obs.joint_positions)
+            q = list(obs.joint_positions[:len(arm_joints)])
             if q:
                 # Simulate policy drifting toward boundary
-                q[0] += 0.02 * tick
+                q[0] += 0.01 * tick
             policy_session.act(rmi.Action(part=arm_part, command="joint_reference", value=q))
             policy_session.wait()
 
@@ -101,7 +102,7 @@ def main() -> None:
             print(f"  -> Planner ACTIVE: Computing collision-free return path to safe pose {safe_target_pos}...")
             safe_target = CartesianState(
                 position_xyz=tuple(safe_target_pos),
-                orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+                orientation_wxyz=(0.0, 1.0, 0.0, 0.0),
             )
             plan = planner.plan(robot=robot, target=safe_target)
             if not plan.valid:
@@ -111,7 +112,7 @@ def main() -> None:
             print(f"  [✓] Plan generated ({len(plan.points)} waypoints). Executing via JTC...")
             execution = planner_session.execute(arm_part, plan)
             execution.wait(timeout=10.0)
-            print(f"  [✓] Recovery execution reached target: state={execution.state.value}")
+            print(f"  [✓] Recovery execution reached target: state={execution.state.name}")
 
         # 5. Handback to Policy
         print(f"\n  -> Recovery complete! Resuming Policy execution at safe state...")
@@ -120,7 +121,7 @@ def main() -> None:
 
         for tick in range(1, 10):
             obs = policy_session.observe()
-            q = list(obs.joint_positions)
+            q = list(obs.joint_positions[:len(arm_joints)])
             policy_session.act(rmi.Action(part=arm_part, command="joint_reference", value=q))
             policy_session.wait()
 

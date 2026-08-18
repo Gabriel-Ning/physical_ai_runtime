@@ -33,7 +33,7 @@ PROFILE_TO_CUROBO = {
         "home_joint_positions": [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785],
         "default_target_pose": {
             "position": [0.45, 0.0, 0.35],
-            "orientation": [1.0, 0.0, 0.0, 0.0],  # w, x, y, z
+            "orientation": [0.0, 1.0, 0.0, 0.0],  # w, x, y, z (z pointing downwards)
         },
     },
     "marvin_bimanual.yaml": {
@@ -43,7 +43,7 @@ PROFILE_TO_CUROBO = {
         "home_joint_positions": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "default_target_pose": {
             "position": [0.4, 0.2, 0.3],
-            "orientation": [1.0, 0.0, 0.0, 0.0],
+            "orientation": [0.0, 1.0, 0.0, 0.0],
         },
     },
     "piper_bimanual.yaml": {
@@ -53,7 +53,7 @@ PROFILE_TO_CUROBO = {
         "home_joint_positions": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "default_target_pose": {
             "position": [0.3, 0.15, 0.2],
-            "orientation": [1.0, 0.0, 0.0, 0.0],
+            "orientation": [0.0, 1.0, 0.0, 0.0],
         },
     },
 }
@@ -124,5 +124,5 @@ def make_circular_target(
     z = center[2]
     return CartesianState(
         position_xyz=(float(x), float(y), float(z)),
-        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        orientation_wxyz=(0.0, 1.0, 0.0, 0.0),
     )
