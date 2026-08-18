@@ -32,7 +32,14 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
-            DeclareLaunchArgument("cpu_affinity", default_value="none"),
+            DeclareLaunchArgument(
+                "cpu_affinity",
+                default_value="",
+                description=(
+                    "Comma-separated CPUs for ros2_control_node. Empty uses "
+                    "RT_CM_CPU_AFFINITY from the cpu RT profile. Pass none to disable."
+                ),
+            ),
             DeclareLaunchArgument("robot_ip", default_value="10.19.0.191"),
             DeclareLaunchArgument(
                 "load_pika_hardware",

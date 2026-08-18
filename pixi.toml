@@ -131,7 +131,7 @@ WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
 
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
-ROS_DOMAIN_ID = "2"
+ROS_DOMAIN_ID = "1"
 MPLCONFIGDIR = "/tmp/physical_ai_matplotlib"
 CMAKE_GENERATOR = "Ninja"
 

@@ -62,9 +62,9 @@ ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=false \
   load_pika_hardware:=false \
   robot_ip:=10.19.0.191 \
-  use_rviz:=false \
-  cpu_affinity:=none
+  use_rviz:=false
 ```
+> **Note**: Do not set `cpu_affinity:=none` on the real RT host; allow the real-time kernel / RT profile to manage CPU pinning for `ros2_control_node`.
 
 ### B. Full Manipulation Cell (Bimanual Arms + Dual Pika Grippers)
 ```bash
@@ -74,8 +74,7 @@ ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   left_gripper_serial_port:=/dev/ttyUSB0 \
   right_gripper_serial_port:=/dev/ttyUSB1 \
   robot_ip:=10.19.0.191 \
-  use_rviz:=false \
-  cpu_affinity:=none
+  use_rviz:=false
 ```
 
 ---
@@ -89,7 +88,7 @@ ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
 | `load_pika_hardware` | `true` | Whether to load Pika gripper `ros2_control` hardware drivers. Set `false` when grippers are not attached. |
 | `left_gripper_serial_port` | `/dev/ttyUSB0` | Serial device port for Left Pika gripper. |
 | `right_gripper_serial_port` | `/dev/ttyUSB1` | Serial device port for Right Pika gripper. |
-| `cpu_affinity` | `none` | CPU pinning affinity (e.g. `12,13` or `none`). |
+| `cpu_affinity` | `""` | Comma-separated CPUs for `ros2_control_node`. Empty uses `RT_CM_CPU_AFFINITY` from the RT profile. Pass `none` to disable (for fake/simulation). |
 | `use_rviz` | `false` | Launch RViz2 visualization on local host. |
 
 Details: [docs/BRINGUP.md](docs/BRINGUP.md).
