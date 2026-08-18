@@ -49,40 +49,44 @@ MUJOCO_LOG.TXT
 .DS_Store
 Thumbs.db
 
-# Reference checkouts are development inputs, not runtime source packages.
+# Reference checkouts and repos
 ref/
+repos/
+examples/
 
-# ROS package checkouts under src/ are managed as independent repositories.
+# ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
 # Keep structural placeholders so the workspace tree is present in git.
-/src/**/
-/src/**
-!/src/
-!/src/**/
-!/src/**/.gitkeep
-# Owned embodiment meta-repo gitlink. Nested package checkouts stay ignored.
-!/src/embodiments
-!/src/toolbox/
-!/src/toolbox/**/
-!/src/toolbox/**
-!/src/policy_inference/
-!/src/policy_inference/**/
-!/src/policy_inference/**
-!/src/embodiments/sensors/orbbec_camera_config/
-!/src/embodiments/sensors/orbbec_camera_config/**/
-!/src/embodiments/sensors/orbbec_camera_config/**
-!/src/embodiments/sensors/realsense_camera_config/
-!/src/embodiments/sensors/realsense_camera_config/**/
-!/src/embodiments/sensors/realsense_camera_config/**
-!/src/embodiments/sensors/usb_cam_camera_config/
-!/src/embodiments/sensors/usb_cam_camera_config/**/
-# Controller binaries come from Pixi. Track only the directory placeholder.
-# Local checkouts, COLCON_IGNORE, and nested package gitkeeps stay untracked.
 /src/controller/**
 !/src/controller/.gitkeep
+
+/src/execution/**
+!/src/execution/.gitkeep
+
+/src/interfaces/**
+!/src/interfaces/.gitkeep
+
+/src/motion_planning/**
+!/src/motion_planning/.gitkeep
+
+/src/recording/**
+!/src/recording/.gitkeep
+
+/src/teleop/**
+!/src/teleop/.gitkeep
+
+/src/toolbox/**
+!/src/toolbox/.gitkeep
+
+/src/visualization/**
+!/src/visualization/.gitkeep
+
+# Tracked source components
+!/src/embodiments
+!/src/policy_inference/
+!/src/policy_inference/**
 !/src/rt_launch/
-!/src/rt_launch/**/
 !/src/rt_launch/**
-!/src/teleop/COLCON_IGNORE
+
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/
 /src/**/.pytest_cache/
