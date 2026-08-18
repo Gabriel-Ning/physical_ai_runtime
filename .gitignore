@@ -41,6 +41,12 @@ calibrations/
 metrics/
 MUJOCO_LOG.TXT
 
+# Host-setup docs only. Design / architecture notes stay local, not this repo.
+/docs/*
+!/docs/CLOCK_SYNC.md
+!/docs/CPU_HOST_SETUP.md
+!/docs/UDEV_HOST_SETUP.md
+
 # Editor and operating-system noise
 .vscode/*
 !.vscode/settings.json

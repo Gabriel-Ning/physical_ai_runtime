@@ -7,16 +7,11 @@ learn the layout and develop on top. Domain and application packages stay in
 their own repositories; this workspace owns the Pixi/colcon scaffolding, docs,
 and small reusable toolbox packages.
 
-Architecture, examples, and migration notes live under [`docs/`](docs/):
+Host setup notes live under [`docs/`](docs/):
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Camera driver, configuration, and host provisioning](docs/CAMERA_DEPLOYMENT.md)
 - [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
-- [Manipulation Execution Manager architecture (v1)](docs/MANIPULATION_EXECUTION_ARCHITECTURE.md)
-- [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
-- [Runtime orchestration SDK master plan](docs/RUNTIME_ORCHESTRATION_SDK_MASTER_PLAN.md)
-- [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
-- [Migration](docs/MIGRATION.md)
+- [CPU / isolcpus / RT host setup](docs/CPU_HOST_SETUP.md)
+- [udev CAN aliases](docs/UDEV_HOST_SETUP.md)
 
 ## Features
 
@@ -145,7 +140,7 @@ vcs import src < repos/example.repos
 git submodule update --init --recursive -- src/embodiments
 # Vendor Hikvision
 vcs import src < repos/embodiment.repos
-bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter; see docs/ARCHITECTURE.md
+bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter
 pixi run build
 ```
 
@@ -212,7 +207,6 @@ owns those ABIs.
   `pixi install -e cpu` for the conda-only RT control host (see
   [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
-  `test` / `clean` / `stop`). For Marvin Example 1, see
-  [docs/EXAMPLE1.md](docs/EXAMPLE1.md).
+  `test` / `clean` / `stop`).
 - Contribute Pixi/docs/template changes here; contribute package changes in
   each package's own repository.
