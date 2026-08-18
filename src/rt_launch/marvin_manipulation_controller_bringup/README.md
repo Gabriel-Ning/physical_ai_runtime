@@ -42,6 +42,18 @@ ros2 launch marvin_manipulation_controller_bringup controller_bringup.launch.py 
   cpu_affinity:=none
 ```
 
+## Pre-flight: Clear Hardware Errors (Real Hardware)
+
+On real hardware, Marvin CCS M6 controller may require clearing servo / bus error state before launching the RT stack (otherwise controller launch may fail):
+
+```bash
+# 1. Clear errors with default IP (10.19.0.191):
+ros2 run marvin_manipulation_controller_bringup clear_errors
+
+# 2. Or specify custom controller IP:
+ros2 run marvin_manipulation_controller_bringup clear_errors --ip 10.19.0.191
+```
+
 ## Real hardware (RT host)
 
 ```bash

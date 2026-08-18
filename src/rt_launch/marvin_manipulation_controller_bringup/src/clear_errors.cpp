@@ -66,14 +66,14 @@ bool has_active_errors(const long errs[7])
 
 int main(int argc, char ** argv)
 {
-  std::string target_ip = "192.168.1.10";
+  std::string target_ip = "10.19.0.191";
 
   for (int i = 1; i < argc; ++i) {
     if ((std::strcmp(argv[i], "--ip") == 0 || std::strcmp(argv[i], "-i") == 0) && i + 1 < argc) {
       target_ip = argv[++i];
     } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
       std::printf("Usage: ros2 run marvin_manipulation_controller_bringup clear_errors [--ip <controller_ip>]\n");
-      std::printf("Default IP: 192.168.1.10\n");
+      std::printf("Default IP: 10.19.0.191\n");
       return 0;
     }
   }

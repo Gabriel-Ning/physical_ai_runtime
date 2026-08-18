@@ -33,6 +33,15 @@ acquires control.
 Launch commands (visualize / fake / real): see [../README.md](../README.md).
 Use a **pixi-activated** shell so `ROS_DOMAIN_ID=1` and CycloneDDS are set.
 
+## Pre-flight: Clear Servo Errors (Real Hardware)
+
+Before launching `rt_stack.launch.py` or `controller_bringup.launch.py` on real hardware, run:
+
+```bash
+ros2 run marvin_manipulation_controller_bringup clear_errors
+# Default IP: 10.19.0.191 (or specify --ip <ip>)
+```
+
 ## Controllers that are spawned
 
 Serialized: `joint_state_broadcaster` → inactive left/right `*_arm_tskpc` /
