@@ -88,6 +88,8 @@ examples/
 
 # Tracked source components
 !/src/embodiments
+!/src/interfaces/rmi/
+!/src/interfaces/rmi/**
 !/src/policy_inference/
 !/src/policy_inference/**
 !/src/rt_launch/

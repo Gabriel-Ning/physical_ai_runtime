@@ -128,10 +128,11 @@ ros-jazzy-ament-cmake-clang-format = "*"
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
+PYTHONPATH = "$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTHONPATH"
 
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
-ROS_DOMAIN_ID = "1"
+ROS_DOMAIN_ID = "2"
 MPLCONFIGDIR = "/tmp/physical_ai_matplotlib"
 CMAKE_GENERATOR = "Ninja"
 
@@ -155,6 +156,11 @@ stop = "bash scripts/stop_ros.sh"
 pj = "ros2 run plotjuggler plotjuggler"
 format = "ruff format --no-cache src"
 lint = "ruff check --no-cache src"
+
+# ── Production Applications ──────────────────────────────────────────────────
+teleop = "python apps/teleop.py"
+record = "python apps/record.py"
+replay = "python apps/replay.py"
 
 # ── GPU feature (default environment) ────────────────────────────────────────
 #
