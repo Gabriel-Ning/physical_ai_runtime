@@ -199,7 +199,7 @@ class Agent:
             execution=self._execution,
             correlation_id=_goal_correlation_id(handle),
             feedback=feedback,
-            duration_s=plan.points[-1].time_from_start_s,
+            duration_s=_point_time_s(plan.points[-1]),
         )
 
     def execute(self, part: str, plan: Any) -> PlanExecution:
@@ -717,14 +717,31 @@ class Robot:
 
 
 def _require_valid_result(result: Any) -> None:
-    if not result.valid:
-        raise ValueError(f"cannot send invalid planning result: {result.reason}")
+    # Native ROS trajectory messages and plain containers do not expose a `.valid` flag.
+    # Keep compatibility by treating all objects without `.valid` as valid by default.
+    if not hasattr(result, "valid"):
+        return
+    if not bool(getattr(result, "valid")):
+        reason = getattr(result, "reason", "<no reason provided>")
+        raise ValueError(f"cannot send invalid planning result: {reason}")
+
+
+def _point_time_s(point: Any) -> float:
+    if hasattr(point, "time_from_start_s"):
+        return float(point.time_from_start_s)
+    if hasattr(point, "time_from_start"):
+        t = point.time_from_start
+        if hasattr(t, "sec") and hasattr(t, "nanosec"):
+            return float(t.sec) + float(t.nanosec) * 1e-9
+        if isinstance(t, (int, float)):
+            return float(t)
+    return 0.0
 
 
 def _trajectory_spec(
     plan: Any, target_joint_names: list[str] | None = None
 ) -> dict[str, Any]:
-    plan_joint_names = list(plan.joint_names or [])
+    plan_joint_names = list(getattr(plan, "joint_names", None) or [])
     if (
         target_joint_names
         and plan_joint_names
@@ -734,15 +751,15 @@ def _trajectory_spec(
         out_names = list(target_joint_names)
         points = []
         for point in plan.points:
-            pos = [point.positions[i] for i in indices] if point.positions else []
-            vel = [point.velocities[i] for i in indices] if point.velocities else []
-            acc = [point.accelerations[i] for i in indices] if point.accelerations else []
+            pos = [point.positions[i] for i in indices] if getattr(point, "positions", None) else []
+            vel = [point.velocities[i] for i in indices] if getattr(point, "velocities", None) else []
+            acc = [point.accelerations[i] for i in indices] if getattr(point, "accelerations", None) else []
             points.append(
                 {
                     "positions": pos,
                     "velocities": vel,
                     "accelerations": acc,
-                    "time_from_start_s": point.time_from_start_s,
+                    "time_from_start_s": _point_time_s(point),
                 }
             )
         return {"joint_names": out_names, "points": points}
@@ -752,9 +769,9 @@ def _trajectory_spec(
         "points": [
             {
                 "positions": list(point.positions),
-                "velocities": list(point.velocities or []),
-                "accelerations": list(point.accelerations or []),
-                "time_from_start_s": point.time_from_start_s,
+                "velocities": list(getattr(point, "velocities", None) or []),
+                "accelerations": list(getattr(point, "accelerations", None) or []),
+                "time_from_start_s": _point_time_s(point),
             }
             for point in plan.points
         ],

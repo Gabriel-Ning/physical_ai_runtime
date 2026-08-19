@@ -895,3 +895,40 @@ def test_plan_execution_exposes_latest_feedback_and_bounded_progress() -> None:
 
     assert handle.feedback is feedback
     assert handle.progress == pytest.approx(0.25)
+
+
+def test_agent_tolerates_payloads_without_valid_flag() -> None:
+    from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+    from builtin_interfaces.msg import Duration
+
+    execution_manager = FakeExecution()
+    robot = Robot(_profile(), execution_manager)
+    client = FakeProviderClient("Planner")
+    source = Agent("Planner", client, _profile())
+
+    ros_msg = JointTrajectory()
+    ros_msg.joint_names = ["j1"]
+    pt = JointTrajectoryPoint()
+    pt.positions = [0.35]
+    pt.time_from_start = Duration(sec=1, nanosec=500000000)
+    ros_msg.points = [pt]
+
+    with robot.control(source):
+        handle = robot.execute("arm", ros_msg)
+        assert handle._duration_s == pytest.approx(1.5)
+        sent_call = [s for s in client.sent if s[1] == "joint_trajectory"]
+        assert sent_call
+        trajectory_spec = sent_call[0][2]
+        assert trajectory_spec["points"][0]["positions"] == [0.35]
+        assert trajectory_spec["points"][0]["time_from_start_s"] == pytest.approx(1.5)
+
+
+def test_agent_send_joint_reference_without_valid_flag() -> None:
+    client = FakeProviderClient("TeleopJoint")
+    source = Agent("TeleopJoint", client, _profile())
+
+    plain_payload = SimpleNamespace(positions=[0.42])
+    source.send(Action("arm", "joint_reference", plain_payload))
+
+    assert client.sent == [("arm", "joint_reference", ["j1"], [[0.42]], [0.0])]
+
