@@ -95,19 +95,16 @@ class Agent:
         return self._client.send(action.part, action.command, action.value)
 
     def _send_planning_result(self, action: Action) -> bool:
-        from motion_planner_core import (
-            JointHorizonResult,
-            PlanResult,
-            PoseHorizonResult,
-            ResolveResult,
-        )
-
         value = action.value
-        if isinstance(value, ResolveResult):
+        if value is None:
+            return False
+
+        # 1. Single joint resolution (ResolveResult: has positions, no points)
+        if hasattr(value, "positions") and not hasattr(value, "points"):
             _require_valid_result(value)
             if action.command != "joint_reference":
                 raise ValueError("ResolveResult requires command='joint_reference'")
-            joint_names = value.joint_names or self._part_joint_names(action.part)
+            joint_names = getattr(value, "joint_names", None) or self._part_joint_names(action.part)
             self._client.send_joint_reference(
                 action.part,
                 joint_names,
@@ -115,43 +112,50 @@ class Agent:
                 [0.0],
             )
             return True
-        if isinstance(value, JointHorizonResult):
+
+        # 2. Results with trajectory / horizon points
+        if hasattr(value, "points") and isinstance(value.points, (list, tuple)):
             _require_valid_result(value)
-            if action.command != "joint_reference":
-                raise ValueError(
-                    "JointHorizonResult requires command='joint_reference'"
-                )
-            self._client.send_joint_reference(
-                action.part,
-                self._part_joint_names(action.part),
-                [list(point.positions) for point in value.points],
-                [point.time_from_start_s for point in value.points],
-            )
-            return True
-        if isinstance(value, PoseHorizonResult):
-            _require_valid_result(value)
-            if action.command != "pose_reference":
-                raise ValueError("PoseHorizonResult requires command='pose_reference'")
-            self._client.send_pose_reference(
-                action.part,
-                [list(point.position_xyz) for point in value.points],
-                [
+            if not value.points:
+                if action.command == "joint_trajectory":
+                    raise ValueError("PlanResult requires command='joint_trajectory'")
+                return False
+
+            first_pt = value.points[0]
+            # Joint trajectory / joint horizon points (has positions attribute)
+            if hasattr(first_pt, "positions"):
+                if action.command == "joint_reference":
+                    self._client.send_joint_reference(
+                        action.part,
+                        self._part_joint_names(action.part),
+                        [list(point.positions) for point in value.points],
+                        [getattr(point, "time_from_start_s", 0.0) for point in value.points],
+                    )
+                    return True
+                if action.command == "joint_trajectory":
+                    return False
+
+            # Pose horizon points (has position_xyz and orientation_wxyz)
+            if hasattr(first_pt, "position_xyz") and hasattr(first_pt, "orientation_wxyz"):
+                if action.command != "pose_reference":
+                    raise ValueError("PoseHorizonResult requires command='pose_reference'")
+                self._client.send_pose_reference(
+                    action.part,
+                    [list(point.position_xyz) for point in value.points],
                     [
-                        point.orientation_wxyz[1],
-                        point.orientation_wxyz[2],
-                        point.orientation_wxyz[3],
-                        point.orientation_wxyz[0],
-                    ]
-                    for point in value.points
-                ],
-                [point.time_from_start_s for point in value.points],
-                self._part_base_frame(action.part),
-            )
-            return True
-        if isinstance(value, PlanResult):
-            _require_valid_result(value)
-            if action.command != "joint_trajectory":
-                raise ValueError("PlanResult requires command='joint_trajectory'")
+                        [
+                            point.orientation_wxyz[1],
+                            point.orientation_wxyz[2],
+                            point.orientation_wxyz[3],
+                            point.orientation_wxyz[0],
+                        ]
+                        for point in value.points
+                    ],
+                    [getattr(point, "time_from_start_s", 0.0) for point in value.points],
+                    self._part_base_frame(action.part),
+                )
+                return True
+
         return False
 
     def _part_joint_names(self, part: str) -> list[str]:
@@ -172,10 +176,8 @@ class Agent:
         return frame
 
     def start_plan(self, part: str, plan: Any) -> PlanExecution:
-        from motion_planner_core import PlanResult
-
-        if not isinstance(plan, PlanResult):
-            raise TypeError("plan must be a PlanResult")
+        if not hasattr(plan, "points") or not isinstance(plan.points, (list, tuple)):
+            raise TypeError("plan must have trajectory points")
         _require_valid_result(plan)
         if not plan.points:
             raise ValueError("cannot execute a plan without trajectory points")

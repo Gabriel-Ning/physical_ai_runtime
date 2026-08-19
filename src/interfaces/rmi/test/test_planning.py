@@ -1,7 +1,15 @@
 from types import MappingProxyType, SimpleNamespace
 
 import pytest
-from motion_planner_core import (
+from rmi import (
+    CartesianStreamer,
+    JointStreamer,
+    Observation,
+    PlannerCatalog,
+    Planner,
+    Resolver,
+)
+from rmi.planning import (
     CartesianState,
     JointHorizonPoint,
     JointHorizonResult,
@@ -11,14 +19,6 @@ from motion_planner_core import (
     PoseHorizonPoint,
     PoseHorizonResult,
     ResolveResult,
-)
-from rmi import (
-    CartesianStreamer,
-    JointStreamer,
-    Observation,
-    PlannerCatalog,
-    Planner,
-    Resolver,
 )
 
 

@@ -69,7 +69,7 @@ from .topology import (
     RobotTopology,
 )
 
-# Planning symbols are lazy: RT EM must not hard-require motion_planner_core.
+# Planning symbols are lazily loaded on attribute access.
 _PLANNING_EXPORTS = frozenset(
     {
         "CartesianStreamer",

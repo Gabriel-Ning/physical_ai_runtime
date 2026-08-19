@@ -1,46 +1,204 @@
-"""Pure motion-planning API for RMI applications.
+"""Pure motion-planning contracts and application wrappers for RMI.
 
-Requires ``motion_planner_core`` (workstation / planning host only). The RT
-ExecutionManager does not import this module.
-
-Planning is deliberately separate from command execution: this module reads
-timestamped state and returns backend-neutral family-specific results. It does
-not acquire Execution Manager ownership, own a stream timer, or publish robot
-commands.
+Decoupled, backend-neutral interfaces for planning, inverse kinematics resolution,
+and trajectory streaming in RMI applications.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any, Protocol
-
-from motion_planner_core import (
-    CartesianState,
-    CartesianStreamerBackend,
-    JointHorizonResult,
-    JointState,
-    JointStreamerBackend,
-    PlannerBackend,
-    PlannerManager,
-    PlannerRegistry,
-    PlannerSpec,
-    PlanResult,
-    PoseHorizonResult,
-    ResolverBackend,
-    ResolveResult,
-    Target,
-    World,
-)
 
 from .contracts import Observation
 
 
+# ------------------------------------------------------------------------------
+# Data Contracts
+# ------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class JointState:
+    """Joint-space state or target representation."""
+
+    joint_names: list[str] = field(default_factory=list)
+    positions: list[float] = field(default_factory=list)
+    velocities: list[float] | None = None
+    accelerations: list[float] | None = None
+    stamp_s: float = 0.0
+
+
+@dataclass(frozen=True)
+class CartesianState:
+    """Cartesian-space state or target representation."""
+
+    position_xyz: tuple[float, float, float] | list[float] = (0.0, 0.0, 0.0)
+    orientation_wxyz: tuple[float, float, float, float] | list[float] = (1.0, 0.0, 0.0, 0.0)
+    linear_velocity_xyz: tuple[float, float, float] | list[float] | None = None
+    angular_velocity_xyz: tuple[float, float, float] | list[float] | None = None
+    linear_acceleration_xyz: tuple[float, float, float] | list[float] | None = None
+    angular_acceleration_xyz: tuple[float, float, float] | list[float] | None = None
+    stamp_s: float = 0.0
+
+
+Target = CartesianState | JointState
+
+
+@dataclass
+class World:
+    """Environment collision and obstacle representation."""
+
+    obstacles: list[Any] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PlanPoint:
+    """Single timed waypoint along a joint trajectory."""
+
+    positions: list[float]
+    velocities: list[float] | None = None
+    accelerations: list[float] | None = None
+    time_from_start_s: float = 0.0
+
+
+@dataclass
+class PlanResult:
+    """Result of an offline or global motion planning query."""
+
+    valid: bool = True
+    reason: str = ""
+    joint_names: list[str] | None = None
+    points: list[PlanPoint] = field(default_factory=list)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResolveResult:
+    """Result of a single-query inverse kinematics (IK) resolution."""
+
+    valid: bool = True
+    reason: str = ""
+    joint_names: list[str] | None = None
+    positions: list[float] | None = None
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class JointHorizonPoint:
+    """Single point in a receding joint horizon."""
+
+    positions: list[float]
+    velocities: list[float] | None = None
+    time_from_start_s: float = 0.0
+
+
+@dataclass
+class JointHorizonResult:
+    """Result of a receding-horizon joint streamer step."""
+
+    valid: bool = True
+    reason: str = ""
+    points: list[JointHorizonPoint] = field(default_factory=list)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PoseHorizonPoint:
+    """Single point in a receding Cartesian pose horizon."""
+
+    position_xyz: list[float]
+    orientation_wxyz: list[float]
+    time_from_start_s: float = 0.0
+
+
+@dataclass
+class PoseHorizonResult:
+    """Result of a receding-horizon Cartesian streamer step."""
+
+    valid: bool = True
+    reason: str = ""
+    points: list[PoseHorizonPoint] = field(default_factory=list)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlannerSpec:
+    """Specification and lazy factory for one planner backend."""
+
+    name: str
+    factory: Callable[[], Any]
+    display_name: str = ""
+    warmup_on_create: bool = True
+
+
+# ------------------------------------------------------------------------------
+# Backend Protocols
+# ------------------------------------------------------------------------------
+
+
 class RobotStateSource(Protocol):
-    """Small structural boundary implemented by application :class:`Robot`."""
+    """Small structural boundary implemented by application Robot / Context."""
 
     @property
     def state(self) -> Observation: ...
+
+
+class PlannerBackend(Protocol):
+    """Interface required of motion planner backend implementations."""
+
+    def update_world(self, world: World | None) -> None: ...
+
+    def plan(
+        self,
+        start_state: JointState,
+        target: Target,
+        options: dict[str, Any],
+    ) -> PlanResult: ...
+
+
+class ResolverBackend(Protocol):
+    """Interface required of IK resolver backend implementations."""
+
+    def update_world(self, world: World | None) -> None: ...
+
+    def resolve(
+        self,
+        start_state: JointState,
+        target: Target,
+        options: dict[str, Any],
+    ) -> ResolveResult: ...
+
+
+class JointStreamerBackend(Protocol):
+    """Interface required of receding-horizon joint streamer backends."""
+
+    def update_world(self, world: World | None) -> None: ...
+
+    def update_target(self, target: Target) -> None: ...
+
+    def reset(self, start: JointState) -> None: ...
+
+    def step(self, current: JointState, dt: float) -> JointHorizonResult: ...
+
+
+class CartesianStreamerBackend(Protocol):
+    """Interface required of receding-horizon Cartesian streamer backends."""
+
+    def update_world(self, world: World | None) -> None: ...
+
+    def update_target(self, target: Target) -> None: ...
+
+    def reset(self, start: CartesianState) -> None: ...
+
+    def step(self, current: CartesianState, dt: float) -> PoseHorizonResult: ...
+
+
+# ------------------------------------------------------------------------------
+# Application Wrappers
+# ------------------------------------------------------------------------------
 
 
 class Planner:
@@ -214,7 +372,7 @@ class PlannerCatalog:
     def register(
         self,
         name: str,
-        factory,
+        factory: Callable[[], Any],
         *,
         display_name: str = "",
         warmup_on_create: bool = True,
@@ -229,7 +387,12 @@ class PlannerCatalog:
         return self._planners.available()
 
     def register_resolver(
-        self, name: str, factory, *, display_name: str = "", warmup_on_create=True
+        self,
+        name: str,
+        factory: Callable[[], Any],
+        *,
+        display_name: str = "",
+        warmup_on_create: bool = True,
     ) -> None:
         self._resolvers.register(name, factory, display_name, warmup_on_create)
 
@@ -238,7 +401,12 @@ class PlannerCatalog:
         return Resolver(name.strip().lower(), backend)
 
     def register_joint_streamer(
-        self, name: str, factory, *, display_name: str = "", warmup_on_create=True
+        self,
+        name: str,
+        factory: Callable[[], Any],
+        *,
+        display_name: str = "",
+        warmup_on_create: bool = True,
     ) -> None:
         self._joint_streamers.register(name, factory, display_name, warmup_on_create)
 
@@ -247,7 +415,12 @@ class PlannerCatalog:
         return JointStreamer(name.strip().lower(), backend)
 
     def register_cartesian_streamer(
-        self, name: str, factory, *, display_name: str = "", warmup_on_create=True
+        self,
+        name: str,
+        factory: Callable[[], Any],
+        *,
+        display_name: str = "",
+        warmup_on_create: bool = True,
     ) -> None:
         self._cartesian_streamers.register(
             name, factory, display_name, warmup_on_create
@@ -260,26 +433,45 @@ class PlannerCatalog:
 
 class _BackendCatalog:
     def __init__(self) -> None:
-        self._registry: PlannerRegistry[Any] = PlannerRegistry()
-        self._manager: PlannerManager[Any] = PlannerManager(self._registry)
+        self._specs: dict[str, PlannerSpec] = {}
+        self._instances: dict[str, Any] = {}
 
     def register(
-        self, name: str, factory, display_name: str, warmup_on_create: bool
+        self,
+        name: str,
+        factory: Callable[[], Any],
+        display_name: str = "",
+        warmup_on_create: bool = True,
     ) -> None:
-        self._registry.register(
-            PlannerSpec(
-                name=name,
-                factory=factory,
-                display_name=display_name,
-                warmup_on_create=warmup_on_create,
-            )
+        canonical = name.strip().lower()
+        self._specs[canonical] = PlannerSpec(
+            name=canonical,
+            factory=factory,
+            display_name=display_name or name,
+            warmup_on_create=warmup_on_create,
         )
 
     def get(self, name: str) -> Any:
-        return self._manager.get(name)
+        canonical = name.strip().lower()
+        if canonical not in self._specs:
+            raise KeyError(
+                f"planner backend {name!r} not registered; available: {self.available()}"
+            )
+        if canonical not in self._instances:
+            spec = self._specs[canonical]
+            instance = spec.factory()
+            if spec.warmup_on_create and hasattr(instance, "warmup"):
+                instance.warmup()
+            self._instances[canonical] = instance
+        return self._instances[canonical]
 
     def available(self) -> list[str]:
-        return self._manager.available()
+        return list(self._specs.keys())
+
+
+# ------------------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------------------
 
 
 def _state_error(
@@ -333,10 +525,26 @@ def _optional_sequence(data: Mapping[str, Any], key: str) -> list[Any] | None:
 
 
 __all__ = [
+    "CartesianState",
     "CartesianStreamer",
+    "CartesianStreamerBackend",
+    "JointHorizonPoint",
+    "JointHorizonResult",
+    "JointState",
     "JointStreamer",
-    "PlannerCatalog",
+    "JointStreamerBackend",
+    "PlanPoint",
+    "PlanResult",
     "Planner",
+    "PlannerBackend",
+    "PlannerCatalog",
+    "PlannerSpec",
+    "PoseHorizonPoint",
+    "PoseHorizonResult",
+    "ResolveResult",
     "Resolver",
+    "ResolverBackend",
     "RobotStateSource",
+    "Target",
+    "World",
 ]

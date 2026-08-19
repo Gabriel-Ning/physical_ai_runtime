@@ -1,15 +1,6 @@
 from types import SimpleNamespace
 
 import pytest
-from motion_planner_core import (
-    JointHorizonPoint,
-    JointHorizonResult,
-    PlanPoint,
-    PlanResult,
-    PoseHorizonPoint,
-    PoseHorizonResult,
-    ResolveResult,
-)
 from rmi import (
     Action,
     Agent,
@@ -18,6 +9,15 @@ from rmi import (
     Observation,
     PlanExecutionState,
     Robot,
+)
+from rmi.planning import (
+    JointHorizonPoint,
+    JointHorizonResult,
+    PlanPoint,
+    PlanResult,
+    PoseHorizonPoint,
+    PoseHorizonResult,
+    ResolveResult,
 )
 
 
