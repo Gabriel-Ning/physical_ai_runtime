@@ -17,8 +17,8 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "arms": "both",
-            "left_can_interface": "piper0",
-            "right_can_interface": "piper1",
+            "left_can_interface": LaunchConfiguration("left_can_interface"),
+            "right_can_interface": LaunchConfiguration("right_can_interface"),
             "left_end_effector": "piper_gripper",
             "right_end_effector": "piper_gripper",
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
@@ -31,6 +31,16 @@ def generate_launch_description() -> LaunchDescription:
     )
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "left_can_interface",
+                default_value="piper0",
+                description="SocketCAN name for the left follower (default: piper0).",
+            ),
+            DeclareLaunchArgument(
+                "right_can_interface",
+                default_value="piper1",
+                description="SocketCAN name for the right follower (default: piper1).",
+            ),
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument(

@@ -39,22 +39,26 @@ ros2 launch piper_manipulation_controller_bringup controller_bringup.launch.py \
 ## Real hardware (RT host)
 
 Bring SocketCAN up externally first. Real dual-arm defaults to the site
-aliases `piper0` / `piper1`. On a cpu RT host, omit `cpu_affinity` so
-`ros2_control_node` pins to `RT_CM_CPU_AFFINITY`. `cpu_affinity:=none`
-disables pinning — that is for fake / workstation only.
-`left_end_effector` / `right_end_effector` are gripper **types**
-(`none` | `piper_gripper`); both sides can be `piper_gripper`.
+aliases `left_can_interface:=piper0` and `right_can_interface:=piper1`.
+If physical wiring or SocketCAN enumeration is swapped, pass the overrides explicitly:
 
 ```bash
+# Default (left=piper0, right=piper1):
 ros2 launch piper_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=false \
   use_rviz:=false
+
+# Swapped CAN interfaces (left=piper1, right=piper0):
+ros2 launch piper_manipulation_controller_bringup rt_stack.launch.py \
+  use_fake_hardware:=false \
+  use_rviz:=false \
+  left_can_interface:=piper1 \
+  right_can_interface:=piper0
 ```
 
-```bash
-ros2 launch piper_manipulation_controller_bringup controller_bringup.launch.py \
-  use_fake_hardware:=false \
-  use_rviz:=false
-```
+On a cpu RT host, omit `cpu_affinity` so `ros2_control_node` pins to `RT_CM_CPU_AFFINITY`.
+`cpu_affinity:=none` disables pinning — that is for fake / workstation only.
+`left_end_effector` / `right_end_effector` are gripper **types**
+(`none` | `piper_gripper`); both sides can be `piper_gripper`.
 
 Details: [docs/BRINGUP.md](docs/BRINGUP.md).

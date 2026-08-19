@@ -96,10 +96,11 @@ TSKPC `tip_frame` is `<side>_gripper_tcp` when the native gripper is enabled.
 | `use_rviz` | `true` \| `false` (`false`) |
 | `cpu_affinity` | e.g. `14,15`; empty uses `RT_CM_CPU_AFFINITY`; `none` disables pinning |
 
-`rt_stack.launch.py` keeps `arms:=both`, site CAN aliases `piper0` / `piper1`,
-and native Piper grippers. It forwards fake/RViz/affinity. Pass end-effector
-overrides through `controller_bringup.launch.py`. Empty `cpu_affinity` pins
-`ros2_control_node` to `RT_CM_CPU_AFFINITY` from the cpu RT profile.
+`rt_stack.launch.py` keeps `arms:=both` and native Piper grippers. It exposes
+`left_can_interface` (default: `piper0`), `right_can_interface` (default: `piper1`),
+`use_fake_hardware`, `use_rviz`, `cpu_affinity`, and `jtc_guard_heartbeat_timeout_s`.
+Pass end-effector overrides through `controller_bringup.launch.py`. Empty `cpu_affinity`
+pins `ros2_control_node` to `RT_CM_CPU_AFFINITY` from the cpu RT profile.
 
 The hardware components never reconfigure SocketCAN. Bring the links up
 externally before `use_fake_hardware:=false`.

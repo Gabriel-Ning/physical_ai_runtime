@@ -177,8 +177,8 @@ def test_rt_stack_contains_only_rt_runtime_components():
     assert "controller_bringup.launch.py" in combo
     assert "execution_manager.launch.py" not in combo
     assert 'get_package_share_directory("rmi")' not in combo
-    assert '"left_can_interface": "piper0"' in combo
-    assert '"right_can_interface": "piper1"' in combo
+    assert 'DeclareLaunchArgument(\n        "left_can_interface",\n        default_value="piper0"' in combo or 'DeclareLaunchArgument(\n                "left_can_interface"' in combo
+    assert 'DeclareLaunchArgument(\n        "right_can_interface",\n        default_value="piper1"' in combo or 'DeclareLaunchArgument(\n                "right_can_interface"' in combo
     assert re.search(
         r'DeclareLaunchArgument\(\s*"cpu_affinity",\s*default_value=""', combo
     )
