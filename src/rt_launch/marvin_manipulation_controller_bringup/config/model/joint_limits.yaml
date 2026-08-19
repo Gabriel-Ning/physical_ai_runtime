@@ -1,0 +1,15 @@
+# Actuated finger travel [m]. gripper_right_joint mimics gripper_left_joint.
+# 0 = closed pose (fingers touching at center); positive opens outward.
+# ROS command/state use this single-finger travel (same pattern as Piper).
+# Full opening width on the wire ≈ 2 × finger travel (~0.09 m at 0.045).
+# Shared by left_ / right_ Pika mounts in this Marvin bringup.
+# Edit here; defaults match pika_gripper_description.
+# After changing this file, regenerate:
+#   curobo_robot_models → config/marvin_manipulation.yml
+#   (cd .../curobo_robot_models && bash scripts/generate_curobo_robot_model.sh --model marvin)
+gripper_left_joint:
+  limit:
+    lower: 0.0
+    upper: 0.045
+    velocity: 5.0
+    effort: 100.0

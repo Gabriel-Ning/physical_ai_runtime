@@ -156,6 +156,29 @@ ulimit -r               # expect 99
 `nohz_full=` / `rcu_nocbs=` in `/etc/default/grub` to match the profile
 (sudo once), then exits 3 until you reboot.
 
+## What this host builds
+
+Enough for attended FR3 / Marvin / Piper controller bringup:
+
+- `src/rt_launch` — owned bringup packages
+- `src/embodiments` — robots + Pika (submodule). Skip Hikvision.
+- Pixi binaries — `ros-jazzy-manipulation-position-controllers`,
+  `ros-jazzy-joint-trajectory-controller-guard` (do not colcon-build a
+  local `src/controller` checkout)
+
+Do not import workstation trees on this host:
+
+```bash
+git submodule update --init --recursive -- src/embodiments
+bash scripts/franka_colcon_ignore.sh
+# skip: vcs import repos/necessary.repos
+# skip: vcs import repos/embodiment.repos   # Hikvision
+pixi run -e cpu build
+```
+
+Launch from the matching bringup README. Examples (`04`, `08`–`11`) run on
+the workstation, not on this host.
+
 ## Related
 
 - Profile defaults: [`scripts/rt_cpu_profile.env`](../scripts/rt_cpu_profile.env)
@@ -166,6 +189,6 @@ ulimit -r               # expect 99
 - Colocation evidence (Marvin + Hik on this class of host):
   [COLOCATION_VALIDATION.md](COLOCATION_VALIDATION.md)
 - Bringups:
-  - [`franka_manipulation_controller_bringup`](../src/apps/franka_manipulation_controller_bringup/README.md)
-  - [`marvin_manipulation_controller_bringup`](../src/apps/marvin_manipulation_controller_bringup/README.md)
-  - [`piper_manipulation_controller_bringup`](../src/apps/piper_manipulation_controller_bringup/README.md)
+  - [`franka_manipulation_controller_bringup`](../src/rt_launch/franka_manipulation_controller_bringup/README.md)
+  - [`marvin_manipulation_controller_bringup`](../src/rt_launch/marvin_manipulation_controller_bringup/README.md)
+  - [`piper_manipulation_controller_bringup`](../src/rt_launch/piper_manipulation_controller_bringup/README.md)

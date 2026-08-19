@@ -22,9 +22,11 @@ class ExampleTrajectoryPolicy:
         self.duration_s = duration_s
         # Load a learned planner, diffusion planner, or trajectory model here.
 
-    def predict(self, observation: dict[str, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    def predict(
+        self, observation: dict[str, np.ndarray]
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Return positions [T,D] and strictly increasing times [T]."""
-        state = observation['observation.state']
+        state = observation["observation.state"]
 
         # Replace with the real planner call, for example:
         # positions = self.model.plan(observation)  # [T,D]
@@ -40,25 +42,25 @@ class ExampleTrajectoryPolicy:
 
 class TrajectoryPolicyNode(Node):
     def __init__(self) -> None:
-        super().__init__('trajectory_policy_example')
-        self.declare_parameter('joint_names', ['joint1', 'joint2', 'joint3'])
-        self.declare_parameter('joint_state_topic', '/joint_states')
+        super().__init__("trajectory_policy_example")
+        self.declare_parameter("joint_names", ["joint1", "joint2", "joint3"])
+        self.declare_parameter("joint_state_topic", "/joint_states")
 
-        self.joint_names = list(self.get_parameter('joint_names').value)
+        self.joint_names = list(self.get_parameter("joint_names").value)
         self.policy = ExampleTrajectoryPolicy()
         self.state: np.ndarray | None = None
         self.submitted = False
 
         self.create_subscription(
             JointState,
-            str(self.get_parameter('joint_state_topic').value),
+            str(self.get_parameter("joint_state_topic").value),
             self.on_joint_state,
             qos_profile_sensor_data,
         )
         self.trajectory_client = ActionClient(
             self,
             FollowJointTrajectory,
-            '/action_sources/policy/joint_trajectory',
+            "/action_sources/policy/joint_trajectory",
         )
         self.timer = self.create_timer(0.1, self.plan_once)
 
@@ -78,7 +80,7 @@ class TrajectoryPolicyNode(Node):
         ):
             return
 
-        observation = {'observation.state': self.state.copy()}
+        observation = {"observation.state": self.state.copy()}
         positions, times = self.policy.predict(observation)
         goal = FollowJointTrajectory.Goal()
         goal.trajectory = self.trajectory_to_ros(positions, times)
@@ -94,7 +96,7 @@ class TrajectoryPolicyNode(Node):
     def on_goal_response(self, future) -> None:
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().error('EM rejected the trajectory')
+            self.get_logger().error("EM rejected the trajectory")
             return
         goal_handle.get_result_async().add_done_callback(self.on_result)
 
@@ -107,8 +109,8 @@ class TrajectoryPolicyNode(Node):
         )
         log = self.get_logger().info if succeeded else self.get_logger().error
         log(
-            f'trajectory completed: status={wrapped.status}, '
-            f'error_code={result.error_code}'
+            f"trajectory completed: status={wrapped.status}, "
+            f"error_code={result.error_code}"
         )
 
     def trajectory_to_ros(
@@ -117,11 +119,11 @@ class TrajectoryPolicyNode(Node):
         positions = np.asarray(positions, dtype=np.float64)
         times = np.asarray(times, dtype=np.float64)
         if positions.ndim != 2 or positions.shape[1] != len(self.joint_names):
-            raise ValueError('positions must have shape [T,D]')
+            raise ValueError("positions must have shape [T,D]")
         if times.shape != (positions.shape[0],) or np.any(np.diff(times) <= 0.0):
-            raise ValueError('times must have shape [T] and be strictly increasing')
+            raise ValueError("times must have shape [T] and be strictly increasing")
         if not np.isfinite(positions).all() or not np.isfinite(times).all():
-            raise ValueError('trajectory contains NaN or Inf')
+            raise ValueError("trajectory contains NaN or Inf")
 
         msg = JointTrajectory()
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -148,5 +150,5 @@ def main() -> None:
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

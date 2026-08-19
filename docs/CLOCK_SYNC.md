@@ -1,77 +1,71 @@
-# Cross-host clock sync (workstation ↔ RT PC)
+# 跨机对时（工作站 ↔ RT）
 
-Cross-machine ROS (marker / leader / demos on a workstation, bringup + EM on
-an RT host) rejects stamps when wall-clock skew exceeds EM `max_future_s`
-(often **0.1 s**). Typical symptom:
+脚本：[`scripts/sync_clock`](../scripts/sync_clock)。
 
-```text
-future pose stamp rejected: NNN ms ahead
-```
-
-Public NTP on some RT hosts resolves to unreachable **fake-ip** (`198.18.0.x`),
-so chrony never reaches `System clock synchronized: yes`. Prefer a **LAN NTP**
-peer: the workstation serves time; the RT host follows it until offset
-converges (you will see `System time` shrink, e.g. `0.227s` → `0.027s` → ms).
-
-Scripts:
-
-| Script | Where to run | Role |
+| 机器 | 作用 | 例子 |
 |---|---|---|
-| [`scripts/sync_clock`](../scripts/sync_clock) | **RT host** (delta) | One-shot or `--follow` sync from a peer IP |
-| [`scripts/sync_remote_clock.sh`](../scripts/sync_remote_clock.sh) | **Workstation** | Measure skew / optional push via SSH |
+| 工作站 / host | 跑 marker / `new_apps`，给局域网供 NTP | `192.168.1.13` |
+| RT | 跑 `ros2_control` / EM，跟着工作站的钟 | `delta@192.168.1.101` |
 
-## 1. Workstation: allow LAN NTP (once)
+看 **chrony offset**。不要看 SSH `date` 的 skew。
 
-On the desk PC that already has a good clock (`timedatectl` →
-`System clock synchronized: yes`), e.g. `192.168.1.13`:
+目标：**|offset| ≤ 100 us**（GOOD）。≤ 500 us 还能用；> 2 ms 先别开跨机 demo。
+
+命令按终端标。把用户 / IP 换成你的。
+
+---
+
+## 对时
+
+`--setup` / `--status` 只打在 **host terminal**。脚本自己 SSH 进 RT，不要先 `ssh` 进去再跑这两条。
 
 ```bash
-echo 'allow 192.168.1.0/24' | sudo tee /etc/chrony/conf.d/allow-lan.conf
-sudo systemctl restart chrony
-ss -ulnp | grep ':123'   # expect chronyd listening on UDP/123
+# host terminal（仓库根目录）
+ssh delta@192.168.1.101
+exit
+
+scripts/sync_clock --setup  delta@192.168.1.101
+scripts/sync_clock --status delta@192.168.1.101
 ```
 
-Adjust the subnet if your robot LAN is not `192.168.1.0/24`.
+`--setup` 可能问密码：
 
-## 2. RT host: follow until converged
+- host `sudo`：本机 NTP 还没开时
+- RT `sudo`：脚本 SSH 上去之后会停在 host terminal 等你输入
 
-On the RT PC (e.g. delta), with the workstation IP:
+等到脚本自己结束。`verdict: GOOD` 再跑跨机节点。下次先 `--status`，不是 GOOD / OK 再 `--setup`。
+
+---
+
+## 拆开两步（等价）
+
+host 先供时，再 SSH 进 RT 让它 follow。
 
 ```bash
-cd ~/Documents/Git_space/physical_ai_runtime   # or your checkout path
+# host terminal（仓库根目录）
+sudo scripts/sync_clock --serve --local-ip 192.168.1.13
+ssh delta@192.168.1.101
+```
 
-# Self-converging chrony client (recommended)
+```bash
+# ssh rt host terminal（已经 ssh 进去之后）
 sudo scripts/sync_clock --ip 192.168.1.13 --follow
 ```
 
-`--follow` writes `/etc/chrony/sources.d/pai-peer.sources` with
-`server <ip> iburst prefer`, restarts chrony, runs `makestep`, and prints
-per-second `chronyc tracking` until `Leap status: Normal` /
-`NTPSynchronized=yes`. Chrony **keeps running** against that peer.
+等到打印 `Converged (|offset| <= 100 us)`。
 
-One-shot only (then disables NTP on the RT host):
+不要在 `ssh rt host terminal` 里跑 `--setup` / `--status`。
 
-```bash
-sudo scripts/sync_clock --ip 192.168.1.13
-```
+---
 
-Paste fallback if NTP is unavailable:
+## 精度
 
-```bash
-# On workstation:
-date -u +'%Y-%m-%d %H:%M:%S'
-# On RT host immediately:
-sudo scripts/sync_clock --utc '2026-08-04 03:25:10'
-```
+| 方法 | 稳态钟差 |
+|---|---|
+| chrony / 局域网 NTP（本脚本） | 几十～几百微秒，门限 100 us |
+| PTP + 网卡硬件打戳 | 亚微秒～几微秒（还没上） |
 
-## 3. Verify from the workstation
-
-```bash
-scripts/sync_remote_clock.sh --status
-```
-
-Target: **|skew| ≤ 50 ms** (comfortably under EM `max_future_s`).  
-`HIGH` means cross-host teleop / marker stamps may still be rejected.
+钟齐了只表示墙钟一致。`header.stamp` 仍要打在规划起点；控制器用 `now - stamp`，不要用 `points[0]`。
 
 ## Related
 

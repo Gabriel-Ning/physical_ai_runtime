@@ -14,6 +14,7 @@ __pycache__/
 build/
 install/
 log/
+output/
 compile_commands.json
 
 # Local virtual environments and environment overrides
@@ -35,9 +36,16 @@ venv/
 .cloudxr/*
 !.cloudxr/.gitkeep
 data/
+recorded_episodes/
 calibrations/
 metrics/
 MUJOCO_LOG.TXT
+
+# Host-setup docs only. Design / architecture notes stay local, not this repo.
+/docs/*
+!/docs/CLOCK_SYNC.md
+!/docs/CPU_HOST_SETUP.md
+!/docs/UDEV_HOST_SETUP.md
 
 # Editor and operating-system noise
 .vscode/*
@@ -47,31 +55,45 @@ MUJOCO_LOG.TXT
 .DS_Store
 Thumbs.db
 
-# Reference checkouts are development inputs, not runtime source packages.
+# Reference checkouts and repos
 ref/
+repos/
+examples/
 
-# ROS package checkouts under src/ are managed as independent repositories.
+# ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
 # Keep structural placeholders so the workspace tree is present in git.
-/src/**/
-/src/**
-!/src/
-!/src/**/
-!/src/**/.gitkeep
-!/src/toolbox/
-!/src/toolbox/**/
-!/src/toolbox/**
+/src/controller/**
+!/src/controller/.gitkeep
+
+/src/execution/**
+!/src/execution/.gitkeep
+
+/src/interfaces/**
+!/src/interfaces/.gitkeep
+
+/src/motion_planning/**
+!/src/motion_planning/.gitkeep
+
+/src/recording/**
+!/src/recording/.gitkeep
+
+/src/teleop/**
+!/src/teleop/.gitkeep
+
+/src/toolbox/**
+!/src/toolbox/.gitkeep
+
+/src/visualization/**
+!/src/visualization/.gitkeep
+
+# Tracked source components
+!/src/embodiments
+!/src/interfaces/rmi/
+!/src/interfaces/rmi/**
 !/src/policy_inference/
-!/src/policy_inference/**/
 !/src/policy_inference/**
-!/src/embodiments/sensors/orbbec_camera_config/
-!/src/embodiments/sensors/orbbec_camera_config/**/
-!/src/embodiments/sensors/orbbec_camera_config/**
-!/src/embodiments/sensors/realsense_camera_config/
-!/src/embodiments/sensors/realsense_camera_config/**/
-!/src/embodiments/sensors/realsense_camera_config/**
-!/src/embodiments/sensors/usb_cam_camera_config/
-!/src/embodiments/sensors/usb_cam_camera_config/**/
-!/src/embodiments/sensors/usb_cam_camera_config/**
+!/src/rt_launch/
+!/src/rt_launch/**
 
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/

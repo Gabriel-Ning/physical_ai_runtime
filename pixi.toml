@@ -5,7 +5,11 @@ description = "Release-first ROS 2 Jazzy runtime for Physical AI systems"
 authors = ["Gabriel-Ning <guomning@gmail.com>"]
 # gabriel-robotics before conda-forge so Pixi-ABI libfranka (pixi1_*) wins over
 # conda-forge's urdfdom-.5.1 build of the same name.
-channels = ["robostack-jazzy", "https://prefix.dev/gabriel-robotics", "conda-forge"]
+channels = [
+    "robostack-jazzy",
+    "https://prefix.dev/gabriel-robotics",
+    "conda-forge",
+]
 # Match isaacteleop manylinux_2_35 so `pixi install --locked` does not treat the
 # lock as stale relative to the direct wheel URL. Also satisfies Robostack
 # realsense / libudev glibc floor on the cpu environment.
@@ -32,6 +36,7 @@ rosdep = "*"
 # test run fails at plugin load. Pin below the break until robostack ships a
 # launch_testing build compatible with pytest 9.
 pytest = ">=8,<9"
+ruff = ">=0.12,<1"
 
 # ── Native build toolchain ───────────────────────────────────────────────────
 cmake = "*"
@@ -84,10 +89,18 @@ ros-jazzy-apriltag-msgs = ">=2.0.1,<3"
 
 # ── Motion planning / controllers (conda) ────────────────────────────────────
 placo = "==0.9.23"
+# Python ndcurves on gabriel-robotics (robostack-jazzy / pinocchio 4.0).
+# https://prefix.dev/channels/gabriel-robotics/packages/ndcurves
+# Not the PyPI/cmeel wheel (pulls conflicting libpinocchio 4.1).
+ndcurves = "==2.3.0"
 ros-jazzy-ruckig = ">=0.9.2,<0.10"
-# Binary-only controllers from gabriel-robotics. Keep the source checkout
-# outside this workspace so it cannot shadow the installed package.
-ros-jazzy-manipulation-position-controllers = "==0.2.3"
+# RT controller binaries. Do not overlay a local src/controller checkout.
+ros-jazzy-manipulation-position-controllers = "==0.3.1"
+ros-jazzy-joint-trajectory-controller-guard = "==0.1.0"
+# pinocchio's CMake find_dependency(Qhull) requires the CLI tools under
+# $PREFIX/bin (qhull, qconvex, …). Keep an explicit pin so installs that
+# clobber/drop those binaries can be repaired by reinstalling this package.
+qhull = "==2020.2"
 # Meta package pulls planners, plugins (incl. simple-controller-manager),
 # moveit-ros (move-group, visualization), setup-assistant (configs-utils), etc.
 ros-jazzy-moveit = "*"
@@ -98,7 +111,7 @@ ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
 ros-jazzy-joy-linux = ">=3.3.0,<4"
 
 # ── Recording / visualization / debug ────────────────────────────────────────
-ros-jazzy-episode-recorder = "==0.3.0"
+ros-jazzy-episode-recorder = "==0.4.0"
 ros-jazzy-foxglove-bridge = "*"
 # Time-series debug outside RViz (ROS topic streaming plugins included).
 ros-jazzy-plotjuggler-ros = "*"
@@ -115,9 +128,12 @@ ros-jazzy-ament-cmake-clang-format = "*"
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
+PYTHONPATH = "$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTHONPATH"
+
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
 ROS_DOMAIN_ID = "1"
+MPLCONFIGDIR = "/tmp/physical_ai_matplotlib"
 CMAKE_GENERATOR = "Ninja"
 
 [tasks]
@@ -132,12 +148,19 @@ build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 # ament_python test suites are actually collected and run.
 test = "bash -c 'colcon test --python-testing pytest && colcon test-result --verbose'"
 clean = "rm -rf build install log"
-# Kill leftover background ROS 2 processes (nodes, spawners,
-# controller_manager, rviz, ...) from a `ros2 launch` that wasn't cleanly
-# Ctrl-C'd. Safe to run with nothing running.
+# Kill leftover ROS 2 processes locally and on the RT host (beta), including
+# orphan robot_state_publisher / joint_state_publisher that steal /joint_states.
+# STOP_ROS_REMOTE=0 → local only. STOP_ROS_REMOTE_HOST overrides beta SSH target.
 stop = "bash scripts/stop_ros.sh"
 # Time-series inspector (alongside / instead of RViz). Same ROS_DOMAIN_ID.
 pj = "ros2 run plotjuggler plotjuggler"
+format = "ruff format --no-cache src"
+lint = "ruff check --no-cache src"
+
+# ── Production Applications ──────────────────────────────────────────────────
+teleop = "python apps/teleop.py"
+record = "python apps/record.py"
+replay = "python apps/replay.py"
 
 # ── GPU feature (default environment) ────────────────────────────────────────
 #
@@ -152,11 +175,16 @@ pj = "ros2 run plotjuggler plotjuggler"
 
 [feature.gpu.pypi-options]
 index-url = "https://pypi.org/simple"
-extra-index-urls = ["https://pypi.nvidia.com", "https://download.pytorch.org/whl/cu130"]
+extra-index-urls = [
+    "https://pypi.nvidia.com",
+    "https://download.pytorch.org/whl/cu130",
+]
 index-strategy = "unsafe-best-match"
 
 [feature.gpu.pypi-dependencies]
 torch = { version = ">=2.9", index = "https://download.pytorch.org/whl/cu130" }
+jax = { version = ">=0.11.0", extras = ["cuda13"] }
+jax-cuda13-plugin = { version = ">=0.11.0", extras = ["with-cuda"] }
 
 # Isaac Teleop (wheel URL avoids manylinux_2_28 vs NVIDIA manylinux_2_35 mismatch)
 isaacteleop = { url = "https://pypi.nvidia.com/isaacteleop/isaacteleop-1.3.131-cp312-cp312-manylinux_2_35_x86_64.whl" }
@@ -169,6 +197,8 @@ daqp = "*"
 loop-rate-limiters = "*"
 pin-pink = "*"
 dex-retargeting = "*"
+toppra = "*"
+
 
 # Motion planning backends (git-pinned; never live-query upstream HEAD)
 # Bump pyroki: git ls-remote https://github.com/Gabriel-Ning/pyroki.git main
@@ -176,7 +206,9 @@ dex-retargeting = "*"
 pyroki = { git = "https://github.com/Gabriel-Ning/pyroki.git", rev = "388e43e1fc0d0ee382968d3dd72970fd62a0450c" }
 # Bump curobo: git ls-remote https://github.com/Gabriel-Ning/curobo.git main
 # then `pixi update nvidia-curobo` with PIXI_FROZEN unset.
-nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3", extras = ["cu13-torch"] }
+nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c002b02aef02e634cbf9ddc3ea08ea8d9a64c3", extras = [
+    "cu13-torch",
+] }
 # Runtime orchestration HTTP/WebSocket transport.
 fastapi = ">=0.139.2, <0.140"
 uvicorn = ">=0.51.0, <0.52"

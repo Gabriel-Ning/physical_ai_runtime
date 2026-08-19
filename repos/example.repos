@@ -1,6 +1,0 @@
-# Example application packages.
-repositories:
-  apps:
-    type: git
-    url: https://github.com/Gabriel-Ning/runtime_resources.git
-    version: main

@@ -1,70 +1,270 @@
 #!/usr/bin/env bash
-# Clock sync on the robot / RT host (e.g. delta). No SSH back to the workstation.
+# Align workstation and RT-host wall clocks (ROS header.stamp / evaluate(now)).
 #
-# Workstation must serve NTP on the LAN once:
-#   echo 'allow 192.168.1.0/24' | sudo tee /etc/chrony/conf.d/allow-lan.conf
-#   sudo systemctl restart chrony
-#   ss -ulnp | grep ':123'
+# host terminal:
+#   scripts/sync_clock --setup  rt_user@rt_ip
+#   scripts/sync_clock --status rt_user@rt_ip
 #
-# One-shot (set once, then disable NTP):
-#   sudo scripts/sync_clock --ip 192.168.1.13
+# ssh rt host terminal (after: ssh rt_user@rt_ip):
+#   sudo scripts/sync_clock --ip <workstation_lan_ip> --follow
 #
-# Self-converging chrony client (the old "watch until synced" style):
-#   sudo scripts/sync_clock --ip 192.168.1.13 --follow
-# Prints chronyc tracking until Leap=Normal / synchronized: yes, and LEAVES
-# chrony running against that peer (public fake-ip pools are overridden by prefer).
-#
-# Manual paste fallback:
-#   sudo scripts/sync_clock --utc '2026-08-04 03:25:10'
+# Target: chrony |offset| <= 100 us. SSH date skew is noisier — ignore it.
 set -euo pipefail
+
+DEFAULT_HOST="delta@192.168.1.101"
+WAIT_S="${SYNC_CLOCK_WAIT_S:-120}"
+SCRIPT_PATH="$(readlink -f "$0")"
 
 MODE=""
 VALUE=""
 FOLLOW=0
-WAIT_S="${SYNC_CLOCK_WAIT_S:-120}"
+ONESHOT=0
+HOST=""
+LOCAL_IP=""
 
 usage() {
-  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
-ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --status|--apply|--setup|--serve)
+      MODE="${1#--}"
+      shift
+      ;;
     --ip)
       MODE=ip
       VALUE="${2:-}"
-      ARGS+=(--ip "$VALUE")
       shift 2
       ;;
     --utc)
       MODE=utc
       VALUE="${2:-}"
-      ARGS+=(--utc "$VALUE")
       shift 2
       ;;
     --follow)
       FOLLOW=1
-      ARGS+=(--follow)
       shift
       ;;
+    --oneshot)
+      ONESHOT=1
+      shift
+      ;;
+    --local-ip)
+      LOCAL_IP="${2:-}"
+      shift 2
+      ;;
     -h|--help) usage 0 ;;
-    *)
-      echo "Unknown argument: $1" >&2
+    -*)
+      echo "Unknown option: $1" >&2
       usage 1
+      ;;
+    *)
+      if [[ -n "$HOST" ]]; then
+        echo "Unexpected argument: $1" >&2
+        usage 1
+      fi
+      HOST="$1"
+      shift
       ;;
   esac
 done
 
-if [[ -z "$MODE" || -z "$VALUE" ]]; then
-  echo "Need --ip <addr> or --utc '<YYYY-mm-dd HH:MM:SS>'." >&2
+if [[ -z "$MODE" ]]; then
+  echo "On the workstation after joining the robot LAN: scripts/sync_clock --setup" >&2
   usage 1
 fi
 
-if [[ "$(id -u)" -ne 0 ]]; then
-  echo "Re-exec with sudo ..."
-  exec sudo -- "$0" "${ARGS[@]}"
-fi
+ssh_base() {
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" "$@"
+}
+
+ssh_tty() {
+  ssh -tt -o ConnectTimeout=15 "$HOST" "$@"
+}
+
+remote_ipv4() {
+  local spec="$1"
+  spec="${spec##*@}"
+  spec="${spec%%:*}"
+  printf '%s\n' "$spec"
+}
+
+detect_local_ip() {
+  local peer="$1"
+  if [[ -n "$LOCAL_IP" ]]; then
+    printf '%s\n' "$LOCAL_IP"
+    return
+  fi
+  ip -4 route get "$peer" 2>/dev/null \
+    | awk '{ for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit } }'
+}
+
+measure_skew_ms() {
+  # Positive => remote ahead of local. Corrects for half RTT.
+  python3 - "$HOST" <<'PY'
+import subprocess, sys, time
+host = sys.argv[1]
+samples = []
+for _ in range(5):
+    t0 = time.time()
+    out = subprocess.check_output(
+        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, "date -u +%s.%N"],
+        text=True,
+    ).strip()
+    t1 = time.time()
+    remote = float(out)
+    mid = 0.5 * (t0 + t1)
+    samples.append(((remote - mid) * 1000.0, (t1 - t0) * 1000.0))
+samples.sort(key=lambda x: x[0])
+skew = samples[len(samples) // 2][0]
+rtt = sum(s[1] for s in samples) / len(samples)
+print(f"{skew:.1f} {rtt:.1f}")
+PY
+}
+
+print_verdict() {
+  # Prefer chrony offset (ms). SSH date skew is a noisy cross-check.
+  local offset_ms="$1"
+  local abs
+  abs="$(awk -v s="$offset_ms" 'BEGIN { s = (s < 0 ? -s : s); printf "%.1f", s }')"
+  local us
+  us="$(awk -v a="$abs" 'BEGIN { printf "%.0f", a * 1000.0 }')"
+  if awk -v a="$abs" 'BEGIN { exit !(a <= 0.1) }'; then
+    echo "verdict:           GOOD      (|offset| ${us} us <= 100 us)"
+  elif awk -v a="$abs" 'BEGIN { exit !(a <= 0.5) }'; then
+    echo "verdict:           OK        (|offset| ${us} us <= 500 us)"
+  elif awk -v a="$abs" 'BEGIN { exit !(a <= 2) }'; then
+    echo "verdict:           MARGINAL  (|offset| ${abs} ms <= 2 ms)"
+  else
+    echo "verdict:           HIGH      (|offset| ${abs} ms) — on workstation: scripts/sync_clock --setup rt_user@rt_ip"
+  fi
+}
+
+remote_chrony_offset_ms() {
+  ssh_base 'chronyc tracking 2>/dev/null' | awk -F': ' '
+    /System time/ {
+      split($2, a, " ")
+      ms = a[1] * 1000.0
+      if ($2 ~ /slow/) ms = -ms
+      printf "%.2f", ms
+      exit
+    }'
+}
+
+print_status() {
+  local skew rtt chrono
+  HOST="${HOST:-$DEFAULT_HOST}"
+  read -r skew rtt < <(measure_skew_ms)
+  chrono="$(remote_chrony_offset_ms || true)"
+  echo "host:              $HOST"
+  echo "local UTC:         $(date -u +'%Y-%m-%d %H:%M:%S.%N %Z')"
+  echo "remote UTC:        $(ssh_base "date -u +'%Y-%m-%d %H:%M:%S.%N %Z'")"
+  echo "ssh-date skew:     ${skew} ms  (RTT ${rtt} ms, noisy)"
+  if [[ -n "${chrono}" ]]; then
+    echo "chrony offset:     ${chrono} ms  ($(awk -v c="$chrono" 'BEGIN { printf "%.0f", (c < 0 ? -c : c) * 1000 }') us, RT vs NTP peer)"
+    print_verdict "$chrono"
+  else
+    echo "chrony offset:     (chronyc not available on remote — using ssh-date)"
+    print_verdict "$skew"
+  fi
+  ssh_base 'timedatectl 2>/dev/null | sed -n "1,8p"; echo; chronyc tracking 2>/dev/null | sed -n "1,8p"' || true
+}
+
+ntp_is_serving() {
+  ss -ulnp 2>/dev/null | grep -q ':123'
+}
+
+lan_cidr_from_ip() {
+  local ip="$1"
+  printf '%s.0/24\n' "${ip%.*}"
+}
+
+serve_lan() {
+  local ip cidr conf
+  ip="${LOCAL_IP:-}"
+  if [[ -z "$ip" ]]; then
+    echo "--serve needs --local-ip A.B.C.D (or run --setup, which detects it)." >&2
+    exit 1
+  fi
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "Re-exec --serve with sudo ..."
+    exec sudo -- "$SCRIPT_PATH" --serve --local-ip "$ip"
+  fi
+  cidr="$(lan_cidr_from_ip "$ip")"
+  conf="/etc/chrony/conf.d/pai-lan.conf"
+  mkdir -p /etc/chrony/conf.d
+  cat >"$conf" <<EOF
+# Managed by scripts/sync_clock --serve
+allow ${cidr}
+local stratum 10
+EOF
+  echo "Wrote ${conf} (allow ${cidr}, local stratum 10)"
+  timedatectl set-ntp true || true
+  systemctl enable --now chrony
+  systemctl restart chrony
+  sleep 0.5
+  if ss -ulnp 2>/dev/null | grep -q ':123'; then
+    echo "chronyd is listening on UDP/123"
+  else
+    echo "WARNING: chronyd is not listening on UDP/123" >&2
+  fi
+  timedatectl | sed -n '1,8p' || true
+}
+
+ensure_lan_ntp() {
+  local ws_ip="$1"
+  if ntp_is_serving; then
+    echo "Workstation NTP:   already listening on UDP/123"
+    return
+  fi
+  echo "Workstation NTP:   enabling LAN serve for $(lan_cidr_from_ip "$ws_ip")"
+  sudo -- "$SCRIPT_PATH" --serve --local-ip "$ws_ip"
+}
+
+apply_remote() {
+  HOST="${HOST:-$DEFAULT_HOST}"
+  local peer ws_ip skew_before skew_after rtt remote_args remote_tmp
+  peer="$(remote_ipv4 "$HOST")"
+  ws_ip="$(detect_local_ip "$peer")"
+  if [[ -z "$ws_ip" ]]; then
+    echo "Could not detect the LAN IP this host uses toward ${peer}." >&2
+    echo "Pass it explicitly: --local-ip 192.168.1.13" >&2
+    exit 1
+  fi
+
+  read -r skew_before rtt < <(measure_skew_ms)
+  echo "Before: ssh-date skew ${skew_before} ms (RTT ${rtt} ms)"
+  echo "NTP peer the RT host will follow: ${ws_ip}"
+  ensure_lan_ntp "$ws_ip"
+
+  remote_args=(--ip "$ws_ip")
+  if [[ "$ONESHOT" -ne 1 ]]; then
+    remote_args+=(--follow)
+  fi
+
+  echo
+  echo "Step 1/2: copy script to $HOST."
+
+  # Do not pipe the script on the same stdin as sudo. A later `sudo -n` SSH
+  # cannot reuse the timestamp from `sudo -v` (new TTY / tty_tickets).
+  remote_tmp="$(
+    ssh -o ConnectTimeout=15 "$HOST" \
+      'tmp=$(mktemp) && cat >"$tmp" && printf %s "$tmp"' \
+      <"$SCRIPT_PATH"
+  )"
+  if [[ -z "$remote_tmp" ]]; then
+    echo "Failed to copy sync_clock to $HOST." >&2
+    exit 1
+  fi
+
+  echo "Step 2/2: sudo on $HOST from ${ws_ip} (enter password if prompted)."
+  ssh_tty "sudo env SYNC_CLOCK_WAIT_S=${WAIT_S} bash ${remote_tmp} ${remote_args[*]}; ec=\$?; rm -f ${remote_tmp}; exit \$ec"
+
+  echo
+  print_status
+}
 
 SOURCES_FILE="/etc/chrony/sources.d/pai-peer.sources"
 
@@ -92,15 +292,16 @@ EOF
   sleep 1
   chronyc -a makestep || chronyc makestep || true
 
-  echo "Waiting up to ${WAIT_S}s for chrony to converge (Ctrl-C to stop waiting) ..."
-  local i sync leap offset
+  echo "Waiting up to ${WAIT_S}s for |offset| <= 100 us (Ctrl-C to stop waiting) ..."
+  local i sync leap offset offset_s
   for i in $(seq 1 "$WAIT_S"); do
     sync="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo no)"
     leap="$(chronyc tracking 2>/dev/null | awk -F': ' '/Leap status/ {print $2}')"
     offset="$(chronyc tracking 2>/dev/null | awk -F': ' '/System time/ {print $2}')"
+    offset_s="$(awk '{print $1}' <<<"${offset:-}")"
     printf '[%3ds] synchronized=%-3s  leap=%-16s  %s\n' "$i" "$sync" "${leap:-?}" "${offset:-}"
-    if [[ "$sync" == "yes" ]] || [[ "${leap}" == "Normal" ]]; then
-      echo "Converged."
+    if [[ -n "$offset_s" ]] && awk -v o="$offset_s" 'BEGIN { o = (o < 0 ? -o : o); exit !(o <= 0.0001) }'; then
+      echo "Converged (|offset| <= 100 us)."
       break
     fi
     sleep 1
@@ -114,7 +315,7 @@ EOF
   timedatectl | sed -n '1,8p' || true
   echo
   echo "chrony left RUNNING against ${ip}. Verify from workstation:"
-  echo "  scripts/sync_remote_clock.sh --status"
+  echo "  scripts/sync_clock --status"
 }
 
 oneshot_ip() {
@@ -140,22 +341,48 @@ oneshot_ip() {
   date -u
   timedatectl | sed -n '1,8p' || true
   echo
-  echo "NTP left disabled. Workstation: scripts/sync_remote_clock.sh --status"
+  echo "NTP left disabled. Workstation: scripts/sync_clock --status"
+}
+
+run_local_privileged() {
+  if [[ "$(id -u)" -ne 0 ]]; then
+    echo "Re-exec with sudo ..."
+    exec sudo -- "$SCRIPT_PATH" "$@"
+  fi
 }
 
 case "$MODE" in
+  status)
+    print_status
+    ;;
+  serve)
+    serve_lan
+    ;;
+  setup)
+    apply_remote
+    ;;
+  apply)
+    apply_remote
+    ;;
   ip)
+    if [[ "$ONESHOT" -eq 1 && "$FOLLOW" -eq 1 ]]; then
+      echo "Use only one of --follow / --oneshot." >&2
+      exit 1
+    fi
     if [[ "$FOLLOW" -eq 1 ]]; then
+      run_local_privileged --ip "$VALUE" --follow
       follow_ip "$VALUE"
     else
+      run_local_privileged --ip "$VALUE"
       oneshot_ip "$VALUE"
     fi
     ;;
   utc)
     if [[ "$FOLLOW" -eq 1 ]]; then
-      echo "--follow only applies with --ip" >&2
+      echo "--follow only applies with --ip / --apply." >&2
       exit 1
     fi
+    run_local_privileged --utc "$VALUE"
     timedatectl set-ntp false || true
     echo "Setting UTC to: ${VALUE}"
     date -u -s "${VALUE}"

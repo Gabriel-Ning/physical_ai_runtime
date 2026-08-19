@@ -7,15 +7,11 @@ learn the layout and develop on top. Domain and application packages stay in
 their own repositories; this workspace owns the Pixi/colcon scaffolding, docs,
 and small reusable toolbox packages.
 
-Architecture, examples, and migration notes live under [`docs/`](docs/):
+Host setup notes live under [`docs/`](docs/):
 
-- [Architecture](docs/ARCHITECTURE.md)
-- [Camera driver, configuration, and host provisioning](docs/CAMERA_DEPLOYMENT.md)
 - [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
-- [Manipulation Execution Manager architecture (v1)](docs/MANIPULATION_EXECUTION_ARCHITECTURE.md)
-- [Runtime orchestration SDK and API](docs/RUNTIME_ORCHESTRATION.md)
-- [Example 1 — Marvin bringup](docs/EXAMPLE1.md)
-- [Migration](docs/MIGRATION.md)
+- [CPU / isolcpus / RT host setup](docs/CPU_HOST_SETUP.md)
+- [udev CAN aliases](docs/UDEV_HOST_SETUP.md)
 
 ## Features
 
@@ -127,17 +123,24 @@ them back into this template.
 
 | Manifest | Purpose | Checkout roots |
 | --- | --- | --- |
-| `repos/necessary.repos` | Reusable execution, teleop, and motion-planning modules | `src/execution`, `src/teleop`, `src/motion_planning` |
-| `repos/example.repos` | Optional runnable example applications | `src/apps` |
-| `repos/embodiment.repos` | Robot and sensor embodiment integrations (Marvin, Franka, Hikvision) | `src/embodiments/robots/marvin`, `src/embodiments/robots/franka`, `src/embodiments/sensors/hikvision_ros2` |
+| this repo | examples and `src/rt_launch` bringups | `src/rt_launch`, `examples/` |
+| `repos/necessary.repos` | Workstation teleop / motion-planning / recorder | `src/teleop`, `src/motion_planning`, `src/recording` |
+| `src/embodiments` submodule | Owned Marvin / Piper / Pika, plus pinned Franka vendor trees | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
+| `repos/embodiment.repos` | Vendor Hikvision (not required for RT bringup) | `src/embodiments/sensors/hikvision_ros2` |
+
+RT control host: follow [CPU host setup](docs/CPU_HOST_SETUP.md) — build
+`src/rt_launch` + `src/embodiments`, use Pixi controller binaries, do not
+import `necessary.repos` or Hikvision.
 
 ```bash
 vcs import src < repos/necessary.repos
 # Optional example applications
 vcs import src < repos/example.repos
-# Marvin, Franka, Hikvision embodiments
+# Owned embodiments + pinned Franka (HTTPS nested submodules)
+git submodule update --init --recursive -- src/embodiments
+# Vendor Hikvision
 vcs import src < repos/embodiment.repos
-bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter; see docs/ARCHITECTURE.md
+bash scripts/franka_colcon_ignore.sh   # Franka: core-arm filter
 pixi run build
 ```
 
@@ -204,7 +207,6 @@ owns those ABIs.
   `pixi install -e cpu` for the conda-only RT control host (see
   [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
-  `test` / `clean` / `stop`). For Marvin Example 1, see
-  [docs/EXAMPLE1.md](docs/EXAMPLE1.md).
+  `test` / `clean` / `stop`).
 - Contribute Pixi/docs/template changes here; contribute package changes in
   each package's own repository.
