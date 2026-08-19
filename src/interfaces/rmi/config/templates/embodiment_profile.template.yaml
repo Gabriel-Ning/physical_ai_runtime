@@ -218,6 +218,9 @@ recorder:
 teleoperators:
   leader:
     type: "generic_leader"
+    can_interface: "can0"                           # SocketCAN interface or USB-serial port
+    publish_rate_hz: 200.0                          # Driver publication frequency in Hz
+    rate_hz: 200.0                                  # Teleoperation relay / agent frequency in Hz
     enable_service: "/teleop_leader/enable"
     preempt_service: "/teleop_leader/preempt"
     status_topic: "/teleop/leader/status"

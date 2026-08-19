@@ -53,7 +53,12 @@ class PiperLeaderManager:
         self.processes: list[subprocess.Popen[bytes]] = []
 
     def ensure_started_and_enabled(
-        self, node: Any, sides: list[str], can_map: dict[str, str] | None = None
+        self,
+        node: Any,
+        sides: list[str],
+        can_map: dict[str, str] | None = None,
+        rate_map: dict[str, float] | None = None,
+        side_map: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Autostart leader nodes if needed and enable torque."""
         setup_bash = self.workspace_root / "install" / "setup.bash"
@@ -66,19 +71,35 @@ class PiperLeaderManager:
         )
         if can_map is None:
             can_map = {"left": "can0", "right": "can1"}
+        if rate_map is None:
+            rate_map = {"left": 200.0, "right": 200.0}
 
         for side in sides:
             can_iface = can_map.get(side, "can0" if side == "left" else "can1")
+            pub_hz = rate_map.get(side, 200.0)
             srv_name = f"/piper_leader_{side}/enable"
             enable_client = node.create_client(SetBool, srv_name)
 
+            cfg = (side_map or {}).get(side, {})
+            arm_joints = cfg.get("arm_joints", [f"{side}_joint{i}" for i in range(1, 7)])
+            gripper_joints = cfg.get("gripper_joints", [f"{side}_gripper_joint1"])
+            arm_topic = cfg.get("leader_arm_topic", f"/action_sources/piper_leader_{side}/arm/joint_reference")
+            gripper_topic = cfg.get("leader_gripper_topic", f"/action_sources/piper_leader_{side}/end_effector/joint_reference")
+            status_topic = cfg.get("status_topic", f"/teleop/piper_leader_{side}/status")
+
             if not enable_client.wait_for_service(timeout_sec=0.2):
-                config_yaml = share_config / f"piper_leader_{side}.yaml"
+                config_yaml = share_config / "piper_leader.yaml"
                 cmd = (
                     f"source '{setup_bash}' && exec ros2 launch piper_leader_teleop piper_leader.launch.py "
-                    f"config:='{config_yaml}' node_name:=piper_leader_{side} can_interface:='{can_iface}'"
+                    f"config:='{config_yaml}' node_name:=piper_leader_{side} can_interface:='{can_iface}' "
+                    f"publish_rate_hz:='{pub_hz}' "
+                    f"joint_names:='{','.join(arm_joints)}' "
+                    f"gripper_joint_name:='{gripper_joints[0] if gripper_joints else ''}' "
+                    f"joint_reference_topic:='{arm_topic}' "
+                    f"gripper_reference_topic:='{gripper_topic}' "
+                    f"status_topic:='{status_topic}'"
                 )
-                print(f"  >> Autostarting piper_leader_{side} driver on '{can_iface}'...")
+                print(f"  >> Autostarting piper_leader_{side} driver on '{can_iface}' @ {pub_hz:.1f} Hz...")
                 proc = subprocess.Popen(
                     cmd,
                     shell=True,
@@ -93,6 +114,11 @@ class PiperLeaderManager:
                     if enable_client.wait_for_service(timeout_sec=0.1):
                         break
                     time.sleep(0.1)
+            else:
+                print(
+                    f"  [i] Existing piper_leader_{side} service detected on ROS graph.\n"
+                    f"      (Target interface: '{can_iface}' @ {pub_hz:.1f} Hz. If swapped, run 'pixi run stop' to restart drivers)."
+                )
 
             if enable_client.service_is_ready():
                 req = SetBool.Request(data=True)
@@ -254,14 +280,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--left-can",
         type=str,
-        default="can0",
-        help="SocketCAN interface for left leader",
+        default=None,
+        help="SocketCAN interface override for left leader (default: from profile)",
     )
     parser.add_argument(
         "--right-can",
         type=str,
-        default="can1",
-        help="SocketCAN interface for right leader",
+        default=None,
+        help="SocketCAN interface override for right leader (default: from profile)",
     )
     return parser.parse_args()
 
@@ -269,7 +295,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     workspace_root = Path(__file__).resolve().parents[1]
-    can_map = {"left": args.left_can, "right": args.right_can}
 
     # 1. Initialize RMI Context & Managed MCAP Recorder Backend
     ctx = rmi.Context.from_profile(args.profile)
@@ -286,15 +311,74 @@ def main() -> None:
         args.homing_duration if args.homing_duration is not None else rec_cfg.get("homing_duration_s", 2.5)
     )
 
+    # Resolve teleoperator profiles & CAN mappings
+    teleop_defs = ctx.profile.raw_data.get("teleoperators", {})
+    parts_map = {}
+    default_home_q = rec_cfg.get("home_pose", [0.0, 0.5, -0.5, 0.0, 0.0, 0.0])
+    default_home_grip = [0.020]  # Single finger position 0.02m = 0.04m opening
+
+    for side in ["left", "right"]:
+        t_key = f"{side}_leader"
+        t_cfg = teleop_defs.get(t_key, {})
+        arm_p = t_cfg.get("arm_part", f"{side}_arm")
+        grip_p = t_cfg.get("gripper_part", f"{side}_gripper")
+        arm_joints = (
+            list(ctx.profile.parts[arm_p].joint_names)
+            if arm_p in ctx.profile.parts
+            else [f"{side}_joint{i}" for i in range(1, 7)]
+        )
+        grip_joints = (
+            list(ctx.profile.parts[grip_p].joint_names)
+            if grip_p in ctx.profile.parts
+            else [f"{side}_gripper_joint1"]
+        )
+        parts_map[side] = {
+            "can_interface": t_cfg.get("can_interface", "can0" if side == "left" else "can1"),
+            "publish_rate_hz": float(t_cfg.get("publish_rate_hz", t_cfg.get("rate_hz", 200.0))),
+            "rate_hz": float(t_cfg.get("rate_hz", 200.0)),
+            "agent": t_cfg.get("target_agent", f"TeleopJoint_{side.capitalize()}"),
+            "arm_part": arm_p,
+            "gripper_part": grip_p,
+            "arm_joints": arm_joints,
+            "gripper_joints": grip_joints,
+            "status_topic": t_cfg.get("status_topic", f"/teleop/piper_leader_{side}/status"),
+            "leader_arm_topic": t_cfg.get(
+                "arm_source", f"/action_sources/piper_leader_{side}/arm/joint_reference"
+            ),
+            "leader_gripper_topic": t_cfg.get(
+                "gripper_source",
+                f"/action_sources/piper_leader_{side}/end_effector/joint_reference",
+            ),
+            "home_arm_pose": list(default_home_q),
+            "home_gripper_pose": list(default_home_grip),
+        }
+
+    can_map = {}
+    rate_map = {}
+    for s in ["left", "right"]:
+        cli_can = getattr(args, f"{s}_can", None)
+        if cli_can is not None:
+            can_map[s] = cli_can
+        elif s in parts_map and "can_interface" in parts_map[s]:
+            can_map[s] = parts_map[s]["can_interface"]
+        else:
+            can_map[s] = "can0" if s == "left" else "can1"
+
+        if s in parts_map and "publish_rate_hz" in parts_map[s]:
+            rate_map[s] = parts_map[s]["publish_rate_hz"]
+        else:
+            rate_map[s] = 200.0
+
     print("=" * 72)
     print("  RMI Production Dataset Episode Recorder")
     print(f"  Embodiment Profile : {args.profile}")
     print(f"  Task Description   : '{task_name}'")
     print(f"  Target Episodes    : {target_episodes}")
-    print(f"  Stream Frequency   : {rate_hz:.1f} Hz")
+    print(f"  Stream Frequency   : {rate_hz:.1f} Hz (Action recording)")
+    print(f"  Driver Publish Rate: {max(rate_map.values()):.1f} Hz (Teleop master)")
     print(f"  Homing Duration    : {homing_duration_s:.1f} s")
-    print(f"  Left Leader CAN    : {args.left_can}")
-    print(f"  Right Leader CAN   : {args.right_can}")
+    print(f"  Left Leader CAN    : {can_map.get('left')} (profile: {parts_map.get('left', {}).get('can_interface', 'n/a')})")
+    print(f"  Right Leader CAN   : {can_map.get('right')} (profile: {parts_map.get('right', {}).get('can_interface', 'n/a')})")
     print("=" * 72)
 
     recorder = ctx.make_recorder(type="mcap", autostart=True)
@@ -309,31 +393,9 @@ def main() -> None:
     # Autostart Piper Leader Hardware in Shadow Tracking mode
     is_piper = "piper" in args.profile.lower()
     if is_piper:
-        leader_mgr.ensure_started_and_enabled(ctx.node, sides, can_map=can_map)
-
-    # Resolve parts and default staging home poses
-    teleop_defs = ctx.profile.raw_data.get("teleoperators", {})
-    parts_map = {}
-    default_home_q = rec_cfg.get("home_pose", [0.0, 0.5, -0.5, 0.0, 0.0, 0.0])
-    default_home_grip = [0.020]  # Single finger position 0.02m = 0.04m opening
-
-    for side in sides:
-        t_key = f"{side}_leader"
-        t_cfg = teleop_defs.get(t_key, {})
-        parts_map[side] = {
-            "agent": t_cfg.get("target_agent", f"TeleopJoint_{side.capitalize()}"),
-            "arm_part": t_cfg.get("arm_part", f"{side}_arm"),
-            "gripper_part": t_cfg.get("gripper_part", f"{side}_gripper"),
-            "leader_arm_topic": t_cfg.get(
-                "arm_source", f"/action_sources/piper_leader_{side}/arm/joint_reference"
-            ),
-            "leader_gripper_topic": t_cfg.get(
-                "gripper_source",
-                f"/action_sources/piper_leader_{side}/end_effector/joint_reference",
-            ),
-            "home_arm_pose": list(default_home_q),
-            "home_gripper_pose": list(default_home_grip),
-        }
+        leader_mgr.ensure_started_and_enabled(
+            ctx.node, sides, can_map=can_map, rate_map=rate_map, side_map=parts_map
+        )
 
     saved_episodes: list[str] = []
 

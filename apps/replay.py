@@ -30,21 +30,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
-PLANNER_CORE_SRC = (
-    WORKSPACE_ROOT / "src" / "motion_planning" / "motion_planners" / "motion_planner_core"
-)
-if PLANNER_CORE_SRC.exists() and str(PLANNER_CORE_SRC) not in sys.path:
-    sys.path.insert(0, str(PLANNER_CORE_SRC))
-
 from mcap.reader import make_reader
-from motion_planner_core.contracts import PlanPoint, PlanResult
 from rclpy.serialization import deserialize_message
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory as RosJointTrajectory
 
 import rmi
+from rmi.planning import PlanPoint, PlanResult
 
 
 class ProgressBar:
@@ -100,8 +93,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--homing-duration",
         type=float,
-        default=3.0,
-        help="Duration in seconds for smooth JTC homing alignment to start pose",
+        default=None,
+        help="Duration in seconds for smooth JTC homing alignment to start pose (default: from profile)",
     )
     return parser.parse_args()
 
@@ -257,7 +250,14 @@ def generate_quintic_transition(
 def main() -> None:
     args = parse_args()
 
-    # 1. Resolve episode path
+    # 1. Connect RMI Context & Topology
+    ctx = rmi.Context.from_profile(args.profile)
+    rec_cfg = ctx.profile.raw_data.get("recorder", {})
+    homing_duration_s = (
+        args.homing_duration if args.homing_duration is not None else rec_cfg.get("homing_duration_s", 3.0)
+    )
+
+    # 2. Resolve episode path
     if args.episode:
         ep_path = Path(args.episode).resolve()
         if ep_path.is_dir():
@@ -267,7 +267,7 @@ def main() -> None:
                 sys.exit(1)
             ep_path = mcaps[0]
     else:
-        episodes_dir = Path("data/episodes").resolve()
+        episodes_dir = Path(rec_cfg.get("root_dir", "data/episodes")).resolve()
         latest = find_latest_mcap(episodes_dir)
         if not latest:
             print(f"[!] No recorded episodes found in {episodes_dir}. Please specify --episode.")
@@ -279,12 +279,11 @@ def main() -> None:
     print(f"  Embodiment Profile : {args.profile}")
     print(f"  Target Episode     : {ep_path.name}")
     print(f"  Full Path          : {ep_path}")
-    print(f"  Homing Duration    : {args.homing_duration:.1f} s")
+    print(f"  Homing Duration    : {homing_duration_s:.1f} s (profile: {rec_cfg.get('homing_duration_s', 'n/a')}s)")
     print("=" * 72)
 
-    # 2. Connect RMI Context & Introspect Hardware
-    print("\n[1/4] Initializing RMI Context & Topology...")
-    ctx = rmi.Context.from_profile(args.profile)
+    # 3. Wait for Hardware Readiness
+    print("\n[1/4] Waiting for hardware and controller readiness...")
     ctx.wait_until_ready(timeout=6.0)
     robot = ctx.robot
 
@@ -318,16 +317,16 @@ def main() -> None:
 
                 if max_delta > 0.005:
                     print(
-                        f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({args.homing_duration}s)..."
+                        f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({homing_duration_s:.1f}s)..."
                     )
                     homing_plan = generate_quintic_transition(
                         part_joints,
                         q_curr,
                         q_start[:len(part_joints)],
-                        duration_s=args.homing_duration,
+                        duration_s=homing_duration_s,
                     )
                     execution = planner_session.execute(part_name, homing_plan)
-                    execution.wait(timeout=args.homing_duration + 5.0)
+                    execution.wait(timeout=homing_duration_s + 5.0)
                     if execution.done and not execution.canceled:
                         print(f"  [✓] Part '{part_name}' settled smoothly at episode start pose.")
                     else:

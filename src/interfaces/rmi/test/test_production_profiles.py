@@ -225,39 +225,30 @@ def test_dual_piper_native_gripper_profile_matches_controller_contracts():
 
 def test_piper_leader_configs_match_teleop_provider_ingress():
     config = EmbodimentConfig.from_yaml(PROFILES / "piper_bimanual.yaml")
-    teleop_config_dir = ROOT / "src" / "teleop" / "piper_leader_teleop" / "config"
+    teleop_defs = config.raw_data.get("teleoperators", {})
 
     for side, provider in (
         ("left", "TeleopJoint_Left"),
         ("right", "TeleopJoint_Right"),
     ):
-        loaded = yaml.safe_load(
-            (teleop_config_dir / f"piper_leader_{side}.yaml").read_text(
-                encoding="utf-8"
-            )
-        )
-        leader = loaded.get("piper_leader", loaded.get("/**", {}))["ros__parameters"]
+        leader = teleop_defs[f"{side}_leader"]
         sources = {
             source["part"]: source["topic"]
             for source in config.execution["sources"]
             if source["provider"] == provider
         }
-        # Leader publishes on action_sources; LocalEM TeleopJoint ingress is
-        # the RT /execution topic. examples/14_piper_leader_teleop.py relays.
-        assert leader["joint_reference_topic"] == (
+        assert leader["arm_source"] == (
             f"/action_sources/piper_leader_{side}/arm/joint_reference"
         )
-        assert leader["gripper_reference_topic"] == (
+        assert leader["gripper_source"] == (
             f"/action_sources/piper_leader_{side}/end_effector/joint_reference"
         )
+        assert leader["publish_rate_hz"] == 200.0
+        assert leader["rate_hz"] == 200.0
+        assert leader["can_interface"] == ("can0" if side == "left" else "can1")
         assert sources[f"{side}_arm"] == f"/execution/{side}_arm/joint_reference"
         assert sources[f"{side}_gripper"] == (
             f"/execution/{side}_gripper/joint_reference"
-        )
-        assert leader["joint_names"] == list(config.parts[f"{side}_arm"].joint_names)
-        assert (
-            leader["gripper_joint_name"]
-            == config.parts[f"{side}_gripper"].joint_names[0]
         )
 
 

@@ -286,6 +286,8 @@ teleoperators:
     type: "piper_leader"
     side: "left"
     can_interface: "can0"
+    publish_rate_hz: 200.0
+    rate_hz: 200.0
     enable_service: "/piper_leader_left/enable"
     preempt_service: "/piper_leader_left/preempt"
     status_topic: "/teleop/piper_leader_left/status"
@@ -298,6 +300,8 @@ teleoperators:
     type: "piper_leader"
     side: "right"
     can_interface: "can1"
+    publish_rate_hz: 200.0
+    rate_hz: 200.0
     enable_service: "/piper_leader_right/enable"
     preempt_service: "/piper_leader_right/preempt"
     status_topic: "/teleop/piper_leader_right/status"

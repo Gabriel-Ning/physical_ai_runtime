@@ -43,7 +43,12 @@ class PiperLeaderManager:
         self.processes: list[subprocess.Popen[bytes]] = []
 
     def ensure_started_and_enabled(
-        self, node: Any, sides: list[str], can_map: dict[str, str] | None = None
+        self,
+        node: Any,
+        sides: list[str],
+        can_map: dict[str, str] | None = None,
+        rate_map: dict[str, float] | None = None,
+        side_map: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """Autostart leader nodes if needed and enable base mode."""
         setup_bash = self.workspace_root / "install" / "setup.bash"
@@ -56,20 +61,36 @@ class PiperLeaderManager:
         )
         if can_map is None:
             can_map = {"left": "can0", "right": "can1"}
+        if rate_map is None:
+            rate_map = {"left": 200.0, "right": 200.0}
 
         for side in sides:
             can_iface = can_map.get(side, "can0" if side == "left" else "can1")
+            pub_hz = rate_map.get(side, 200.0)
             srv_name = f"/piper_leader_{side}/enable"
             enable_client = node.create_client(SetBool, srv_name)
 
+            cfg = (side_map or {}).get(side, {})
+            arm_joints = cfg.get("arm_joints", [f"{side}_joint{i}" for i in range(1, 7)])
+            gripper_joints = cfg.get("gripper_joints", [f"{side}_gripper_joint1"])
+            arm_topic = cfg.get("leader_arm_topic", f"/action_sources/piper_leader_{side}/arm/joint_reference")
+            gripper_topic = cfg.get("leader_gripper_topic", f"/action_sources/piper_leader_{side}/end_effector/joint_reference")
+            status_topic = cfg.get("status_topic", f"/teleop/piper_leader_{side}/status")
+
             # Check if service is already running
             if not enable_client.wait_for_service(timeout_sec=0.2):
-                config_yaml = share_config / f"piper_leader_{side}.yaml"
+                config_yaml = share_config / "piper_leader.yaml"
                 cmd = (
                     f"source '{setup_bash}' && exec ros2 launch piper_leader_teleop piper_leader.launch.py "
-                    f"config:='{config_yaml}' node_name:=piper_leader_{side} can_interface:='{can_iface}'"
+                    f"config:='{config_yaml}' node_name:=piper_leader_{side} can_interface:='{can_iface}' "
+                    f"publish_rate_hz:='{pub_hz}' "
+                    f"joint_names:='{','.join(arm_joints)}' "
+                    f"gripper_joint_name:='{gripper_joints[0] if gripper_joints else ''}' "
+                    f"joint_reference_topic:='{arm_topic}' "
+                    f"gripper_reference_topic:='{gripper_topic}' "
+                    f"status_topic:='{status_topic}'"
                 )
-                print(f"  >> Autostarting piper_leader_{side} driver on '{can_iface}'...")
+                print(f"  >> Autostarting piper_leader_{side} driver on '{can_iface}' @ {pub_hz:.1f} Hz...")
                 proc = subprocess.Popen(
                     cmd,
                     shell=True,
@@ -85,6 +106,11 @@ class PiperLeaderManager:
                     if enable_client.wait_for_service(timeout_sec=0.1):
                         break
                     time.sleep(0.1)
+            else:
+                print(
+                    f"  [i] Existing piper_leader_{side} service detected on ROS graph.\n"
+                    f"      (Target interface: '{can_iface}' @ {pub_hz:.1f} Hz. If swapped, run 'pixi run stop' to restart drivers)."
+                )
 
             # Enable base mode
             if enable_client.service_is_ready():
@@ -157,20 +183,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rate-hz",
         type=float,
-        default=200.0,
-        help="Teleoperation relay loop rate (Hz)",
+        default=None,
+        help="Teleoperation relay loop rate in Hz (default: from profile teleoperators)",
     )
     parser.add_argument(
         "--left-can",
         type=str,
-        default="can0",
-        help="SocketCAN interface for left leader (default: can0)",
+        default=None,
+        help="SocketCAN interface override for left leader (default: from profile)",
     )
     parser.add_argument(
         "--right-can",
         type=str,
-        default="can1",
-        help="SocketCAN interface for right leader (default: can1)",
+        default=None,
+        help="SocketCAN interface override for right leader (default: from profile)",
     )
     return parser.parse_args()
 
@@ -187,17 +213,6 @@ def _relay_callback(session: rmi.Session, part: str):
 def main() -> None:
     args = parse_args()
     workspace_root = Path(__file__).resolve().parents[1]
-    can_map = {"left": args.left_can, "right": args.right_can}
-
-    print("=" * 68)
-    print("  RMI Autonomous Robot Teleoperation (One-Command Start)")
-    print(f"  Embodiment Profile : {args.profile}")
-    print(f"  Mode / Device      : {args.device.upper()}")
-    print(f"  Loop Frequency     : {args.rate_hz:.1f} Hz")
-    if args.device == "leader":
-        print(f"  Left Leader CAN    : {args.left_can}")
-        print(f"  Right Leader CAN   : {args.right_can}")
-    print("=" * 68)
 
     ctx = rmi.Context.from_profile(args.profile)
     ctx.wait_until_ready(timeout=5.0)
@@ -207,27 +222,81 @@ def main() -> None:
     leader_mgr = PiperLeaderManager(workspace_root)
     sides = ["left", "right"] if args.side == "both" else [args.side]
 
+    # Resolve teleoperator profiles & CAN mappings
+    teleop_defs = ctx.profile.raw_data.get("teleoperators", {})
+    side_map = {}
+    for t_name, t_cfg in teleop_defs.items():
+        s = t_cfg.get("side", "left" if "left" in t_name else "right")
+        arm_p = t_cfg.get("arm_part", f"{s}_arm")
+        grip_p = t_cfg.get("gripper_part", f"{s}_gripper")
+        arm_joints = (
+            list(ctx.profile.parts[arm_p].joint_names)
+            if arm_p in ctx.profile.parts
+            else [f"{s}_joint{i}" for i in range(1, 7)]
+        )
+        grip_joints = (
+            list(ctx.profile.parts[grip_p].joint_names)
+            if grip_p in ctx.profile.parts
+            else [f"{s}_gripper_joint1"]
+        )
+        side_map[s] = {
+            "can_interface": t_cfg.get("can_interface", "can0" if s == "left" else "can1"),
+            "publish_rate_hz": float(t_cfg.get("publish_rate_hz", t_cfg.get("rate_hz", 200.0))),
+            "rate_hz": float(t_cfg.get("rate_hz", 200.0)),
+            "agent": t_cfg.get("target_agent", f"TeleopJoint_{s.capitalize()}"),
+            "arm_part": arm_p,
+            "gripper_part": grip_p,
+            "arm_joints": arm_joints,
+            "gripper_joints": grip_joints,
+            "status_topic": t_cfg.get("status_topic", f"/teleop/piper_leader_{s}/status"),
+            "leader_arm_topic": t_cfg.get(
+                "arm_source", f"/action_sources/piper_leader_{s}/arm/joint_reference"
+            ),
+            "leader_gripper_topic": t_cfg.get(
+                "gripper_source",
+                f"/action_sources/piper_leader_{s}/end_effector/joint_reference",
+            ),
+        }
+
+    can_map = {}
+    rate_map = {}
+    for s in ["left", "right"]:
+        cli_val = getattr(args, f"{s}_can", None)
+        if cli_val is not None:
+            can_map[s] = cli_val
+        elif s in side_map and "can_interface" in side_map[s]:
+            can_map[s] = side_map[s]["can_interface"]
+        else:
+            can_map[s] = "can0" if s == "left" else "can1"
+
+        if args.rate_hz is not None:
+            rate_map[s] = args.rate_hz
+        elif s in side_map and "publish_rate_hz" in side_map[s]:
+            rate_map[s] = side_map[s]["publish_rate_hz"]
+        else:
+            rate_map[s] = 200.0
+
+    target_rate_hz = args.rate_hz or (
+        max(rate_map.values()) if rate_map else 200.0
+    )
+
+    print("=" * 68)
+    print("  RMI Autonomous Robot Teleoperation (One-Command Start)")
+    print(f"  Embodiment Profile : {args.profile}")
+    print(f"  Mode / Device      : {args.device.upper()}")
+    print(f"  Loop Frequency     : {target_rate_hz:.1f} Hz")
+    if args.device == "leader":
+        print(f"  Left Leader CAN    : {can_map.get('left')} (profile: {side_map.get('left', {}).get('can_interface', 'n/a')})")
+        print(f"  Right Leader CAN   : {can_map.get('right')} (profile: {side_map.get('right', {}).get('can_interface', 'n/a')})")
+        print(f"  Driver Publish Rate: {max(rate_map.values()):.1f} Hz (profile: {side_map.get('left', {}).get('publish_rate_hz', 200.0)} Hz)")
+    print("=" * 68)
+
     try:
         if "piper" in args.profile.lower() and args.device == "leader":
-            teleop_defs = ctx.profile.raw_data.get("teleoperators", {})
-            side_map = {}
-            for t_name, t_cfg in teleop_defs.items():
-                s = t_cfg.get("side", "left" if "left" in t_name else "right")
-                side_map[s] = {
-                    "agent": t_cfg.get("target_agent", f"TeleopJoint_{s.capitalize()}"),
-                    "arm_part": t_cfg.get("arm_part", f"{s}_arm"),
-                    "gripper_part": t_cfg.get("gripper_part", f"{s}_gripper"),
-                    "leader_arm_topic": t_cfg.get(
-                        "arm_source", f"/action_sources/piper_leader_{s}/arm/joint_reference"
-                    ),
-                    "leader_gripper_topic": t_cfg.get(
-                        "gripper_source",
-                        f"/action_sources/piper_leader_{s}/end_effector/joint_reference",
-                    ),
-                }
-
             # 1. Autostart & enable Piper leader hardware nodes in Shadow Tracking mode
-            leader_mgr.ensure_started_and_enabled(ctx.node, sides, can_map=can_map)
+            leader_mgr.ensure_started_and_enabled(
+                ctx.node, sides, can_map=can_map, rate_map=rate_map, side_map=side_map
+            )
 
             # 2. Engage Preemption (0-G Gravity Comp + Streaming Ingress)
             leader_mgr.set_preempt(ctx.node, sides, True)
@@ -238,7 +307,8 @@ def main() -> None:
                     if side not in side_map:
                         continue
                     cfg = side_map[side]
-                    agent = ctx.make_agent(cfg["agent"], frequency=args.rate_hz)
+                    arm_rate = rate_map.get(side, target_rate_hz)
+                    agent = ctx.make_agent(cfg["agent"], frequency=arm_rate)
                     session = stack.enter_context(
                         agent.run(robot, parts=[cfg["arm_part"], cfg["gripper_part"]])
                     )
