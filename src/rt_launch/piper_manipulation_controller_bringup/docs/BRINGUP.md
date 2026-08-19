@@ -109,7 +109,7 @@ externally before `use_fake_hardware:=false`.
 
 This package does not launch EM or planner. Workstation composition uses the
 `piper_bimanual` RMI profile
-(`src/interfaces/rmi/config/embodiment_profiles/piper_bimanual.yaml`).
+(`apps/profiles/piper_bimanual.yaml`).
 That profile still lists the old controller-named command topics; update it
 after this RT topic lock. Keep `use_rviz:=false` on the RT host.
 

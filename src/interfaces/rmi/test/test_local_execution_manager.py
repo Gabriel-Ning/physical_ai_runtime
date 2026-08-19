@@ -6,9 +6,9 @@ from rmi import EmbodimentConfig
 from rmi.execution import LocalExecutionManager
 
 PROFILE = (
-    Path(__file__).resolve().parents[1]
-    / "config"
-    / "embodiment_profiles"
+    Path(__file__).resolve().parents[4]
+    / "apps"
+    / "profiles"
     / "fr3_pika_single_arm.yaml"
 )
 

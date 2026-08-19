@@ -3,8 +3,9 @@ from pathlib import Path
 import yaml
 from rmi import EmbodimentConfig
 
-ROOT = Path(__file__).resolve().parents[3]
-PROFILES = Path(__file__).resolve().parents[1] / "config" / "embodiment_profiles"
+ROOT = Path(__file__).resolve().parents[4]
+PROFILES = ROOT / "apps" / "profiles"
+TEMPLATES = Path(__file__).resolve().parents[1] / "config" / "templates"
 PRODUCTION_PROFILE_NAMES = {
     "fr3_pika_single_arm.yaml",
     "marvin_bimanual.yaml",
@@ -13,7 +14,7 @@ PRODUCTION_PROFILE_NAMES = {
 
 
 def _controllers(app: str) -> dict:
-    path = ROOT / "rt_launch" / app / "config" / "controller" / "controllers.yaml"
+    path = ROOT / "src" / "rt_launch" / app / "config" / "controller" / "controllers.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
@@ -224,7 +225,7 @@ def test_dual_piper_native_gripper_profile_matches_controller_contracts():
 
 def test_piper_leader_configs_match_teleop_provider_ingress():
     config = EmbodimentConfig.from_yaml(PROFILES / "piper_bimanual.yaml")
-    teleop_config_dir = ROOT / "teleop" / "piper_leader_teleop" / "config"
+    teleop_config_dir = ROOT / "src" / "teleop" / "piper_leader_teleop" / "config"
 
     for side, provider in (
         ("left", "TeleopJoint_Left"),
@@ -308,3 +309,20 @@ def test_production_profiles_declare_joint_cartesian_and_twist_teleop():
                 if name == kind or name.startswith(f"{kind}_")
             ]
             assert matches, f"{profile_name} missing {kind}*"
+
+
+def test_template_profile_is_valid():
+    template_path = TEMPLATES / "embodiment_profile.template.yaml"
+    assert template_path.is_file(), "Template YAML file missing"
+    config = EmbodimentConfig.from_yaml(template_path)
+    assert config.name == "template_embodiment"
+    assert "arm" in config.parts
+    assert "end_effector" in config.parts
+    assert "manipulator" in config.groups
+    assert set(config.execution["providers"]) == {
+        "Policy",
+        "Planner",
+        "TeleopJoint",
+        "TeleopCartesian",
+        "TeleopTwist",
+    }

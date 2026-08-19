@@ -431,7 +431,11 @@ class Context:
                 if found_path is not None:
                     stream_config_uri = str(found_path.resolve())
                     values["stream_config_uri"] = stream_config_uri
-            recorder_config = RecorderConfig(**values)
+            import inspect
+
+            valid_keys = inspect.signature(RecorderConfig.__init__).parameters.keys()
+            filtered_values = {k: v for k, v in values.items() if k in valid_keys and k != "self"}
+            recorder_config = RecorderConfig(**filtered_values)
         else:
             recorder_config = config
         self._recorder_config = recorder_config
@@ -499,28 +503,31 @@ def _resolve_profile_path(profile_path: str | Path) -> Path:
     candidate = Path(profile_path)
     if candidate.is_file():
         return candidate
-    # 1. Search in ROS 2 ament package share for rmi
+    # 1. Search relative to repository workspace apps/profiles or apps/
+    workspace_root = Path(__file__).resolve().parents[4]
+    for apps_dir in ("apps/profiles", "apps/config", "apps"):
+        app_candidate = workspace_root / apps_dir / candidate.name
+        if app_candidate.is_file():
+            return app_candidate
+
+    # 2. Search in ROS 2 ament package share for rmi
     try:
         from ament_index_python.packages import get_package_share_directory
-        share_candidate = (
-            Path(get_package_share_directory("rmi"))
-            / "config"
-            / "embodiment_profiles"
-            / candidate.name
-        )
-        if share_candidate.is_file():
-            return share_candidate
+
+        share_dir = Path(get_package_share_directory("rmi")) / "config"
+        for sub in ("templates", "embodiment_profiles"):
+            share_candidate = share_dir / sub / candidate.name
+            if share_candidate.is_file():
+                return share_candidate
     except Exception:
         pass
-    # 2. Search relative to repository workspace source tree
-    repo_src = (
-        Path(__file__).resolve().parents[1]
-        / "config"
-        / "embodiment_profiles"
-        / candidate.name
-    )
-    if repo_src.is_file():
-        return repo_src
+
+    # 3. Search relative to repository workspace source tree
+    config_dir = Path(__file__).resolve().parents[1] / "config"
+    for sub in ("templates", "embodiment_profiles"):
+        repo_src = config_dir / sub / candidate.name
+        if repo_src.is_file():
+            return repo_src
     return candidate
 
 

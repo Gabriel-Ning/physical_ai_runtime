@@ -112,10 +112,8 @@ compound_groups:
     included_groups: ["left_arm", "left_gripper"]
   right_manipulator:
     included_groups: ["right_arm", "right_gripper"]
-  # Kinematic compound for coordinated dual-arm motion; excludes grippers.
   dual_arm:
     included_groups: ["left_arm", "right_arm"]
-  # Complete bimanual embodiment view for ownership, policy, and recording.
   dual_manipulator:
     included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
 

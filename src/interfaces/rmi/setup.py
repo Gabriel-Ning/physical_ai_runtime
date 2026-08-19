@@ -12,8 +12,8 @@ setup(
         ("share/ament_index/resource_index/packages", ["resource/rmi"]),
         ("share/rmi", ["package.xml"]),
         (
-            "share/rmi/config/embodiment_profiles",
-            glob("config/embodiment_profiles/*.yaml"),
+            "share/rmi/config/templates",
+            glob("config/templates/*.yaml"),
         ),
     ],
     install_requires=["pyyaml", "setuptools"],

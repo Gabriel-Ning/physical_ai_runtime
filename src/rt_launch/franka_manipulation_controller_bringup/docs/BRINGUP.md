@@ -91,7 +91,7 @@ Topics:
 
 This package does not launch EM or planner. Workstation composition uses the
 `fr3_pika_single_arm` RMI profile
-(`src/interfaces/rmi/config/embodiment_profiles/fr3_pika_single_arm.yaml`).
+(`apps/profiles/fr3_pika_single_arm.yaml`).
 That profile still lists the old controller-named command topics; update it
 after this RT topic lock. Keep `use_rviz:=false` on the RT host; open RViz on
 the workstation with Fixed Frame `fr3_link0`.

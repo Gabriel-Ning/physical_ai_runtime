@@ -11,6 +11,8 @@ host_roles:
       launch_file: "rt_stack.launch.py"
       arguments:
         arms: "both"
+        left_can_interface: "piper0"
+        right_can_interface: "piper1"
         left_end_effector: "piper_gripper"
         right_end_effector: "piper_gripper"
         use_fake_hardware: true
@@ -33,8 +35,6 @@ groups:
         name: "left_arm_jtc"
         implementation: "joint_trajectory_controller/JointTrajectoryController"
         command_interface: "position"
-        # Downstream controller endpoint. Providers use the action_sources
-        # ingress declared under execution_manager.sources below.
         ros_actions:
           follow_joint_trajectory: "/execution/left_arm/follow_joint_trajectory"
         ros_topics:
@@ -64,7 +64,6 @@ groups:
         name: "left_gripper_fwd"
         implementation: "forward_command_controller/ForwardCommandController"
         command_interface: "position"
-        # Downstream controller endpoint reached only after EM admission.
         ros_topics:
           joint_reference: "/execution/left_gripper/joint_reference"
 
@@ -81,8 +80,6 @@ groups:
         name: "right_arm_jtc"
         implementation: "joint_trajectory_controller/JointTrajectoryController"
         command_interface: "position"
-        # Downstream controller endpoint. Providers use the action_sources
-        # ingress declared under execution_manager.sources below.
         ros_actions:
           follow_joint_trajectory: "/execution/right_arm/follow_joint_trajectory"
         ros_topics:
@@ -112,7 +109,6 @@ groups:
         name: "right_gripper_fwd"
         implementation: "forward_command_controller/ForwardCommandController"
         command_interface: "position"
-        # Downstream controller endpoint reached only after EM admission.
         ros_topics:
           joint_reference: "/execution/right_gripper/joint_reference"
 
@@ -121,10 +117,8 @@ compound_groups:
     included_groups: ["left_arm", "left_gripper"]
   right_manipulator:
     included_groups: ["right_arm", "right_gripper"]
-  # Kinematic compound for coordinated dual-arm motion; excludes grippers.
   dual_arm:
     included_groups: ["left_arm", "right_arm"]
-  # Complete bimanual embodiment view for ownership, policy, and recording.
   dual_manipulator:
     included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
 
@@ -235,22 +229,22 @@ agents:
     frequency: 30.0
   TeleopJoint_Left:
     provider: TeleopJoint_Left
-    frequency: 30.0
+    frequency: 200.0
   TeleopJoint_Right:
     provider: TeleopJoint_Right
-    frequency: 30.0
+    frequency: 200.0
   TeleopCartesian_Left:
     provider: TeleopCartesian_Left
-    frequency: 30.0
+    frequency: 100.0
   TeleopCartesian_Right:
     provider: TeleopCartesian_Right
-    frequency: 30.0
+    frequency: 100.0
   TeleopTwist_Left:
     provider: TeleopTwist_Left
-    frequency: 30.0
+    frequency: 100.0
   TeleopTwist_Right:
     provider: TeleopTwist_Right
-    frequency: 30.0
+    frequency: 100.0
 
 sensors:
   cameras:
@@ -276,22 +270,41 @@ sensors:
       qos_profile: "sensor_data"
       frame_id: "right_hand_realsense_color_optical_frame"
 
+recorder:
+  profile: "rmi_piper_bimanual"
+  root_dir: "data/episodes"
+  experiment_name: "piper_bimanual_teleop"
+  task: "bimanual_manipulation"
+  episodes: 5
+  rate_hz: 50.0
+  max_duration_s: 60.0
+  homing_duration_s: 2.5
+  home_pose: [0.0, 0.5, -0.5, 0.0, 0.0, 0.0]
+
 teleoperators:
   left_leader:
     type: "piper_leader"
+    side: "left"
+    can_interface: "can0"
     enable_service: "/piper_leader_left/enable"
     preempt_service: "/piper_leader_left/preempt"
     status_topic: "/teleop/piper_leader_left/status"
     arm_source: "/action_sources/piper_leader_left/arm/joint_reference"
     gripper_source: "/action_sources/piper_leader_left/end_effector/joint_reference"
+    arm_part: "left_arm"
+    gripper_part: "left_gripper"
     target_agent: "TeleopJoint_Left"
   right_leader:
     type: "piper_leader"
+    side: "right"
+    can_interface: "can1"
     enable_service: "/piper_leader_right/enable"
     preempt_service: "/piper_leader_right/preempt"
     status_topic: "/teleop/piper_leader_right/status"
     arm_source: "/action_sources/piper_leader_right/arm/joint_reference"
     gripper_source: "/action_sources/piper_leader_right/end_effector/joint_reference"
+    arm_part: "right_arm"
+    gripper_part: "right_gripper"
     target_agent: "TeleopJoint_Right"
 
 features:

@@ -78,7 +78,7 @@ topics; update it after this RT topic lock.
 
 This package does not launch EM or planner. Workstation composition uses the
 `marvin_bimanual` RMI profile
-(`src/interfaces/rmi/config/embodiment_profiles/marvin_bimanual.yaml`).
+(`apps/profiles/marvin_bimanual.yaml`).
 That profile still lists the old controller-named command topics; update it
 after this RT topic lock. Keep `use_rviz:=false` on the RT host; open RViz on
 the workstation with Fixed Frame `world`.

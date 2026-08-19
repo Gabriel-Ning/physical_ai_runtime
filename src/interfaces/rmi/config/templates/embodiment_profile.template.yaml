@@ -1,0 +1,235 @@
+# ==============================================================================
+# RMI Embodiment Profile Template (Schema Specification & Reference)
+# ==============================================================================
+# This template defines the contract for physical AI robot embodiments in RMI.
+# Applications (e.g. teleop, record, replay) and runtime execution managers use
+# this unified profile to configure hardware abstraction, ROS 2 control interfaces,
+# multi-agent arbitration, sensor streaming, and teleoperation mappings.
+#
+# Concrete production profiles are maintained in: apps/profiles/<embodiment_name>.yaml
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Metadata: General Embodiment Identification
+# ------------------------------------------------------------------------------
+metadata:
+  name: "template_embodiment"                        # Unique identifier for the embodiment
+  vendor: "generic"                                  # Hardware vendor / manufacturer
+  embodiment_type: "single_arm"                      # "single_arm" | "dual_arm" | "humanoid" | "mobile_manipulator"
+  version: "1.0"                                     # Profile schema revision
+  description: "Template reference for RMI Embodiment Configuration"
+
+# ------------------------------------------------------------------------------
+# 2. Host Roles & Component Ownership Distribution
+# ------------------------------------------------------------------------------
+host_roles:
+  rt_host:
+    bringup:
+      package: "template_manipulation_controller_bringup"
+      launch_file: "rt_stack.launch.py"
+      arguments:
+        use_fake_hardware: true
+        use_rviz: false
+    owns:
+      - "ros2_control"                               # Low-level controller manager and hardware interfaces
+      - "local_safety"                               # Real-time trajectory and heartbeat safety guards
+  policy_host:
+    owns:
+      - "rmi"
+      - "execution_manager"                          # High-level command multiplexing & priority admission
+      - "policy_client"                              # Learning policy inference client
+      - "orchestrator"
+      - "episode_recorder_client"
+
+# ------------------------------------------------------------------------------
+# 3. Articulated Parts (Groups): Kinematic Chains & Controller Endpoints
+# ------------------------------------------------------------------------------
+groups:
+  arm:
+    type: "arm"                                      # Subsystem type: "arm" | "gripper" | "torso" | "base"
+    joint_names:
+      - "joint1"
+      - "joint2"
+      - "joint3"
+      - "joint4"
+      - "joint5"
+      - "joint6"
+      - "joint7"
+    base_frame: "base_link"                          # Base coordinate frame for kinematic transforms
+    flange_frame: "link7"                            # Mechanical tool flange coordinate frame
+    tcp_frame: "tool_center_point"                   # Tool Center Point (TCP) frame
+    controller_manager: "/controller_manager"        # Namespace of the target ros2_control node
+    default_controller: "joint_trajectory"           # Default controller contract when system starts
+    controllers:
+      joint_trajectory:
+        name: "arm_jtc"                              # Controller instance registered in ros2_control
+        implementation: "joint_trajectory_controller/JointTrajectoryController"
+        command_interface: "position"                # "position" | "velocity" | "effort"
+        ros_actions:
+          follow_joint_trajectory: "/execution/arm/follow_joint_trajectory"
+        ros_topics:
+          trajectory_guard_heartbeat: "/execution/arm/trajectory_guard_heartbeat"
+      joint_space_reference:
+        name: "arm_fwd"
+        implementation: "forward_command_controller/ForwardCommandController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/execution/arm/joint_reference"
+      task_space_reference:
+        name: "arm_tsjic"
+        implementation: "manipulation_position_controllers/TaskSpaceJointImpedanceController"
+        command_interface: "effort"
+        ros_topics:
+          pose_reference: "/execution/arm/pose_reference"
+          twist_reference: "/execution/arm/twist_reference"
+
+  end_effector:
+    type: "gripper"
+    parent_group: "arm"                              # Parent articulated part
+    joint_names:
+      - "gripper_joint"
+    controller_manager: "/controller_manager"
+    default_controller: "joint_space_reference"
+    controllers:
+      joint_space_reference:
+        name: "gripper_fwd"
+        implementation: "forward_command_controller/ForwardCommandController"
+        command_interface: "position"
+        ros_topics:
+          joint_reference: "/execution/end_effector/joint_reference"
+
+# ------------------------------------------------------------------------------
+# 4. Compound Groups: Composite Views of Multiple Articulated Parts
+# ------------------------------------------------------------------------------
+compound_groups:
+  manipulator:
+    included_groups: ["arm", "end_effector"]
+
+# ------------------------------------------------------------------------------
+# 5. Execution Manager: Multi-Agent Ingress Arbitration & Priority Routing
+# ------------------------------------------------------------------------------
+execution_manager:
+  # Providers, preemption priorities and controller requirements
+  # Higher integer = Higher priority (e.g. Teleop > Planner > Policy)
+  providers:
+    Policy:
+      priority: 10
+      controllers:
+        arm: "joint_space_reference"
+        end_effector: "joint_space_reference"
+    Planner:
+      priority: 20
+      controllers:
+        arm: "joint_trajectory"
+    TeleopJoint:
+      priority: 100
+      controllers:
+        arm: "joint_space_reference"
+        end_effector: "joint_space_reference"
+    TeleopCartesian:
+      priority: 100
+      controllers:
+        arm: "task_space_reference"
+    TeleopTwist:
+      priority: 100
+      controllers:
+        arm: "task_space_reference"
+
+  # Ingress mapping from high-level provider action sources to low-level controller interfaces
+  sources:
+    - provider: "Policy"
+      part: "arm"
+      command: "joint_reference"
+      topic: "/execution/arm/joint_reference"
+    - provider: "Policy"
+      part: "end_effector"
+      command: "joint_reference"
+      topic: "/execution/end_effector/joint_reference"
+    - provider: "Planner"
+      part: "arm"
+      command: "joint_trajectory"
+      action: "/execution/arm/follow_joint_trajectory"
+    - provider: "TeleopJoint"
+      part: "arm"
+      command: "joint_reference"
+      topic: "/execution/arm/joint_reference"
+    - provider: "TeleopJoint"
+      part: "end_effector"
+      command: "joint_reference"
+      topic: "/execution/end_effector/joint_reference"
+    - provider: "TeleopCartesian"
+      part: "arm"
+      command: "pose_reference"
+      topic: "/execution/arm/pose_reference"
+    - provider: "TeleopTwist"
+      part: "arm"
+      command: "twist_reference"
+      topic: "/execution/arm/twist_reference"
+
+# ------------------------------------------------------------------------------
+# 6. Action Spaces & Agent Execution Defaults
+# ------------------------------------------------------------------------------
+agents:
+  Policy:
+    provider: "Policy"
+    frequency: 50.0                                  # Policy evaluation rate in Hz
+  Planner:
+    provider: "Planner"
+    frequency: 20.0                                  # Trajectory generation rate in Hz
+  TeleopJoint:
+    provider: "TeleopJoint"
+    frequency: 100.0                                 # Teleop joint relay rate in Hz
+  TeleopCartesian:
+    provider: "TeleopCartesian"
+    frequency: 100.0                                 # Teleop Cartesian pose rate in Hz
+  TeleopTwist:
+    provider: "TeleopTwist"
+    frequency: 100.0                                 # Teleop twist velocity rate in Hz
+
+# ------------------------------------------------------------------------------
+# 7. Sensor Inputs & Observations
+# ------------------------------------------------------------------------------
+sensors:
+  cameras:
+    head_camera:
+      ros_topic: "/sensors/camera/head/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+
+# ------------------------------------------------------------------------------
+# 8. Dataset Recorder Configuration (MCAP / Physical AI Datasets)
+# ------------------------------------------------------------------------------
+recorder:
+  profile: "template_embodiment"
+  root_dir: "data/episodes"
+  experiment_name: "template_experiment"
+  task: "template_task"
+  episodes: 5
+  rate_hz: 50.0
+  max_duration_s: 60.0
+  homing_duration_s: 2.5
+  home_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+# ------------------------------------------------------------------------------
+# 9. Master-Slave Teleoperation Devices
+# ------------------------------------------------------------------------------
+teleoperators:
+  leader:
+    type: "generic_leader"
+    enable_service: "/teleop_leader/enable"
+    preempt_service: "/teleop_leader/preempt"
+    status_topic: "/teleop/leader/status"
+    arm_source: "/action_sources/leader/arm/joint_reference"
+    gripper_source: "/action_sources/leader/end_effector/joint_reference"
+    arm_part: "arm"
+    gripper_part: "end_effector"
+    target_agent: "TeleopJoint"
+
+# ------------------------------------------------------------------------------
+# 10. Middleware & Safety Feature Flags
+# ------------------------------------------------------------------------------
+features:
+  zenoh_bridge: false
+  safety_guards: true

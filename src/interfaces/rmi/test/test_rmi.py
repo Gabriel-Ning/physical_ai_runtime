@@ -218,11 +218,9 @@ def test_profile_validates_parent_group():
 )
 def test_current_profiles_parse(profile_name):
     profile_path = (
-        Path(__file__).parents[3]
-        / "interfaces"
-        / "rmi"
-        / "config"
-        / "embodiment_profiles"
+        Path(__file__).parents[4]
+        / "apps"
+        / "profiles"
         / profile_name
     )
 
@@ -246,11 +244,9 @@ def test_current_profiles_parse(profile_name):
 )
 def test_robot_from_profile_builds_all_declared_clients(profile_name, expected_parts):
     profile_path = (
-        Path(__file__).parents[3]
-        / "interfaces"
-        / "rmi"
-        / "config"
-        / "embodiment_profiles"
+        Path(__file__).parents[4]
+        / "apps"
+        / "profiles"
         / profile_name
     )
 
@@ -270,11 +266,9 @@ def test_robot_from_profile_builds_all_declared_clients(profile_name, expected_p
 )
 def test_bimanual_profile_contains_complete_execution_manager_deployment(profile_name):
     profile_path = (
-        Path(__file__).parents[3]
-        / "interfaces"
-        / "rmi"
-        / "config"
-        / "embodiment_profiles"
+        Path(__file__).parents[4]
+        / "apps"
+        / "profiles"
         / profile_name
     )
     config = EmbodimentConfig.from_yaml(profile_path)

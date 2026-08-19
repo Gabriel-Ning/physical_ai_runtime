@@ -157,7 +157,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--rate-hz",
         type=float,
-        default=100.0,
+        default=200.0,
         help="Teleoperation relay loop rate (Hz)",
     )
     parser.add_argument(
@@ -209,32 +209,34 @@ def main() -> None:
 
     try:
         if "piper" in args.profile.lower() and args.device == "leader":
+            teleop_defs = ctx.profile.raw_data.get("teleoperators", {})
+            side_map = {}
+            for t_name, t_cfg in teleop_defs.items():
+                s = t_cfg.get("side", "left" if "left" in t_name else "right")
+                side_map[s] = {
+                    "agent": t_cfg.get("target_agent", f"TeleopJoint_{s.capitalize()}"),
+                    "arm_part": t_cfg.get("arm_part", f"{s}_arm"),
+                    "gripper_part": t_cfg.get("gripper_part", f"{s}_gripper"),
+                    "leader_arm_topic": t_cfg.get(
+                        "arm_source", f"/action_sources/piper_leader_{s}/arm/joint_reference"
+                    ),
+                    "leader_gripper_topic": t_cfg.get(
+                        "gripper_source",
+                        f"/action_sources/piper_leader_{s}/end_effector/joint_reference",
+                    ),
+                }
+
             # 1. Autostart & enable Piper leader hardware nodes in Shadow Tracking mode
             leader_mgr.ensure_started_and_enabled(ctx.node, sides, can_map=can_map)
 
             # 2. Engage Preemption (0-G Gravity Comp + Streaming Ingress)
             leader_mgr.set_preempt(ctx.node, sides, True)
 
-            side_map = {
-                "left": {
-                    "agent": "TeleopJoint_Left",
-                    "arm_part": "left_arm",
-                    "gripper_part": "left_gripper",
-                    "leader_arm_topic": "/action_sources/piper_leader_left/arm/joint_reference",
-                    "leader_gripper_topic": "/action_sources/piper_leader_left/end_effector/joint_reference",
-                },
-                "right": {
-                    "agent": "TeleopJoint_Right",
-                    "arm_part": "right_arm",
-                    "gripper_part": "right_gripper",
-                    "leader_arm_topic": "/action_sources/piper_leader_right/arm/joint_reference",
-                    "leader_gripper_topic": "/action_sources/piper_leader_right/end_effector/joint_reference",
-                },
-            }
-
             with ExitStack() as stack:
                 sessions: list[tuple[dict[str, Any], rmi.Session]] = []
                 for side in sides:
+                    if side not in side_map:
+                        continue
                     cfg = side_map[side]
                     agent = ctx.make_agent(cfg["agent"], frequency=args.rate_hz)
                     session = stack.enter_context(
@@ -283,6 +285,7 @@ def main() -> None:
         print("\n\n  [!] Exiting Teleoperation...")
     finally:
         leader_mgr.shutdown(ctx.node, sides)
+        ctx.close()
         print("=" * 68)
         print("  [✓] Teleoperation Cleanly Terminated.")
         print("=" * 68)

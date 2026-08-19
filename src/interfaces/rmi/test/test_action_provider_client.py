@@ -10,11 +10,9 @@ from rmi import ActionProviderClient, EmbodimentConfig
 from trajectory_msgs.msg import JointTrajectory
 
 PROFILE = (
-    Path(__file__).parents[3]
-    / "interfaces"
-    / "rmi"
-    / "config"
-    / "embodiment_profiles"
+    Path(__file__).parents[4]
+    / "apps"
+    / "profiles"
     / "marvin_bimanual.yaml"
 )
 
