@@ -42,7 +42,9 @@ class PiperLeaderManager:
         self.workspace_root = workspace_root
         self.processes: list[subprocess.Popen[bytes]] = []
 
-    def ensure_started_and_enabled(self, node: Any, sides: list[str]) -> None:
+    def ensure_started_and_enabled(
+        self, node: Any, sides: list[str], can_map: dict[str, str] | None = None
+    ) -> None:
         """Autostart leader nodes if needed and enable base mode."""
         setup_bash = self.workspace_root / "install" / "setup.bash"
         share_config = (
@@ -52,8 +54,11 @@ class PiperLeaderManager:
             / "piper_leader_teleop"
             / "config"
         )
+        if can_map is None:
+            can_map = {"left": "can0", "right": "can1"}
 
         for side in sides:
+            can_iface = can_map.get(side, "can0" if side == "left" else "can1")
             srv_name = f"/piper_leader_{side}/enable"
             enable_client = node.create_client(SetBool, srv_name)
 
@@ -62,9 +67,9 @@ class PiperLeaderManager:
                 config_yaml = share_config / f"piper_leader_{side}.yaml"
                 cmd = (
                     f"source '{setup_bash}' && exec ros2 launch piper_leader_teleop piper_leader.launch.py "
-                    f"config:='{config_yaml}' node_name:=piper_leader_{side}"
+                    f"config:='{config_yaml}' node_name:=piper_leader_{side} can_interface:='{can_iface}'"
                 )
-                print(f"  >> Autostarting piper_leader_{side} driver...")
+                print(f"  >> Autostarting piper_leader_{side} driver on '{can_iface}'...")
                 proc = subprocess.Popen(
                     cmd,
                     shell=True,
@@ -155,6 +160,18 @@ def parse_args() -> argparse.Namespace:
         default=100.0,
         help="Teleoperation relay loop rate (Hz)",
     )
+    parser.add_argument(
+        "--left-can",
+        type=str,
+        default="can0",
+        help="SocketCAN interface for left leader (default: can0)",
+    )
+    parser.add_argument(
+        "--right-can",
+        type=str,
+        default="can1",
+        help="SocketCAN interface for right leader (default: can1)",
+    )
     return parser.parse_args()
 
 
@@ -170,12 +187,16 @@ def _relay_callback(session: rmi.Session, part: str):
 def main() -> None:
     args = parse_args()
     workspace_root = Path(__file__).resolve().parents[1]
+    can_map = {"left": args.left_can, "right": args.right_can}
 
     print("=" * 68)
     print("  RMI Autonomous Robot Teleoperation (One-Command Start)")
     print(f"  Embodiment Profile : {args.profile}")
     print(f"  Mode / Device      : {args.device.upper()}")
     print(f"  Loop Frequency     : {args.rate_hz:.1f} Hz")
+    if args.device == "leader":
+        print(f"  Left Leader CAN    : {args.left_can}")
+        print(f"  Right Leader CAN   : {args.right_can}")
     print("=" * 68)
 
     ctx = rmi.Context.from_profile(args.profile)
@@ -189,7 +210,7 @@ def main() -> None:
     try:
         if "piper" in args.profile.lower() and args.device == "leader":
             # 1. Autostart & enable Piper leader hardware nodes in Shadow Tracking mode
-            leader_mgr.ensure_started_and_enabled(ctx.node, sides)
+            leader_mgr.ensure_started_and_enabled(ctx.node, sides, can_map=can_map)
 
             # 2. Engage Preemption (0-G Gravity Comp + Streaming Ingress)
             leader_mgr.set_preempt(ctx.node, sides, True)
