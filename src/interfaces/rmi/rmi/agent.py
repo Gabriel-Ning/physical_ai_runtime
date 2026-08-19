@@ -717,8 +717,13 @@ class Robot:
 
 
 def _require_valid_result(result: Any) -> None:
-    if not result.valid:
-        raise ValueError(f"cannot send invalid planning result: {result.reason}")
+    # Native ROS trajectory messages do not expose a `.valid` flag.
+    # Keep compatibility by treating all non-RMI result objects as valid-by-default.
+    if not hasattr(result, "valid"):
+        return
+    if not bool(getattr(result, "valid")):
+        reason = getattr(result, "reason", "<no reason provided>")
+        raise ValueError(f"cannot send invalid planning result: {reason}")
 
 
 def _trajectory_spec(
