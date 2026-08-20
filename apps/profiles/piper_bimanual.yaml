@@ -8,7 +8,7 @@ host_roles:
   rt_host:
     bringup:
       package: "piper_manipulation_controller_bringup"
-      launch_file: "rt_launch/rt_stack.launch.py"
+      launch_file: "rt_stack.launch.py"
       arguments:
         left_end_effector: "piper_gripper"
         right_end_effector: "piper_gripper"
@@ -16,7 +16,7 @@ host_roles:
   policy_host:
     bringup:
       package: "piper_manipulation_controller_bringup"
-      launch_file: "workstation_launch/workstation_stack.launch.py"
+      launch_file: "workstation_stack.launch.py"
       arguments:
         with_cameras: true
         with_leaders: true

@@ -12,11 +12,11 @@ All hardware drivers and runtime parameters are sourced strictly from `config/`:
 
 ---
 
-## 1. RT Host Real-Time Stack (`rt_launch/`)
+## 1. RT Host Real-Time Stack
 
 ### A. Mock / Fake Hardware (Local Dev & Testing)
 ```bash
-ros2 launch marvin_manipulation_controller_bringup rt_launch/rt_stack.launch.py \
+ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=true \
   use_rviz:=false \
   cpu_affinity:=none
@@ -29,7 +29,7 @@ ros2 run marvin_manipulation_controller_bringup clear_errors --ip 10.19.0.191
 
 ### C. Physical Hardware (Dual 7-DOF Arms + Dual Pika Grippers)
 ```bash
-ros2 launch marvin_manipulation_controller_bringup rt_launch/rt_stack.launch.py \
+ros2 launch marvin_manipulation_controller_bringup rt_stack.launch.py \
   use_fake_hardware:=false \
   load_pika_hardware:=true \
   left_gripper_serial_port:=/dev/ttyUSB0 \
@@ -40,20 +40,20 @@ ros2 launch marvin_manipulation_controller_bringup rt_launch/rt_stack.launch.py 
 
 ---
 
-## 2. Workstation Peripherals Stack (`workstation_launch/`)
+## 2. Workstation Peripherals Stack
 
 ### A. Full Workstation Stack (Cameras + MCAP Recorder)
 ```bash
-ros2 launch marvin_manipulation_controller_bringup workstation_launch/workstation_stack.launch.py
+ros2 launch marvin_manipulation_controller_bringup workstation_stack.launch.py
 ```
 
 ### B. Individual Workstation Modules
 ```bash
 # 1. Perception Cameras only (Head + Dual Wrist):
-ros2 launch marvin_manipulation_controller_bringup workstation_launch/camera_bringup.launch.py
+ros2 launch marvin_manipulation_controller_bringup camera_bringup.launch.py
 
 # 2. C++ MCAP Episode Recorder Backend only:
-ros2 launch marvin_manipulation_controller_bringup workstation_launch/recorder_bringup.launch.py
+ros2 launch marvin_manipulation_controller_bringup recorder_bringup.launch.py
 ```
 
 ---
