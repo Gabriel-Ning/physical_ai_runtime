@@ -95,12 +95,12 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "left_leader_can",
-                default_value="can0",
+                default_value="can1",
                 description="SocketCAN interface for left leader arm.",
             ),
             DeclareLaunchArgument(
                 "right_leader_can",
-                default_value="can1",
+                default_value="can0",
                 description="SocketCAN interface for right leader arm.",
             ),
             DeclareLaunchArgument(
