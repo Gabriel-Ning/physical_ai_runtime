@@ -8,7 +8,7 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_bringup_contract test/test_bringup_contract.py)
 endif()
 
-install(DIRECTORY launch config docs
+install(DIRECTORY launch config docs scripts
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
 )

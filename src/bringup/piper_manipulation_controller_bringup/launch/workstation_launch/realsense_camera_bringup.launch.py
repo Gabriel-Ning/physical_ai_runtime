@@ -1,137 +1,108 @@
 # Copyright 2026 Physical AI Runtime contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Launch the dual RealSense D435 wrist cameras bringup.
+"""Launch the two wrist RealSense D435i cameras.
 
-Publishes to:
-- /observation/left_hand_realsense/color/image_raw
-- /observation/right_hand_realsense/color/image_raw
+Publishes color images to:
+
+* ``/observation/left_hand_realsense/color/image_raw``
+* ``/observation/right_hand_realsense/color/image_raw``
 """
 
 from __future__ import annotations
 
-import os
-from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
-from launch.conditions import IfCondition
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    ResetLaunchConfigurations,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
 
-def _launch_setup(context, *args, **kwargs):
-    enable_left = LaunchConfiguration("enable_left").perform(context).strip().lower() in ("true", "1")
-    enable_right = LaunchConfiguration("enable_right").perform(context).strip().lower() in ("true", "1")
-    left_serial = LaunchConfiguration("left_serial_no").perform(context).strip()
-    right_serial = LaunchConfiguration("right_serial_no").perform(context).strip()
-    color_profile = LaunchConfiguration("color_profile").perform(context).strip()
-
-    actions = []
-    try:
-        rs_share = get_package_share_directory("realsense2_camera")
-        launch_file = os.path.join(rs_share, "launch", "rs_launch.py")
-
-        if enable_left:
-            left_args = {
-                "camera_name": "left_hand_realsense",
-                "camera_namespace": "observation",
-                "rgb_camera.color_profile": color_profile,
-            }
-            if left_serial:
-                left_args["serial_no"] = left_serial
-            actions.append(
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(launch_file),
-                    launch_arguments=left_args.items(),
+def _camera_group(camera_name_arg: str, serial_no_arg: str) -> GroupAction:
+    """Isolate each upstream rs_launch.py invocation's launch arguments."""
+    return GroupAction(
+        scoped=True,
+        actions=[
+            ResetLaunchConfigurations(
+                {
+                    "config_file": LaunchConfiguration("realsense_config_file"),
+                    "camera_name": LaunchConfiguration(camera_name_arg),
+                    "camera_namespace": "/observation",
+                    "serial_no": LaunchConfiguration(serial_no_arg),
+                }
+            ),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    PathJoinSubstitution(
+                        [
+                            FindPackageShare("realsense2_camera"),
+                            "launch",
+                            "rs_launch.py",
+                        ]
+                    )
                 )
-            )
-
-        if enable_right:
-            right_args = {
-                "camera_name": "right_hand_realsense",
-                "camera_namespace": "observation",
-                "rgb_camera.color_profile": color_profile,
-            }
-            if right_serial:
-                right_args["serial_no"] = right_serial
-            actions.append(
-                IncludeLaunchDescription(
-                    PythonLaunchDescriptionSource(launch_file),
-                    launch_arguments=right_args.items(),
-                )
-            )
-        return actions
-    except Exception:
-        pass
-
-    # Fallback to direct nodes if launch package unavailable
-    if enable_left:
-        params = {"rgb_camera.color_profile": color_profile}
-        if left_serial:
-            params["serial_no"] = left_serial
-        actions.append(
-            Node(
-                package="realsense2_camera",
-                executable="realsense2_camera_node",
-                name="left_hand_realsense",
-                namespace="observation",
-                parameters=[params],
-                output="screen",
-            )
-        )
-    if enable_right:
-        params = {"rgb_camera.color_profile": color_profile}
-        if right_serial:
-            params["serial_no"] = right_serial
-        actions.append(
-            Node(
-                package="realsense2_camera",
-                executable="realsense2_camera_node",
-                name="right_hand_realsense",
-                namespace="observation",
-                parameters=[params],
-                output="screen",
-            )
-        )
-    return actions
+            ),
+        ],
+    )
 
 
 def generate_launch_description() -> LaunchDescription:
-    bringup_share = get_package_share_directory("piper_manipulation_controller_bringup")
-    default_config = os.path.join(bringup_share, "config", "camera", "piper_cameras.yaml")
+    config_file = PathJoinSubstitution(
+        [
+            FindPackageShare("piper_manipulation_controller_bringup"),
+            "config",
+            "camera",
+            "d435i_dual.yaml",
+        ]
+    )
+    left_camera = _camera_group("left_camera_name", "left_serial_no")
+    right_camera = _camera_group("right_camera_name", "right_serial_no")
 
     return LaunchDescription(
         [
+            # Suppress benign librealsense USB HID warnings not covered by
+            # ROS log levels.
+            SetEnvironmentVariable("LRS_LOG_LEVEL", "ERROR"),
             DeclareLaunchArgument(
-                "config",
-                default_value=default_config,
-                description="Path to camera configuration YAML file.",
+                "realsense_config_file",
+                default_value=config_file,
+                description="Absolute path to the shared D435i parameter YAML.",
             ),
             DeclareLaunchArgument(
-                "enable_left",
-                default_value="true",
-                description="Whether to start left wrist RealSense camera.",
+                "left_camera_name",
+                default_value="left_hand_realsense",
+                description="Left wrist camera topic and frame-name prefix.",
             ),
             DeclareLaunchArgument(
-                "enable_right",
-                default_value="true",
-                description="Whether to start right wrist RealSense camera.",
+                "right_camera_name",
+                default_value="right_hand_realsense",
+                description="Right wrist camera topic and frame-name prefix.",
             ),
             DeclareLaunchArgument(
                 "left_serial_no",
-                default_value="",
-                description="Optional serial number for left wrist RealSense.",
+                default_value="_332522075913",
+                description="Left D435i serial number.",
             ),
             DeclareLaunchArgument(
                 "right_serial_no",
-                default_value="",
-                description="Optional serial number for right wrist RealSense.",
+                default_value="_332322073584",
+                description="Right D435i serial number.",
             ),
             DeclareLaunchArgument(
-                "color_profile",
-                default_value="640x480x30",
-                description="Color stream resolution and rate (WIDTHxHEIGHTxFPS).",
+                "right_camera_delay",
+                default_value="10.0",
+                description="Seconds to wait before starting the right D435i.",
             ),
-            OpaqueFunction(function=_launch_setup),
+            left_camera,
+            TimerAction(
+                period=LaunchConfiguration("right_camera_delay"),
+                actions=[right_camera],
+            ),
         ]
     )

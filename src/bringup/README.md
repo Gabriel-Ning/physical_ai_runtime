@@ -67,10 +67,18 @@ src/bringup/piper_manipulation_controller_bringup/
 
 ## 3. Standard Launch Commands
 
+First build the bringup package once in this workspace. Every command below
+sources the resulting colcon overlay, so it works from a fresh terminal without
+requiring Direnv.
+
+```bash
+pixi run colcon build --packages-select piper_manipulation_controller_bringup --symlink-install
+```
+
 ### 3.1 On RT Host (Physical Realtime Machine)
 ```bash
 # Start dual-arm follower controllers on physical robot via SocketCAN interfaces:
-pixi run ros2 launch piper_manipulation_controller_bringup rt_launch/rt_stack.launch.py left_can_interface:=piper0 right_can_interface:=piper1 use_fake_hardware:=false
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup rt_stack.launch.py left_can_interface:=piper0 right_can_interface:=piper1 use_fake_hardware:=false'
 ```
 
 ### 3.2 On Workstation (Peripherals & Perception Services)
@@ -80,20 +88,40 @@ Workstation peripherals can be launched using either of the two standard workflo
 #### 方式 1: 一键聚合启动（默认全开：3路相机 + 2个示教主臂 + MCAP录制服务）
 ```bash
 # 启动工作站全部外设与录制服务（with_cameras=true, with_leaders=true, with_recorder=true）:
-pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/workstation_stack.launch.py
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup workstation_stack.launch.py'
 ```
 
 #### 方式 2: 分别独立启动常驻服务（适用于分终端或容器化部署）
 ```bash
 # 1. 静态 Orbbec 顶视/前视相机服务 -> /observation/static_orbbec/...
-pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/orbbec_camera_bringup.launch.py
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup orbbec_camera_bringup.launch.py'
 
 # 2. 左右手腕双 RealSense D435 相机服务 -> /observation/{left,right}_hand_realsense/...
-pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/realsense_camera_bringup.launch.py
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup realsense_camera_bringup.launch.py'
 
 # 3. 左右双臂 Piper 示教主臂服务 (can0, can1) -> /action_sources/piper_leader_{left,right}/...
-pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/piper_teleop_leader_bringup.launch.py
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup piper_teleop_leader_bringup.launch.py'
 
 # 4. C++ MCAP 数据集录制 Server (自动加载 rmi_piper_bimanual.yaml 契约)
-pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/recorder_bringup.launch.py
+pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup recorder_bringup.launch.py'
 ```
+
+---
+
+## 4. 三相机帧率与延迟诊断
+
+先按方式 1 或方式 2 启动三台相机，然后在另一个终端运行 30 秒采样：
+
+```bash
+pixi run bash -lc 'source install/setup.bash && python3 "$(ros2 pkg prefix piper_manipulation_controller_bringup)/share/piper_manipulation_controller_bringup/scripts/camera_stream_diagnostics.py" --duration 30'
+```
+
+脚本会同时订阅以下三路彩色图像，并在结束时分别输出接收帧数、实际交付帧率，以及消息头时间戳到本机 ROS 回调的平均值、P50、P95 和最大延迟：
+
+- `/observation/static_orbbec/color/image_raw`
+- `/observation/left_hand_realsense/color/image_raw`
+- `/observation/right_hand_realsense/color/image_raw`
+
+可通过 `--duration 60 --report-period 10` 修改采样时长和中间进度输出周期。任一相机在采样期内没有收到图像时，脚本会显示 `NO DATA` 并以非零状态退出。
+
+这里的“延迟”是同一主机上从 `Image.header.stamp` 到 ROS 订阅回调的时间差，反映驱动发布与 DDS 传输后的消息到达情况；它不是从曝光到主机的完整硬件端到端延迟。三路相机应运行在同一台主机并使用同步的系统时钟。Orbbec 配置已经改为使用主机 realtime 时间戳，使该指标能与 RealSense 的输出进行比较。

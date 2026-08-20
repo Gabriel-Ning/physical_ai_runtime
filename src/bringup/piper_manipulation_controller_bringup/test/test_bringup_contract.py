@@ -209,3 +209,18 @@ def test_docs_do_not_point_at_removed_new_apps():
         encoding="utf-8"
     )
     assert "src/new_apps" not in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def test_camera_diagnostic_script_is_installed_and_uses_the_three_color_topics():
+    cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
+    script = (ROOT / "scripts" / "camera_stream_diagnostics.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "install(DIRECTORY launch config docs scripts" in cmake
+    for topic in (
+        "/observation/static_orbbec/color/image_raw",
+        "/observation/left_hand_realsense/color/image_raw",
+        "/observation/right_hand_realsense/color/image_raw",
+    ):
+        assert topic in script
