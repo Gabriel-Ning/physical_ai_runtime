@@ -1,0 +1,21 @@
+# Shared RealSense D435i profile for the two wrist cameras. rs_launch.py
+# reads this file directly, so its parameter names are intentionally flat.
+#
+# Site serials are launch defaults in realsense_camera_bringup.launch.py
+# (left _332522075913, right _332322073584).
+enable_color: true
+rgb_camera.color_profile: 640x480x30
+
+# The recording contract and RViz validation consume color only. Disabling
+# depth keeps both wrist cameras within the available USB streaming budget.
+enable_depth: false
+
+enable_infra: false
+enable_infra1: false
+enable_infra2: false
+enable_gyro: false
+enable_accel: false
+
+align_depth.enable: false
+pointcloud.enable: false
+publish_tf: true

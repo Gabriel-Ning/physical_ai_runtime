@@ -2,16 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Launch the dual Piper Leader Arm teleoperation hardware drivers.
 
-Publishes to:
-- /action_sources/piper_leader_left/arm/joint_reference
-- /action_sources/piper_leader_left/end_effector/joint_reference
-- /action_sources/piper_leader_right/arm/joint_reference
-- /action_sources/piper_leader_right/end_effector/joint_reference
+Defaults (CAN, joints, topics, modes, rate) come from
+``config/teleop/piper_leaders.yaml``. Launch arguments are optional overrides
+only — leave them empty to keep the YAML values.
 """
 
 from __future__ import annotations
 
 import os
+
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -34,12 +33,6 @@ def generate_launch_description() -> LaunchDescription:
             "node_name": "piper_leader_left",
             "can_interface": LaunchConfiguration("left_can_interface"),
             "publish_rate_hz": LaunchConfiguration("publish_rate_hz"),
-            "joint_names": "left_joint1,left_joint2,left_joint3,left_joint4,left_joint5,left_joint6",
-            "gripper_joint_name": "left_gripper_joint1",
-            "joint_reference_topic": "/action_sources/piper_leader_left/arm/joint_reference",
-            "gripper_reference_topic": "/action_sources/piper_leader_left/end_effector/joint_reference",
-            "status_topic": "/teleop/piper_leader_left/status",
-            "pendant_state_topic": "/teleop/piper_leader_left/pendant_state",
             "default_mode": LaunchConfiguration("default_mode"),
             "fallback_mode": LaunchConfiguration("fallback_mode"),
         }.items(),
@@ -53,12 +46,6 @@ def generate_launch_description() -> LaunchDescription:
             "node_name": "piper_leader_right",
             "can_interface": LaunchConfiguration("right_can_interface"),
             "publish_rate_hz": LaunchConfiguration("publish_rate_hz"),
-            "joint_names": "right_joint1,right_joint2,right_joint3,right_joint4,right_joint5,right_joint6",
-            "gripper_joint_name": "right_gripper_joint1",
-            "joint_reference_topic": "/action_sources/piper_leader_right/arm/joint_reference",
-            "gripper_reference_topic": "/action_sources/piper_leader_right/end_effector/joint_reference",
-            "status_topic": "/teleop/piper_leader_right/status",
-            "pendant_state_topic": "/teleop/piper_leader_right/pendant_state",
             "default_mode": LaunchConfiguration("default_mode"),
             "fallback_mode": LaunchConfiguration("fallback_mode"),
         }.items(),
@@ -84,28 +71,28 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "left_can_interface",
-                default_value="can0",
-                description="SocketCAN interface for the left leader arm.",
+                default_value="",
+                description="Optional left SocketCAN override (empty = use config).",
             ),
             DeclareLaunchArgument(
                 "right_can_interface",
-                default_value="can1",
-                description="SocketCAN interface for the right leader arm.",
+                default_value="",
+                description="Optional right SocketCAN override (empty = use config).",
             ),
             DeclareLaunchArgument(
                 "publish_rate_hz",
-                default_value="200.0",
-                description="Leader arm publication frequency in Hz.",
+                default_value="",
+                description="Optional publish rate override in Hz (empty = use config).",
             ),
             DeclareLaunchArgument(
                 "default_mode",
-                default_value="shadow",
-                description="Startup mode for leader arms: shadow | passive.",
+                default_value="",
+                description="Optional startup mode override: shadow | passive (empty = use config).",
             ),
             DeclareLaunchArgument(
                 "fallback_mode",
-                default_value="shadow",
-                description="Preempt release fallback mode for leader arms: shadow | passive.",
+                default_value="",
+                description="Optional fallback mode override: shadow | passive (empty = use config).",
             ),
             left_leader,
             right_leader,

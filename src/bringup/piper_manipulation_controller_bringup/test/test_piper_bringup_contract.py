@@ -198,10 +198,65 @@ def test_package_xml_declares_runtime_plugins():
         "piper_hardware_interface",
         "manipulation_position_controllers",
         "joint_trajectory_controller_guard",
+        "orbbec_camera",
+        "realsense2_camera",
         "launch",
         "launch_ros",
     ):
         assert f"<exec_depend>{dep}</exec_depend>" in text
+
+
+def test_workstation_camera_configs_and_launches_exist():
+    assert (ROOT / "config" / "camera" / "femto_bolt.yaml").is_file()
+    assert (ROOT / "config" / "camera" / "d435i_dual.yaml").is_file()
+    assert not (ROOT / "config" / "camera" / "piper_cameras.yaml").exists()
+    assert (
+        ROOT / "launch" / "workstation_launch" / "orbbec_camera_bringup.launch.py"
+    ).is_file()
+    assert (
+        ROOT / "launch" / "workstation_launch" / "realsense_camera_bringup.launch.py"
+    ).is_file()
+    realsense = (
+        ROOT / "launch" / "workstation_launch" / "realsense_camera_bringup.launch.py"
+    ).read_text(encoding="utf-8")
+    assert "d435i_dual.yaml" in realsense
+    assert "_332522075913" in realsense
+    orbbec = (
+        ROOT / "launch" / "workstation_launch" / "orbbec_camera_bringup.launch.py"
+    ).read_text(encoding="utf-8")
+    assert "femto_bolt.yaml" in orbbec
+    assert "femto_bolt.launch.py" in orbbec
+
+
+def test_recording_gripper_streams_use_float64_multiarray():
+    recording = yaml.safe_load(
+        (ROOT / "config" / "recording" / "rmi_piper_bimanual.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    by_id = {stream["id"]: stream for stream in recording["streams"]}
+    assert (
+        by_id["execution_left_gripper_joint_reference"]["expected_type"]
+        == "std_msgs/msg/Float64MultiArray"
+    )
+    assert (
+        by_id["execution_right_gripper_joint_reference"]["expected_type"]
+        == "std_msgs/msg/Float64MultiArray"
+    )
+
+
+def test_leader_defaults_live_in_teleop_config_not_launch():
+    leaders = yaml.safe_load(
+        (ROOT / "config" / "teleop" / "piper_leaders.yaml").read_text(encoding="utf-8")
+    )
+    assert leaders["piper_leader_left"]["ros__parameters"]["can_interface"] == "can1"
+    assert leaders["piper_leader_right"]["ros__parameters"]["can_interface"] == "can0"
+    bringup = (
+        ROOT / "launch" / "workstation_launch" / "piper_teleop_leader_bringup.launch.py"
+    ).read_text(encoding="utf-8")
+    assert 'default_value=""' in bringup
+    assert "left_joint1,left_joint2" not in bringup
+    assert "/action_sources/piper_leader_left/arm/joint_reference" not in bringup
 
 
 def test_docs_do_not_point_at_removed_new_apps():

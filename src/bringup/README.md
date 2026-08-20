@@ -23,7 +23,7 @@ src/bringup/piper_manipulation_controller_bringup/
 │   │
 │   └── workstation_launch/            # 👈 [Workstation 算法/示教工作站专属]
 │       ├── orbbec_camera_bringup.launch.py        # Static Orbbec RGBD camera
-│       ├── realsense_camera_bringup.launch.py     # Left/Right wrist RealSense D435
+│       ├── realsense_camera_bringup.launch.py     # Left/Right wrist RealSense D435i
 │       ├── piper_teleop_leader_bringup.launch.py  # Dual-arm Piper Master Leader teleop
 │       ├── recorder_bringup.launch.py             # C++ MCAP Episode Recorder server
 │       └── workstation_stack.launch.py            # Workstation aggregate launch
@@ -88,7 +88,7 @@ pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/wo
 # 1. 静态 Orbbec 顶视/前视相机服务 -> /observation/static_orbbec/...
 pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/orbbec_camera_bringup.launch.py
 
-# 2. 左右手腕双 RealSense D435 相机服务 -> /observation/{left,right}_hand_realsense/...
+# 2. 左右手腕双 RealSense D435i 相机服务 -> /observation/{left,right}_hand_realsense/...
 pixi run ros2 launch piper_manipulation_controller_bringup workstation_launch/realsense_camera_bringup.launch.py
 
 # 3. 左右双臂 Piper 示教主臂服务 (can0, can1) -> /action_sources/piper_leader_{left,right}/...

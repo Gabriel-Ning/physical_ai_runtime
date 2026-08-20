@@ -1,10 +1,13 @@
 # Copyright 2026 Physical AI Runtime contributors
 # SPDX-License-Identifier: Apache-2.0
 # Piper Bimanual Master-Slave Teleoperation Configuration
+#
+# Site defaults for leader SocketCAN (field-verified): left=can1, right=can0.
+# Launch files should load this YAML and only override via empty CLI args.
 
 piper_leader_left:
   ros__parameters:
-    can_interface: can0
+    can_interface: can1
     publish_rate_hz: 200.0
     feedback_timeout_s: 0.1
     mit_kd_effort_damping: 0.0
@@ -23,7 +26,7 @@ piper_leader_left:
 
 piper_leader_right:
   ros__parameters:
-    can_interface: can1
+    can_interface: can0
     publish_rate_hz: 200.0
     feedback_timeout_s: 0.1
     mit_kd_effort_damping: 0.0

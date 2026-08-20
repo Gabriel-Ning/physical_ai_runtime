@@ -61,4 +61,18 @@ On a cpu RT host, omit `cpu_affinity` so `ros2_control_node` pins to `RT_CM_CPU_
 `left_end_effector` / `right_end_effector` are gripper **types**
 (`none` | `piper_gripper`); both sides can be `piper_gripper`.
 
+## Workstation (cameras + leaders)
+
+```bash
+# Femto Bolt + dual D435i + leaders (defaults from config/)
+ros2 launch piper_manipulation_controller_bringup workstation_stack.launch.py
+
+# Cameras only
+ros2 launch piper_manipulation_controller_bringup orbbec_camera_bringup.launch.py
+ros2 launch piper_manipulation_controller_bringup realsense_camera_bringup.launch.py
+```
+
+Camera params: `config/camera/femto_bolt.yaml`, `config/camera/d435i_dual.yaml`.  
+Leader defaults (incl. site CAN `left=can1` / `right=can0`): `config/teleop/piper_leaders.yaml`.
+
 Details: [docs/BRINGUP.md](docs/BRINGUP.md).

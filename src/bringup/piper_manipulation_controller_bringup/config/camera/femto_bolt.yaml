@@ -1,0 +1,38 @@
+# Static Orbbec Femto Bolt profile. This is a ROS parameter file, so it uses
+# the standard ros__parameters wrapper expected by orbbec_camera.
+/**:
+  ros__parameters:
+    depth_registration: false
+
+    enable_color: true
+    color_width: 1280
+    color_height: 720
+    color_fps: 30
+    color_format: "MJPG"
+
+    enable_depth: true
+    depth_width: 640
+    depth_height: 576
+    depth_fps: 30
+    depth_format: "Y16"
+
+    enable_ir: true
+    ir_width: 640
+    ir_height: 576
+    ir_fps: 30
+    ir_format: "Y16"
+
+    enable_accel: false
+    enable_gyro: false
+    enable_point_cloud: false
+    enable_colored_point_cloud: false
+
+    align_mode: "SW"
+    align_target_stream: "COLOR"
+    sync_mode: "standalone"
+    enable_frame_sync: true
+    # Stamp frames with the host realtime clock so their header timestamps can
+    # be compared with the two RealSense streams.
+    time_domain: "system"
+    timestamp_clock_type: "realtime"
+    publish_tf: true

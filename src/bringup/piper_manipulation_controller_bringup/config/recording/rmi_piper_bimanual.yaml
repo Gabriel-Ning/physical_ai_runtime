@@ -13,7 +13,7 @@ streams:
 
   - id: execution_left_gripper_joint_reference
     topic: /execution/left_gripper/joint_reference
-    expected_type: trajectory_msgs/msg/JointTrajectory
+    expected_type: std_msgs/msg/Float64MultiArray
     required: false
     start_gate: false
     qos:
@@ -35,7 +35,7 @@ streams:
 
   - id: execution_right_gripper_joint_reference
     topic: /execution/right_gripper/joint_reference
-    expected_type: trajectory_msgs/msg/JointTrajectory
+    expected_type: std_msgs/msg/Float64MultiArray
     required: false
     start_gate: false
     qos:
