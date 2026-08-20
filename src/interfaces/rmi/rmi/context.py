@@ -455,23 +455,47 @@ class Context:
             return
         self._closed = True
         if self._recorder is not None and hasattr(self._recorder, "close"):
-            self._recorder.close()
+            try:
+                self._recorder.close()
+            except Exception:
+                pass
             self._recorder = None
         if self._executor is not None:
-            self._executor.shutdown(timeout_sec=1.0)
+            try:
+                self._executor.shutdown(timeout_sec=0.5)
+            except Exception:
+                pass
             self._executor = None
         if self._spin_thread is not None:
-            self._spin_thread.join(timeout=1.0)
+            try:
+                self._spin_thread.join(timeout=0.5)
+            except Exception:
+                pass
             self._spin_thread = None
-        for camera in self._cameras.values():
-            camera.close()
-        for sensor in self._sensors.values():
-            sensor.close()
-        self.execution.close()
+        for camera in list(self._cameras.values()):
+            try:
+                camera.close()
+            except Exception:
+                pass
+        for sensor in list(self._sensors.values()):
+            try:
+                sensor.close()
+            except Exception:
+                pass
+        try:
+            self.execution.close()
+        except Exception:
+            pass
         if hasattr(self.node, "destroy_subscription"):
-            self.node.destroy_subscription(self._state_subscription)
+            try:
+                self.node.destroy_subscription(self._state_subscription)
+            except Exception:
+                pass
         if self._owns_node and hasattr(self.node, "destroy_node"):
-            self.node.destroy_node()
+            try:
+                self.node.destroy_node()
+            except Exception:
+                pass
 
     def __enter__(self) -> Self:
         return self

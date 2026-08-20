@@ -942,6 +942,8 @@ class LocalExecutionManager:
             await self._cm.switch_controller(
                 activate=needed_activate,
                 deactivate=needed_deactivate,
+                strict=False,
+                timeout_sec=2.0,
             )
 
         try:

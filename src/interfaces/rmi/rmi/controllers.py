@@ -582,7 +582,12 @@ class ControllerManagerClient:
         return activated
 
     async def switch_controller(
-        self, *, activate: tuple[str, ...], deactivate: tuple[str, ...]
+        self,
+        *,
+        activate: tuple[str, ...],
+        deactivate: tuple[str, ...],
+        strict: bool = True,
+        timeout_sec: float = 2.0,
     ) -> None:
         if not activate and not deactivate:
             raise ValueError("activate and deactivate must not both be empty")
@@ -606,12 +611,20 @@ class ControllerManagerClient:
         request = SwitchController.Request()
         request.activate_controllers = list(activate)
         request.deactivate_controllers = list(deactivate)
-        request.strictness = SwitchController.Request.STRICT
+        request.strictness = (
+            SwitchController.Request.STRICT
+            if strict
+            else SwitchController.Request.BEST_EFFORT
+        )
+        request.activate_asap = True
+        request.timeout.sec = int(timeout_sec)
+        request.timeout.nanosec = int((timeout_sec - int(timeout_sec)) * 1e9)
         response = await self._call(self._switch_client, request, "switch_controller")
         if not response.ok:
             hw_diags = await self.get_hardware_diagnostics()
+            strict_label = "STRICT " if strict else ""
             msg_lines = [
-                "controller manager rejected STRICT switch "
+                f"controller manager rejected {strict_label}switch "
                 f"activate={list(activate)} deactivate={list(deactivate)}"
                 + (f" skipped_unloaded={missing}" if missing else "")
             ]
