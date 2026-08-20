@@ -52,25 +52,49 @@ streams:
     qos:
       mode: sensor_data
 
-  # Cameras observation streams:
-  - id: head_cam_color
-    topic: /sensors/head_cam/color/image_raw
+  # Cameras observation streams (dual Pika D405 + fisheye):
+  - id: left_pika_d405_color
+    topic: /left_pika_d405/camera/color/image_raw
     expected_type: sensor_msgs/msg/Image
     required: false
     start_gate: false
     qos:
       mode: sensor_data
 
-  - id: left_wrist_cam_color
-    topic: /sensors/left_wrist_cam/color/image_raw
+  - id: left_pika_d405_depth
+    topic: /left_pika_d405/camera/depth/image_rect_raw
     expected_type: sensor_msgs/msg/Image
     required: false
     start_gate: false
     qos:
       mode: sensor_data
 
-  - id: right_wrist_cam_color
-    topic: /sensors/right_wrist_cam/color/image_raw
+  - id: left_pika_fisheye_color
+    topic: /left_pika_fisheye/image_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+
+  - id: right_pika_d405_color
+    topic: /right_pika_d405/camera/color/image_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+
+  - id: right_pika_d405_depth
+    topic: /right_pika_d405/camera/depth/image_rect_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+
+  - id: right_pika_fisheye_color
+    topic: /right_pika_fisheye/image_raw
     expected_type: sensor_msgs/msg/Image
     required: false
     start_gate: false

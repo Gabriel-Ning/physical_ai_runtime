@@ -18,7 +18,8 @@ host_roles:
       package: "marvin_manipulation_controller_bringup"
       launch_file: "workstation_stack.launch.py"
       arguments:
-        with_cameras: true
+        # Wrist Pika cameras run on RT host (rt_stack / pika_camera_bringup).
+        with_cameras: false
         with_recorder: true
     owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
 
@@ -249,12 +250,14 @@ agents:
 
 sensors:
   cameras:
-    head_cam:
-      ros_topic: "/sensors/head_cam/color/image_raw"
-    left_wrist_cam:
-      ros_topic: "/sensors/left_wrist_cam/color/image_raw"
-    right_wrist_cam:
-      ros_topic: "/sensors/right_wrist_cam/color/image_raw"
+    left_pika_d405:
+      ros_topic: "/left_pika_d405/camera/color/image_raw"
+    left_pika_fisheye:
+      ros_topic: "/left_pika_fisheye/image_raw"
+    right_pika_d405:
+      ros_topic: "/right_pika_d405/camera/color/image_raw"
+    right_pika_fisheye:
+      ros_topic: "/right_pika_fisheye/image_raw"
 
 recorder:
   profile: "rmi_marvin_bimanual"
@@ -268,10 +271,22 @@ recorder:
 
 features:
   observation:
-    "observation.images.head_cam":
+    "observation.images.left_pika_d405":
       type: "image"
-      shape: [3, 480, 640]
-      source: "sensors.cameras.head_cam"
+      shape: [3, 480, 848]
+      source: "sensors.cameras.left_pika_d405"
+    "observation.images.left_pika_fisheye":
+      type: "image"
+      shape: [3, 720, 1280]
+      source: "sensors.cameras.left_pika_fisheye"
+    "observation.images.right_pika_d405":
+      type: "image"
+      shape: [3, 480, 848]
+      source: "sensors.cameras.right_pika_d405"
+    "observation.images.right_pika_fisheye":
+      type: "image"
+      shape: [3, 720, 1280]
+      source: "sensors.cameras.right_pika_fisheye"
     "observation.state":
       type: "vector"
       shape: [16]

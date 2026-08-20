@@ -134,8 +134,11 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
         "stale_error_ms",
         "max_joint_velocity",
         "load_pika_hardware",
+        "load_left_pika_hardware",
+        "load_right_pika_hardware",
+        "left_gripper_serial_port",
+        "right_gripper_serial_port",
     ):
-        assert f'LaunchConfiguration("{argument}")' in launch_source
         assert f'"{argument}"' in launch_source
 
 
@@ -146,6 +149,8 @@ def test_manipulation_xacro_is_owned_by_bringup() -> None:
     assert "marvin_manipulation_controller_bringup" in text
     assert "pika_gripper_description" in text
     assert "marvin_description" in text
+    assert 'name="left_gripper_serial_port"' in text
+    assert 'name="right_gripper_serial_port"' in text
 
 
 def _run_xacro(*args: str) -> str:
@@ -216,6 +221,22 @@ def test_load_pika_hardware_false_skips_gripper_ros2_control() -> None:
     assert len(controls) == 1
     names = {control.get("name") for control in controls}
     assert "LeftPikaGripperHardware" not in names
+    assert "RightPikaGripperHardware" not in names
+
+
+def test_load_right_pika_hardware_false_skips_only_right_gripper() -> None:
+    import xml.etree.ElementTree as ET
+
+    stdout = _run_xacro(
+        "ros2_control:=true",
+        "use_fake_hardware:=true",
+        "load_pika_hardware:=true",
+        "load_left_pika_hardware:=true",
+        "load_right_pika_hardware:=false",
+    )
+    root = ET.fromstring(stdout)
+    names = {control.get("name") for control in root.findall("ros2_control")}
+    assert "LeftPikaGripperHardware" in names
     assert "RightPikaGripperHardware" not in names
 
 

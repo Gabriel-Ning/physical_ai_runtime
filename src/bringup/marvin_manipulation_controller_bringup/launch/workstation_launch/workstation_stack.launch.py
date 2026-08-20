@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Launch the Workstation Peripherals Server Stack for Marvin Bimanual.
 
-Modularly aggregates Workstation hardware bringup:
-1. Perception Cameras (Head + Dual Wrist) (camera_bringup.launch.py)
-2. Optional C++ MCAP Episode Recorder backend (recorder_bringup.launch.py)
+Aggregates Workstation services:
+1. Optional C++ MCAP Episode Recorder backend (recorder_bringup.launch.py)
+2. Optional workstation RealSense bringup (camera_bringup.launch.py)
 """
 
 from __future__ import annotations
@@ -23,16 +23,22 @@ def generate_launch_description() -> LaunchDescription:
     default_stream_cfg = os.path.join(
         bringup_share, "config", "recording", "rmi_marvin_bimanual.yaml"
     )
+    default_camera_cfg = os.path.join(
+        bringup_share, "config", "camera", "workstation_realsense.yaml"
+    )
 
-    # 1. Perception Cameras Bringup
+    # 1. Workstation RealSense
     camera_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_share, "launch", "workstation_launch", "camera_bringup.launch.py")
         ),
         condition=IfCondition(LaunchConfiguration("with_cameras")),
+        launch_arguments={
+            "camera_config": LaunchConfiguration("camera_config"),
+        }.items(),
     )
 
-    # 2. Optional C++ MCAP Episode Recorder Server
+    # 2. C++ MCAP Episode Recorder Server
     recorder_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_share, "launch", "workstation_launch", "recorder_bringup.launch.py")
@@ -47,8 +53,13 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument(
                 "with_cameras",
-                default_value="true",
-                description="Whether to start the perception cameras.",
+                default_value="false",
+                description="Whether to start the workstation RealSense.",
+            ),
+            DeclareLaunchArgument(
+                "camera_config",
+                default_value=default_camera_cfg,
+                description="Path to workstation RealSense params YAML.",
             ),
             DeclareLaunchArgument(
                 "with_recorder",

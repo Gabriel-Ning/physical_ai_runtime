@@ -4,6 +4,9 @@
 
 Starts robot_state_publisher, ros2_control, and three inactive controller
 routes per arm. RMI execution services are composed by deployment launches.
+
+Site defaults for robot_ip / gripper serials match the URDF xacro defaults
+(gamma RT host); override via launch CLI when needed.
 """
 
 import os
@@ -55,12 +58,22 @@ def _controller_nodes(context: LaunchContext):
     cancel_response_timeout_s = float(
         LaunchConfiguration("jtc_guard_cancel_response_timeout_s").perform(context)
     )
-    load_pika = LaunchConfiguration("load_pika_hardware").perform(
-        context
-    ).strip().lower() in ("true", "1")
-    use_rviz = LaunchConfiguration("use_rviz").perform(context).strip().lower() in (
-        "true",
-        "1",
+    def _as_bool(name: str) -> bool:
+        return LaunchConfiguration(name).perform(context).strip().lower() in (
+            "true",
+            "1",
+        )
+
+    load_pika = _as_bool("load_pika_hardware")
+    load_left_pika = load_pika and _as_bool("load_left_pika_hardware")
+    load_right_pika = load_pika and _as_bool("load_right_pika_hardware")
+    use_rviz = _as_bool("use_rviz")
+    robot_ip = context.perform_substitution(LaunchConfiguration("robot_ip"))
+    left_serial = context.perform_substitution(
+        LaunchConfiguration("left_gripper_serial_port")
+    )
+    right_serial = context.perform_substitution(
+        LaunchConfiguration("right_gripper_serial_port")
     )
 
     robot_description_xacro = os.path.join(
@@ -84,7 +97,7 @@ def _controller_nodes(context: LaunchContext):
             "hardware_plugin": context.perform_substitution(
                 LaunchConfiguration("hardware_plugin")
             ),
-            "robot_ip": context.perform_substitution(LaunchConfiguration("robot_ip")),
+            "robot_ip": robot_ip,
             "stale_warn_ms": context.perform_substitution(
                 LaunchConfiguration("stale_warn_ms")
             ),
@@ -94,13 +107,11 @@ def _controller_nodes(context: LaunchContext):
             "max_joint_velocity": context.perform_substitution(
                 LaunchConfiguration("max_joint_velocity")
             ),
-            "left_gripper_serial_port": context.perform_substitution(
-                LaunchConfiguration("left_gripper_serial_port")
-            ),
-            "right_gripper_serial_port": context.perform_substitution(
-                LaunchConfiguration("right_gripper_serial_port")
-            ),
+            "left_gripper_serial_port": left_serial,
+            "right_gripper_serial_port": right_serial,
             "load_pika_hardware": "true" if load_pika else "false",
+            "load_left_pika_hardware": "true" if load_left_pika else "false",
+            "load_right_pika_hardware": "true" if load_right_pika else "false",
         },
     ).toprettyxml(indent="  ")
 
@@ -148,15 +159,15 @@ def _controller_nodes(context: LaunchContext):
         "--remap left_arm_jtc/follow_joint_trajectory:=/execution/left_arm/follow_joint_trajectory",
         "--remap right_arm_jtc/follow_joint_trajectory:=/execution/right_arm/follow_joint_trajectory",
     ]
-    if load_pika:
-        route_controllers.extend(
-            ["left_pika_gripper_fwd", "right_pika_gripper_fwd"]
+    if load_left_pika:
+        route_controllers.append("left_pika_gripper_fwd")
+        route_remaps.append(
+            "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference"
         )
-        route_remaps.extend(
-            [
-                "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference",
-                "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference",
-            ]
+    if load_right_pika:
+        route_controllers.append("right_pika_gripper_fwd")
+        route_remaps.append(
+            "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference"
         )
 
     route_controller_spawner = Node(
@@ -186,6 +197,13 @@ def _controller_nodes(context: LaunchContext):
 
     actions.extend(
         [
+            LogInfo(
+                msg=(
+                    f"Marvin bringup: robot_ip={robot_ip}, "
+                    f"left_gripper={'on:' + left_serial if load_left_pika else 'off'}, "
+                    f"right_gripper={'on:' + right_serial if load_right_pika else 'off'}."
+                )
+            ),
             robot_state_publisher,
             controller_manager,
             *[
@@ -303,26 +321,44 @@ def generate_launch_description() -> LaunchDescription:
                 ),
             ),
             DeclareLaunchArgument(
-                "left_gripper_serial_port", default_value="/dev/ttyUSB0"
+                "left_gripper_serial_port",
+                default_value="/dev/ttyUSB1",
+                description="Left Pika gripper serial (gamma default).",
             ),
             DeclareLaunchArgument(
-                "right_gripper_serial_port", default_value="/dev/ttyUSB1"
+                "right_gripper_serial_port",
+                default_value="/dev/ttyUSB0",
+                description="Right Pika gripper serial (gamma default).",
             ),
             DeclareLaunchArgument(
                 "load_pika_hardware",
                 default_value="true",
                 description=(
-                    "Load Pika ros2_control + left/right_pika_gripper_fwd. "
-                    "Set false when the grippers are not installed; "
+                    "Master switch for Pika ros2_control. "
+                    "Set false when no grippers are installed; "
                     "URDF/TCP stay for planning."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "load_left_pika_hardware",
+                default_value="true",
+                description=(
+                    "Load left Pika ros2_control + left_pika_gripper_fwd "
+                    "(requires load_pika_hardware:=true)."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "load_right_pika_hardware",
+                default_value="true",
+                description=(
+                    "Load right Pika ros2_control + right_pika_gripper_fwd "
+                    "(requires load_pika_hardware:=true)."
                 ),
             ),
             DeclareLaunchArgument(
                 "robot_ip",
                 default_value="10.19.0.191",
-                description=(
-                    "Marvin controller IP (used when use_fake_hardware:=false)."
-                ),
+                description="Marvin CCS controller IP.",
             ),
             DeclareLaunchArgument(
                 "stale_warn_ms",

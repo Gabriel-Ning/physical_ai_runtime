@@ -11,7 +11,8 @@
 
      Args: same stand/arm mounts as marvin.urdf.xacro, plus
        left_gripper_serial_port / right_gripper_serial_port /
-       load_pika_hardware (false skips Pika ros2_control; URDF/TCP stay)
+       load_pika_hardware (master; false skips all Pika ros2_control) /
+       load_left_pika_hardware / load_right_pika_hardware (per side; URDF/TCP stay)
 
      Actuated: left_/right_gripper_left_joint (right finger URDF-mimic). -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="marvin_manipulation">
@@ -28,13 +29,16 @@
   <xacro:arg name="ros2_control" default="true"/>
   <xacro:arg name="use_fake_hardware" default="true"/>
   <xacro:arg name="hardware_plugin" default="marvin_hardware_interface/MarvinBimanualArmHardware"/>
+  <!-- Site defaults for gamma RT host; override via launch CLI when cabling changes. -->
   <xacro:arg name="robot_ip" default="10.19.0.191"/>
   <xacro:arg name="stale_warn_ms" default="20.0"/>
   <xacro:arg name="stale_error_ms" default="100.0"/>
   <xacro:arg name="max_joint_velocity" default="6.2832"/>
-  <xacro:arg name="left_gripper_serial_port" default="/dev/ttyUSB0"/>
-  <xacro:arg name="right_gripper_serial_port" default="/dev/ttyUSB1"/>
+  <xacro:arg name="left_gripper_serial_port" default="/dev/ttyUSB1"/>
+  <xacro:arg name="right_gripper_serial_port" default="/dev/ttyUSB0"/>
   <xacro:arg name="load_pika_hardware" default="true"/>
+  <xacro:arg name="load_left_pika_hardware" default="true"/>
+  <xacro:arg name="load_right_pika_hardware" default="true"/>
   <!-- Pika TCP + finger limits owned by this bringup (edit config/model/*.yaml). -->
   <xacro:arg name="gripper_tcp_file"
     default="$(find marvin_manipulation_controller_bringup)/config/model/gripper_tcp.yaml"/>
@@ -86,18 +90,22 @@
       stale_error_ms="$(arg stale_error_ms)"
       max_joint_velocity="$(arg max_joint_velocity)"/>
     <xacro:if value="$(arg load_pika_hardware)">
-      <xacro:pika_gripper_ros2_control
-        name="LeftPikaGripperHardware"
-        prefix="left_"
-        serial_port="$(arg left_gripper_serial_port)"
-        joint_limits_file="$(arg gripper_joint_limits_file)"
-        use_fake_hardware="$(arg use_fake_hardware)"/>
-      <xacro:pika_gripper_ros2_control
-        name="RightPikaGripperHardware"
-        prefix="right_"
-        serial_port="$(arg right_gripper_serial_port)"
-        joint_limits_file="$(arg gripper_joint_limits_file)"
-        use_fake_hardware="$(arg use_fake_hardware)"/>
+      <xacro:if value="$(arg load_left_pika_hardware)">
+        <xacro:pika_gripper_ros2_control
+          name="LeftPikaGripperHardware"
+          prefix="left_"
+          serial_port="$(arg left_gripper_serial_port)"
+          joint_limits_file="$(arg gripper_joint_limits_file)"
+          use_fake_hardware="$(arg use_fake_hardware)"/>
+      </xacro:if>
+      <xacro:if value="$(arg load_right_pika_hardware)">
+        <xacro:pika_gripper_ros2_control
+          name="RightPikaGripperHardware"
+          prefix="right_"
+          serial_port="$(arg right_gripper_serial_port)"
+          joint_limits_file="$(arg gripper_joint_limits_file)"
+          use_fake_hardware="$(arg use_fake_hardware)"/>
+      </xacro:if>
     </xacro:if>
   </xacro:if>
 
