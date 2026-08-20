@@ -15,7 +15,7 @@ def generate_launch_description() -> LaunchDescription:
     )
     controller = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "controller_bringup.launch.py")
+            os.path.join(bringup_share, "launch", "rt_launch", "controller_bringup.launch.py")
         ),
         launch_arguments={
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),

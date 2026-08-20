@@ -10,7 +10,7 @@ target_link_libraries(clear_errors PRIVATE libmarvin::libmarvin)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
-  ament_add_pytest_test(test_server_contract test/test_server_contract.py)
+  ament_add_pytest_test(test_marvin_bringup_contract test/test_marvin_bringup_contract.py)
 endif()
 
 install(TARGETS clear_errors

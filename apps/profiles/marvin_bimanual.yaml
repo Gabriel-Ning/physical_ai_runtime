@@ -8,12 +8,18 @@ host_roles:
   rt_host:
     bringup:
       package: "marvin_manipulation_controller_bringup"
-      launch_file: "rt_stack.launch.py"
+      launch_file: "rt_launch/rt_stack.launch.py"
       arguments:
         use_fake_hardware: true
         use_rviz: false
     owns: ["ros2_control", "local_safety"]
   policy_host:
+    bringup:
+      package: "marvin_manipulation_controller_bringup"
+      launch_file: "workstation_launch/workstation_stack.launch.py"
+      arguments:
+        with_cameras: true
+        with_recorder: true
     owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
 
 groups:
@@ -245,22 +251,20 @@ sensors:
   cameras:
     head_cam:
       ros_topic: "/sensors/head_cam/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
     left_wrist_cam:
       ros_topic: "/sensors/left_wrist_cam/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
     right_wrist_cam:
       ros_topic: "/sensors/right_wrist_cam/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
+
+recorder:
+  profile: "rmi_marvin_bimanual"
+  root_dir: "data/episodes"
+  task: "bimanual_manipulation"
+  episodes: 5
+  rate_hz: 30.0
+  max_duration_s: 60.0
+  homing_duration_s: 3.0
+  home_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 features:
   observation:

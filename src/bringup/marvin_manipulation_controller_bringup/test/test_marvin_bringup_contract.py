@@ -96,7 +96,7 @@ def test_jtc_uses_validated_marvin_goal_constraints() -> None:
 
 def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
     launch_source = (
-        PACKAGE_ROOT / "launch" / "controller_bringup.launch.py"
+        PACKAGE_ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py"
     ).read_text(encoding="utf-8")
 
     assert '"--inactive"' in launch_source
@@ -148,23 +148,35 @@ def test_manipulation_xacro_is_owned_by_bringup() -> None:
     assert "marvin_description" in text
 
 
-def test_bimanual_manipulation_dual_pika_control_contract() -> None:
+def _run_xacro(*args: str) -> str:
+    import os
     import subprocess
-    import xml.etree.ElementTree as ET
+
+    env = dict(os.environ)
+    install_root = PACKAGE_ROOT.parents[2] / "install"
+    installed_prefixes = [str(p) for p in install_root.iterdir() if p.is_dir()] if install_root.is_dir() else []
+    existing_prefix = env.get("AMENT_PREFIX_PATH", "")
+    prefix_list = [p for p in installed_prefixes if p not in existing_prefix]
+    if existing_prefix:
+        prefix_list.append(existing_prefix)
+    env["AMENT_PREFIX_PATH"] = ":".join(prefix_list)
 
     xacro_path = PACKAGE_ROOT / "urdf" / "marvin_manipulation.urdf.xacro"
     result = subprocess.run(
-        [
-            "xacro",
-            str(xacro_path),
-            "ros2_control:=true",
-            "use_fake_hardware:=true",
-        ],
+        ["xacro", str(xacro_path), *args],
         check=True,
         capture_output=True,
         text=True,
+        env=env,
     )
-    root = ET.fromstring(result.stdout)
+    return result.stdout
+
+
+def test_bimanual_manipulation_dual_pika_control_contract() -> None:
+    import xml.etree.ElementTree as ET
+
+    stdout = _run_xacro("ros2_control:=true", "use_fake_hardware:=true")
+    root = ET.fromstring(stdout)
     links = {link.get("name") for link in root.findall("link")}
     joints = {joint.get("name"): joint for joint in root.findall("joint")}
     revolute = [
@@ -189,23 +201,14 @@ def test_bimanual_manipulation_dual_pika_control_contract() -> None:
 
 
 def test_load_pika_hardware_false_skips_gripper_ros2_control() -> None:
-    import subprocess
     import xml.etree.ElementTree as ET
 
-    xacro_path = PACKAGE_ROOT / "urdf" / "marvin_manipulation.urdf.xacro"
-    result = subprocess.run(
-        [
-            "xacro",
-            str(xacro_path),
-            "ros2_control:=true",
-            "use_fake_hardware:=true",
-            "load_pika_hardware:=false",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
+    stdout = _run_xacro(
+        "ros2_control:=true",
+        "use_fake_hardware:=true",
+        "load_pika_hardware:=false",
     )
-    root = ET.fromstring(result.stdout)
+    root = ET.fromstring(stdout)
     links = {link.get("name") for link in root.findall("link")}
     controls = root.findall("ros2_control")
 
@@ -248,7 +251,7 @@ def test_docs_do_not_point_at_removed_new_apps() -> None:
 
 
 def test_rt_stack_contains_only_rt_runtime_components() -> None:
-    source = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(
+    source = (PACKAGE_ROOT / "launch" / "rt_launch" / "rt_stack.launch.py").read_text(
         encoding="utf-8"
     )
     assert "controller_bringup.launch.py" in source

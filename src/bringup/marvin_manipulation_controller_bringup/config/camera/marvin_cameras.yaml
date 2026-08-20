@@ -1,0 +1,24 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+# Marvin Bimanual Perception Camera Parameters (Head Camera + Dual Wrist Cameras)
+
+head_cam:
+  ros__parameters:
+    camera_name: "head_cam"
+    color_profile: "640x480x30"
+    enable_color: true
+    enable_depth: false
+
+left_wrist_cam:
+  ros__parameters:
+    camera_name: "left_wrist_cam"
+    color_profile: "640x480x30"
+    enable_color: true
+    enable_depth: false
+
+right_wrist_cam:
+  ros__parameters:
+    camera_name: "right_wrist_cam"
+    color_profile: "640x480x30"
+    enable_color: true
+    enable_depth: false

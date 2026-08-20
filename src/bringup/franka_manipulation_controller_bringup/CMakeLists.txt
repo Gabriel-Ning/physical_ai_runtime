@@ -5,7 +5,7 @@ find_package(ament_cmake REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
-  ament_add_pytest_test(test_server_contract test/test_server_contract.py)
+  ament_add_pytest_test(test_franka_bringup_contract test/test_franka_bringup_contract.py)
 endif()
 
 install(DIRECTORY
