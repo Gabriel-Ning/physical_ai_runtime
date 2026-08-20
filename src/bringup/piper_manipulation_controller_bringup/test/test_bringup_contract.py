@@ -20,7 +20,7 @@ def test_controller_manager_uses_fifo_priority_98():
 
 def test_rt_profile_is_scoped_to_native_piper_grippers():
     controllers = yaml.safe_load((ROOT / "config" / "controller" / "controllers.yaml").read_text())
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
 
     assert "pika_gripper_fwd" not in controllers
     assert 'VALID_END_EFFECTORS = {"none", "piper_gripper"}' in launch
@@ -93,7 +93,7 @@ def test_jtc_cancel_deceleration_is_configured_per_joint():
 
 def test_launch_owns_no_robot_model():
     assert not (ROOT / "urdf").exists()
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     assert 'get_package_share_directory("piper_description")' in launch
     assert '"urdf", "piper_bimanual_manipulation.urdf.xacro"' in launch
     assert "piper_with_teach.urdf.xacro" not in launch
@@ -107,7 +107,7 @@ def test_launch_owns_no_robot_model():
 
 
 def test_deployment_choices_are_launch_arguments():
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     for argument in (
         "arms",
         "use_fake_hardware",
@@ -138,7 +138,7 @@ def test_deployment_choices_are_launch_arguments():
 
 
 def test_workcell_poses_defer_to_description_xacro():
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     docs = (ROOT / "docs" / "BRINGUP.md").read_text()
     for argument in (
         "table_xyz",
@@ -155,7 +155,7 @@ def test_workcell_poses_defer_to_description_xacro():
 
 
 def test_rviz_is_opt_in_and_reuses_description_package_config():
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     assert re.search(
         r'DeclareLaunchArgument\(\s*"use_rviz",\s*default_value="false"', launch
     )
@@ -164,7 +164,7 @@ def test_rviz_is_opt_in_and_reuses_description_package_config():
 
 
 def test_route_spawner_keeps_arm_and_gripper_routes_inactive_at_bringup():
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     assert 'for route in ("jspc", "tskpc", "jtc")' in launch
     assert "*gripper_controllers" in launch
     assert "/execution/{side}_gripper/joint_reference" in launch
@@ -173,7 +173,7 @@ def test_route_spawner_keeps_arm_and_gripper_routes_inactive_at_bringup():
 
 
 def test_rt_stack_contains_only_rt_runtime_components():
-    combo = (ROOT / "launch" / "rt_stack.launch.py").read_text()
+    combo = (ROOT / "launch" / "rt_launch" / "rt_stack.launch.py").read_text()
     assert "controller_bringup.launch.py" in combo
     assert "execution_manager.launch.py" not in combo
     assert 'get_package_share_directory("rmi")' not in combo
@@ -186,7 +186,7 @@ def test_rt_stack_contains_only_rt_runtime_components():
 
 
 def test_controller_bringup_still_leaves_em_to_rmi_deployment():
-    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    launch = (ROOT / "launch" / "rt_launch" / "controller_bringup.launch.py").read_text()
     assert "execution_manager.launch.py" not in launch
     assert "manipulation_execution_manager" not in launch
 

@@ -1,0 +1,27 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+# Piper Bimanual Camera Parameters (Static Orbbec + Dual Wrist RealSense D435)
+
+static_orbbec:
+  ros__parameters:
+    camera_name: "static_orbbec"
+    rgb_width: 640
+    rgb_height: 480
+    rgb_fps: 30
+    enable_color: true
+    enable_depth: true
+    enable_pointcloud: false
+
+left_hand_realsense:
+  ros__parameters:
+    camera_name: "left_hand_realsense"
+    color_profile: "640x480x30"
+    enable_color: true
+    enable_depth: false
+
+right_hand_realsense:
+  ros__parameters:
+    camera_name: "right_hand_realsense"
+    color_profile: "640x480x30"
+    enable_color: true
+    enable_depth: false

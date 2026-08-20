@@ -9,7 +9,6 @@ Layout::
     controllers.py   ros2_control + controller_manager clients
     provider.py      workstation ActionProviderClient
     execution.py     in-process ExecutionManager core
-    execution_client.py  EM service client
     sensing.py / planning.py / recording.py / replay.py
 """
 

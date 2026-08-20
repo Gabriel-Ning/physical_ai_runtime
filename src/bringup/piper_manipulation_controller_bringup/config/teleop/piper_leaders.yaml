@@ -1,0 +1,41 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+# Piper Bimanual Master-Slave Teleoperation Configuration
+
+piper_leader_left:
+  ros__parameters:
+    can_interface: can0
+    publish_rate_hz: 200.0
+    feedback_timeout_s: 0.1
+    mit_kd_effort_damping: 0.0
+    default_mode: shadow
+    fallback_mode: shadow
+    shadow_velocity_limit_rad_s: 2.5
+    follower_joint_state_topic: /joint_states
+    follower_joint_names: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    follower_gripper_joint_name: left_gripper_joint1
+    joint_names: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    gripper_joint_name: left_gripper_joint1
+    joint_reference_topic: /action_sources/piper_leader_left/arm/joint_reference
+    gripper_reference_topic: /action_sources/piper_leader_left/end_effector/joint_reference
+    status_topic: /teleop/piper_leader_left/status
+    pendant_state_topic: /teleop/piper_leader_left/pendant_state
+
+piper_leader_right:
+  ros__parameters:
+    can_interface: can1
+    publish_rate_hz: 200.0
+    feedback_timeout_s: 0.1
+    mit_kd_effort_damping: 0.0
+    default_mode: shadow
+    fallback_mode: shadow
+    shadow_velocity_limit_rad_s: 2.5
+    follower_joint_state_topic: /joint_states
+    follower_joint_names: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    follower_gripper_joint_name: right_gripper_joint1
+    joint_names: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    gripper_joint_name: right_gripper_joint1
+    joint_reference_topic: /action_sources/piper_leader_right/arm/joint_reference
+    gripper_reference_topic: /action_sources/piper_leader_right/end_effector/joint_reference
+    status_topic: /teleop/piper_leader_right/status
+    pendant_state_topic: /teleop/piper_leader_right/pendant_state

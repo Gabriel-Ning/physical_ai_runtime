@@ -6,9 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import signal
-import subprocess
 import sys
 import threading
 import time
@@ -36,69 +33,23 @@ def _run_sync(awaitable: Any, *, context: str = "synchronous RMI call") -> Any:
 # =============================================================================
 
 class ManagedRosRecorder:
-    """Manages the lifecycle of an offline C++ MCAP episode_recorder node."""
+    """Pure synchronous Client wrapper for an active C++ MCAP episode_recorder service."""
 
     def __init__(
         self,
         recorder_backend: Any,
         *,
-        autostart: bool = True,
+        autostart: bool = False,
         stream_config_uri: str | Path | None = None,
         node_name: str = "/episode_recorder",
     ) -> None:
         self._backend = recorder_backend
-        self._autostart = autostart
         self._stream_config_uri = str(stream_config_uri) if stream_config_uri else None
         self._node_name = node_name
-        self._subprocess: subprocess.Popen[bytes] | None = None
         self._active = False
-
-    def _ensure_service_running(self) -> None:
-        if not self._autostart:
-            return
-
-        client = getattr(self._backend, "_get_state", None)
-        if client is None and hasattr(self._backend, "_backend"):
-            client = getattr(self._backend._backend, "_get_state", None)
-
-        if client is not None and client.service_is_ready():
-            return
-
-        if self._stream_config_uri:
-            workspace_root = Path(__file__).resolve().parents[4]
-            setup_script = workspace_root / "install" / "setup.bash"
-            episodes_dir = workspace_root / "data" / "episodes"
-            episodes_dir.mkdir(parents=True, exist_ok=True)
-
-            domain_id = os.environ.get("ROS_DOMAIN_ID", "2")
-            if setup_script.is_file():
-                cmd = f"source '{setup_script}' && export ROS_DOMAIN_ID={domain_id} && exec ros2 launch episode_recorder recorder.launch.py stream_config_uri:='{self._stream_config_uri}' root_dir:='{episodes_dir}' experiment_name:='fr3_pika_policy'"
-            else:
-                cmd = f"export ROS_DOMAIN_ID={domain_id} && exec ros2 launch episode_recorder recorder.launch.py stream_config_uri:='{self._stream_config_uri}' root_dir:='{episodes_dir}' experiment_name:='fr3_pika_policy'"
-
-            _LOGGER.info("Autostarting episode_recorder launch backend: %s", cmd)
-            try:
-                self._subprocess = subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    executable="/bin/bash",
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    preexec_fn=os.setsid,
-                )
-                if client is not None:
-                    # Wait up to 8.0s for the ROS 2 lifecycle service to become active
-                    for _ in range(80):
-                        if client.wait_for_service(timeout_sec=0.1):
-                            time.sleep(0.5)
-                            break
-                        time.sleep(0.1)
-            except Exception as e:
-                _LOGGER.warning("Could not autostart episode_recorder process: %s", e)
 
     def activate(self) -> None:
         if not self._active:
-            self._ensure_service_running()
             _run_sync(self._backend.activate(), context="synchronous RMI recording")
             self._active = True
 
@@ -128,13 +79,7 @@ class ManagedRosRecorder:
         return _run_sync(self._backend.discard(), context="synchronous RMI recording")
 
     def close(self) -> None:
-        if self._subprocess is not None:
-            try:
-                os.killpg(os.getpgid(self._subprocess.pid), signal.SIGINT)
-                self._subprocess.wait(timeout=2.0)
-            except Exception:
-                pass
-            self._subprocess = None
+        pass
 
 
 class _FinalizeSpinner:

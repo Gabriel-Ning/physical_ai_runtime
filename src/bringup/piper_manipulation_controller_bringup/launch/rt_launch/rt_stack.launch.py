@@ -13,7 +13,7 @@ def generate_launch_description() -> LaunchDescription:
     bringup_share = get_package_share_directory("piper_manipulation_controller_bringup")
     controller = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "controller_bringup.launch.py")
+            os.path.join(bringup_share, "launch", "rt_launch", "controller_bringup.launch.py")
         ),
         launch_arguments={
             "arms": "both",

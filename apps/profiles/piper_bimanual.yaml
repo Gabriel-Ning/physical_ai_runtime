@@ -8,18 +8,20 @@ host_roles:
   rt_host:
     bringup:
       package: "piper_manipulation_controller_bringup"
-      launch_file: "rt_stack.launch.py"
+      launch_file: "rt_launch/rt_stack.launch.py"
       arguments:
-        arms: "both"
-        left_can_interface: "piper0"
-        right_can_interface: "piper1"
         left_end_effector: "piper_gripper"
         right_end_effector: "piper_gripper"
-        use_fake_hardware: true
-        use_rviz: false
     owns: ["ros2_control", "local_safety"]
   policy_host:
-    owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
+    bringup:
+      package: "piper_manipulation_controller_bringup"
+      launch_file: "workstation_launch/workstation_stack.launch.py"
+      arguments:
+        with_cameras: true
+        with_leaders: true
+        with_recorder: true
+    owns: ["sensors", "teleoperators", "rmi", "execution_manager", "episode_recorder_client"]
 
 groups:
   left_arm:
@@ -250,30 +252,14 @@ sensors:
   cameras:
     static_orbbec:
       ros_topic: "/observation/static_orbbec/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
-      frame_id: "static_orbbec_color_optical_frame"
     left_wrist_cam:
       ros_topic: "/observation/left_hand_realsense/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
-      frame_id: "left_hand_realsense_color_optical_frame"
     right_wrist_cam:
       ros_topic: "/observation/right_hand_realsense/color/image_raw"
-      encoding: "rgb8"
-      fps: 30
-      resolution: [480, 640]
-      qos_profile: "sensor_data"
-      frame_id: "right_hand_realsense_color_optical_frame"
 
 recorder:
   profile: "rmi_piper_bimanual"
   root_dir: "data/episodes"
-  experiment_name: "piper_bimanual_teleop"
   task: "bimanual_manipulation"
   episodes: 5
   rate_hz: 50.0
@@ -283,33 +269,19 @@ recorder:
 
 teleoperators:
   left_leader:
-    type: "piper_leader"
-    side: "left"
-    can_interface: "can0"
-    publish_rate_hz: 200.0
-    rate_hz: 200.0
-    enable_service: "/piper_leader_left/enable"
-    preempt_service: "/piper_leader_left/preempt"
-    status_topic: "/teleop/piper_leader_left/status"
-    arm_source: "/action_sources/piper_leader_left/arm/joint_reference"
-    gripper_source: "/action_sources/piper_leader_left/end_effector/joint_reference"
+    target_agent: "TeleopJoint_Left"
     arm_part: "left_arm"
     gripper_part: "left_gripper"
-    target_agent: "TeleopJoint_Left"
+    arm_source: "/action_sources/piper_leader_left/arm/joint_reference"
+    gripper_source: "/action_sources/piper_leader_left/end_effector/joint_reference"
+    preempt_service: "/piper_leader_left/preempt"
   right_leader:
-    type: "piper_leader"
-    side: "right"
-    can_interface: "can1"
-    publish_rate_hz: 200.0
-    rate_hz: 200.0
-    enable_service: "/piper_leader_right/enable"
-    preempt_service: "/piper_leader_right/preempt"
-    status_topic: "/teleop/piper_leader_right/status"
-    arm_source: "/action_sources/piper_leader_right/arm/joint_reference"
-    gripper_source: "/action_sources/piper_leader_right/end_effector/joint_reference"
+    target_agent: "TeleopJoint_Right"
     arm_part: "right_arm"
     gripper_part: "right_gripper"
-    target_agent: "TeleopJoint_Right"
+    arm_source: "/action_sources/piper_leader_right/arm/joint_reference"
+    gripper_source: "/action_sources/piper_leader_right/end_effector/joint_reference"
+    preempt_service: "/piper_leader_right/preempt"
 
 features:
   observation:

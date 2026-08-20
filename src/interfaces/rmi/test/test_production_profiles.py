@@ -14,7 +14,7 @@ PRODUCTION_PROFILE_NAMES = {
 
 
 def _controllers(app: str) -> dict:
-    path = ROOT / "src" / "rt_launch" / app / "config" / "controller" / "controllers.yaml"
+    path = ROOT / "src" / "bringup" / app / "config" / "controller" / "controllers.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
@@ -226,12 +226,23 @@ def test_dual_piper_native_gripper_profile_matches_controller_contracts():
 def test_piper_leader_configs_match_teleop_provider_ingress():
     config = EmbodimentConfig.from_yaml(PROFILES / "piper_bimanual.yaml")
     teleop_defs = config.raw_data.get("teleoperators", {})
+    leader_cfg_path = (
+        ROOT
+        / "src"
+        / "bringup"
+        / "piper_manipulation_controller_bringup"
+        / "config"
+        / "teleop"
+        / "piper_leaders.yaml"
+    )
+    leader_hardware = yaml.safe_load(leader_cfg_path.read_text(encoding="utf-8"))
 
     for side, provider in (
         ("left", "TeleopJoint_Left"),
         ("right", "TeleopJoint_Right"),
     ):
         leader = teleop_defs[f"{side}_leader"]
+        leader_params = leader_hardware[f"piper_leader_{side}"]["ros__parameters"]
         sources = {
             source["part"]: source["topic"]
             for source in config.execution["sources"]
@@ -243,9 +254,8 @@ def test_piper_leader_configs_match_teleop_provider_ingress():
         assert leader["gripper_source"] == (
             f"/action_sources/piper_leader_{side}/end_effector/joint_reference"
         )
-        assert leader["publish_rate_hz"] == 200.0
-        assert leader["rate_hz"] == 200.0
-        assert leader["can_interface"] == ("can0" if side == "left" else "can1")
+        assert leader_params["publish_rate_hz"] == 200.0
+        assert leader_params["can_interface"] == ("can0" if side == "left" else "can1")
         assert sources[f"{side}_arm"] == f"/execution/{side}_arm/joint_reference"
         assert sources[f"{side}_gripper"] == (
             f"/execution/{side}_gripper/joint_reference"

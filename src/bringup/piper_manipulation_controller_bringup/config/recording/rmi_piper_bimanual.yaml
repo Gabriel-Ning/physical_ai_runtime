@@ -52,27 +52,28 @@ streams:
     qos:
       mode: sensor_data
 
-  # Cameras temporarily omitted for motor-only demonstration testing:
-  # - id: static_orbbec_color
-  #   topic: /observation/static_orbbec/color/image_raw
-  #   expected_type: sensor_msgs/msg/Image
-  #   required: false
-  #   start_gate: false
-  #   qos:
-  #     mode: sensor_data
-  #
-  # - id: left_wrist_realsense_color
-  #   topic: /observation/left_hand_realsense/color/image_raw
-  #   expected_type: sensor_msgs/msg/Image
-  #   required: false
-  #   start_gate: false
-  #   qos:
-  #     mode: sensor_data
-  #
-  # - id: right_wrist_realsense_color
-  #   topic: /observation/right_hand_realsense/color/image_raw
-  #   expected_type: sensor_msgs/msg/Image
-  #   required: false
-  #   start_gate: false
-  #   qos:
-  #     mode: sensor_data
+  # Cameras observation streams:
+  - id: static_orbbec_color
+    topic: /observation/static_orbbec/color/image_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+
+  - id: left_wrist_realsense_color
+    topic: /observation/left_hand_realsense/color/image_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+
+  - id: right_wrist_realsense_color
+    topic: /observation/right_hand_realsense/color/image_raw
+    expected_type: sensor_msgs/msg/Image
+    required: false
+    start_gate: false
+    qos:
+      mode: sensor_data
+

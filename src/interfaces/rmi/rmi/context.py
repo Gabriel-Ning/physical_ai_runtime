@@ -385,7 +385,7 @@ class Context:
                 if bringup_pkg:
                     candidate = (
                         Path(__file__).resolve().parents[3]
-                        / "rt_launch"
+                        / "bringup"
                         / bringup_pkg
                         / "config"
                         / "recording"

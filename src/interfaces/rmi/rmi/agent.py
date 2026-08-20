@@ -14,7 +14,7 @@ from sensor_msgs.msg import JointState as RosJointState
 from .config import EmbodimentConfig
 from .contracts import Action, ControlDiagnostics, Observation
 from .controllers import TrajectoryCanceledError
-from .execution_client import ExecutionManagerClient
+from .execution import LocalExecutionManager as ExecutionManagerClient
 from .provider import ActionProviderClient
 from .sensing import Sensor
 
