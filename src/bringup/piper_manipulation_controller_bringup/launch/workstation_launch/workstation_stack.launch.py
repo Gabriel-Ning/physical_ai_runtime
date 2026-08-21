@@ -62,6 +62,9 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "stream_config_uri": LaunchConfiguration("recording_stream_config"),
+            "root_dir": LaunchConfiguration("recording_root_dir"),
+            "experiment_name": LaunchConfiguration("recording_experiment_name"),
+            "task": LaunchConfiguration("recording_task"),
         }.items(),
         condition=IfCondition(LaunchConfiguration("with_recorder")),
     )
@@ -92,6 +95,21 @@ def generate_launch_description() -> LaunchDescription:
                 "recording_stream_config",
                 default_value=default_stream_cfg,
                 description="Stream contract YAML configuration for MCAP recording.",
+            ),
+            DeclareLaunchArgument(
+                "recording_root_dir",
+                default_value="data/episodes",
+                description="Root output directory for recorded episodes.",
+            ),
+            DeclareLaunchArgument(
+                "recording_experiment_name",
+                default_value="piper_bimanual",
+                description="Directory name for this recording task/experiment.",
+            ),
+            DeclareLaunchArgument(
+                "recording_task",
+                default_value="bimanual_manipulation",
+                description="Default task label stored in the episode metadata.",
             ),
             DeclareLaunchArgument(
                 "left_leader_can",

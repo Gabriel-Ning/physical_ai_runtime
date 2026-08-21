@@ -41,7 +41,7 @@ Interactive demonstration data collection workflow with **Quintic Spline Staging
 
 ```bash
 # Record 10 bimanual demonstrations (default 50 Hz):
-pixi run record --profile piper_bimanual.yaml --task bimanual_pickup --episodes 10
+pixi run record --profile piper_bimanual.yaml --task 任务名 --episodes 10
 
 # Custom staging duration and task:
 pixi run record --task cup_stacking --homing-duration 2.5 --rate-hz 50.0
@@ -88,6 +88,30 @@ pixi run record --task cup_stacking --homing-duration 2.5 --rate-hz 50.0
    * `[R]eplay`: Re-execute recorded trajectory on follower while leader mirrors in Shadow mode.
    * `[Q]uit`: Safely conclude the dataset session.
 
+### Convert MCAP to LeRobotDataset v3.0 (30 Hz)
+
+采集完成后，可把一个 episode 转换为 30 Hz、三路 H.264 RGB 视频、14 维
+`observation.state` / `action` 的 LeRobotDataset v3.0：
+
+```bash
+pixi run lerobot-convert -- \
+    --episode data/episodes/piper_bimanual/episode_000012 \
+    --output /home/alpha/lerobot_train/任务名
+```
+
+批量转换所有已完成 episode：
+
+```bash
+pixi run lerobot-convert -- \
+    --all \
+    --episodes-root data/episodes/piper_bimanual \
+    --output /home/alpha/lerobot_train/任务名
+```
+
+脚本会自动跳过已经转换过的源 episode，并在 LeRobot 重新加载时验证帧数和
+state/action shape。若不指定--output data/lerobot/piper_bimanual_v3,数据默认储存在：/home/alpha/physical_ai_runtime/data/lerobot/piper_bimanual_v3
+
+
 ---
 
 ## 3. `pixi run replay` — 1:1 Native Trajectory Replayer
@@ -100,7 +124,7 @@ pixi run replay --profile piper_bimanual.yaml
 
 # Replay specific MCAP episode:
 pixi run replay --profile piper_bimanual.yaml \
-    --mcap-file data/episodes/piper_bimanual_teleop/episode_000001.mcap
+    --mcap-file data/episodes/piper_bimanual/episode_000001
 ```
 
 ---

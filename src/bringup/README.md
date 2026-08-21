@@ -85,18 +85,26 @@ pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_c
 
 Workstation peripherals can be launched using either of the two standard workflows:
 
-#### 方式 1: 一键聚合启动（默认全开：3路相机 + 2个示教主臂 + MCAP录制服务）
+#### 方式 1: 一键聚合启动（3路本地相机 + 2个示教主臂 + MCAP录制服务）
 ```bash
-# 启动工作站全部外设与录制服务（with_cameras=true, with_leaders=true, with_recorder=true）:
-pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup workstation_stack.launch.py'
+# 启动静态 Orbbec、左右手腕 D435i、双示教主臂和 MCAP 录制服务。
+# 将“新任务名”替换为本次采集的任务名，例如 pick_and_place：
+pixi run bash -lc 'source install/setup.bash && ros2 launch \
+  piper_manipulation_controller_bringup workstation_stack.launch.py \
+  recording_experiment_name:=新任务名 \
+  recording_task:=新任务名'
 ```
+
+`recording_experiment_name` 决定数据目录名，`recording_task` 保存为 episode
+元数据中的任务标签。
+所有相机均在本机启动，并发布到 `/observation/...`，供 RViz、RMI 和录制服务订阅。
 
 #### 方式 2: 分别独立启动常驻服务（适用于分终端或容器化部署）
 ```bash
 # 1. 静态 Orbbec 顶视/前视相机服务 -> /observation/static_orbbec/...
 pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup orbbec_camera_bringup.launch.py'
 
-# 2. 左右手腕双 RealSense D435 相机服务 -> /observation/{left,right}_hand_realsense/...
+# 2. 本机启动左右手腕双 RealSense D435i -> /observation/{left,right}_hand_realsense/...
 pixi run bash -lc 'source install/setup.bash && ros2 launch piper_manipulation_controller_bringup realsense_camera_bringup.launch.py'
 
 # 3. 左右双臂 Piper 示教主臂服务 (can0, can1) -> /action_sources/piper_leader_{left,right}/...
@@ -124,4 +132,38 @@ pixi run bash -lc 'source install/setup.bash && python3 "$(ros2 pkg prefix piper
 
 可通过 `--duration 60 --report-period 10` 修改采样时长和中间进度输出周期。任一相机在采样期内没有收到图像时，脚本会显示 `NO DATA` 并以非零状态退出。
 
-这里的“延迟”是同一主机上从 `Image.header.stamp` 到 ROS 订阅回调的时间差，反映驱动发布与 DDS 传输后的消息到达情况；它不是从曝光到主机的完整硬件端到端延迟。三路相机应运行在同一台主机并使用同步的系统时钟。Orbbec 配置已经改为使用主机 realtime 时间戳，使该指标能与 RealSense 的输出进行比较。
+这里的“延迟”是从 `Image.header.stamp` 到本机 ROS 订阅回调的时间差，反映驱动发布与 DDS 传输后的消息到达情况；它不是从曝光到主机的完整硬件端到端延迟。默认脚本会同时订阅三路相机；三路相机连接在本机时无需跨主机对时。若把相机驱动放到另一台主机，两个主机必须先完成 chrony 对时，详见 [`docs/CLOCK_SYNC.md`](../../docs/CLOCK_SYNC.md)。
+
+### Orbbec 采集到驱动主机的时间
+
+此命令直接使用 Orbbec SDK 比较同一帧的设备采集时间（global timestamp）与主机收到帧的时间（system timestamp）。它会独占 USB 相机，因此先停止 Orbbec ROS 驱动；测量完成后再重新启动 `orbbec_camera_bringup.launch.py`。
+
+```bash
+pixi run bash -lc 'source install/setup.bash && ros2 run piper_manipulation_controller_bringup orbbec_capture_latency --samples 300'
+```
+
+输出的 `global -> system` 即为相机采集到驱动主机收到完整帧的时间；如果设备不支持 global timestamp，工具会明确退出而不会给出错误数值。
+
+### D435i 采集到驱动主机的时间
+
+同样先停止 RealSense ROS 驱动。工具以相机曝光中点为起点，以 librealsense 在主机用户态的到达时间为终点，并会临时启用 RealSense 的 global-time 校正。两台 D435i 需分别执行：
+
+```bash
+pixi run bash -lc 'source install/setup.bash && ros2 run piper_manipulation_controller_bringup d435i_capture_latency --serial 332522075913 --samples 300'
+pixi run bash -lc 'source install/setup.bash && ros2 run piper_manipulation_controller_bringup d435i_capture_latency --serial 332322073584 --samples 300'
+```
+
+---
+
+## 5. 相机本地/远程测量记录（2026-08-20）
+
+最终部署决定：三台相机均直连本地工作站。下表保留本次本地与 `delta` 远程主机试验数据，便于后续重新评估。除“SDK 采集到主机”外，所有数值都是 `Image.header.stamp -> ROS 订阅回调`；远程“附加时间”是同一次配置下的 `本地回调均值 - delta 本机回调均值`，包括 DDS 发布、网线、本地 DDS 接收与调度，并非纯网线时延。
+
+| 相机 / 配置 | 本地直连测量 | 相机接 `delta`：delta 本机回调 | 相机接 `delta`：本地回调 | `delta -> 本地` 附加时间 |
+| --- | ---: | ---: | ---: | ---: |
+| Orbbec Femto Bolt，彩色 1280×720@30 | SDK 采集到主机：65.56 ms；ROS 回调：76.50 ms | 576.50 ms | 588.25 ms | 11.75 ms |
+| D435i `332522075913`，彩色 1280×720@30 | — | 39.48 ms | 46.97 ms | 7.49 ms |
+| D435i `332522075913`，彩色 640×480@30 | SDK 曝光中点到主机：13.08 ms | 34.93 ms | 37.93 ms | 3.00 ms |
+| D435i `332322073584`，彩色 640×480@30 | SDK 曝光中点到主机：25.81 ms | 未测 | 未测 | 未测 |
+
+Orbbec 远程配置同时开启了彩色、深度和 IR，出现了约 576 ms 的驱动侧延迟；这不是网线导致。D435i 的远程 640×480 试验中，跨机附加均值约 3 ms，低于 1280×720 的约 7.5 ms。表中不同分辨率、流配置或测量方法的“总延迟”不能直接横向比较；只有同一行的远程附加时间可用于判断网络代价。
