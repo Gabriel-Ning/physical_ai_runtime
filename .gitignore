@@ -82,6 +82,8 @@ examples/
 
 /src/toolbox/**
 !/src/toolbox/.gitkeep
+!/src/toolbox/mjpeg_cam/
+!/src/toolbox/mjpeg_cam/**
 
 /src/visualization/**
 !/src/visualization/.gitkeep

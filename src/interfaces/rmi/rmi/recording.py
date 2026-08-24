@@ -1,6 +1,11 @@
 # Copyright 2026 Gabriel-Ning
 # SPDX-License-Identifier: Apache-2.0
-"""Episode recorder wrappers for offline MCAP persistence and online RL replay."""
+"""Episode persistence and online RL transition buffers.
+
+``EpisodeRecorder`` is the client for the independent MCAP episode_recorder
+service. ``MemoryReplayBuffer`` stores paired observation/action transitions
+for a later gym env / RL training loop. They are separate products.
+"""
 
 from __future__ import annotations
 
@@ -11,9 +16,8 @@ import threading
 import time
 from collections import deque
 from collections.abc import Mapping
-from pathlib import Path
 from types import TracebackType
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,26 +36,70 @@ def _run_sync(awaitable: Any, *, context: str = "synchronous RMI call") -> Any:
 # Mode 1: MCAP Transactional Recorder (Managed ROS 2 C++ Node Backend)
 # =============================================================================
 
-class ManagedRosRecorder:
-    """Pure synchronous Client wrapper for an active C++ MCAP episode_recorder service."""
+class RecorderServiceClient(Protocol):
+    """Service-client contract implemented by the episode_recorder SDK."""
+
+    async def activate(self) -> Any: ...
+
+    async def prepare(self) -> Any: ...
+
+    async def wait_ready(self, *, timeout_s: float) -> Any: ...
+
+    async def get_status(self) -> Any: ...
+
+    async def start_recording(
+        self, *, task: str, manifest_context: Mapping[str, Any]
+    ) -> Any: ...
+
+    async def stop_recording(self, *, timeout_s: float) -> Any: ...
+
+    async def discard(self) -> Any: ...
+
+    async def close(self) -> Any: ...
+
+
+class EpisodeRecorder:
+    """Synchronous client for an active C++ MCAP episode_recorder service."""
 
     def __init__(
         self,
-        recorder_backend: Any,
+        recorder_client: RecorderServiceClient,
         *,
         autostart: bool = False,
-        stream_config_uri: str | Path | None = None,
         node_name: str = "/episode_recorder",
     ) -> None:
-        self._backend = recorder_backend
-        self._stream_config_uri = str(stream_config_uri) if stream_config_uri else None
+        self._client = recorder_client
         self._node_name = node_name
         self._active = False
 
     def activate(self) -> None:
         if not self._active:
-            _run_sync(self._backend.activate(), context="synchronous RMI recording")
+            _run_sync(self._client.activate(), context="synchronous RMI recording")
+            _run_sync(self._client.prepare(), context="synchronous RMI recording")
             self._active = True
+
+    def prepare(self) -> None:
+        self.activate()
+
+    def wait_ready(self, *, timeout_s: float = 2.0) -> Any:
+        self.activate()
+        return _run_sync(
+            self._client.wait_ready(timeout_s=timeout_s),
+            context="synchronous RMI recording",
+        )
+
+    def __enter__(self) -> Self:
+        self.activate()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        del exc_type, exc, traceback
+        self.close()
 
     def episode(
         self,
@@ -71,15 +119,17 @@ class ManagedRosRecorder:
     def status(self) -> Any:
         self.activate()
         return _run_sync(
-            self._backend.get_status(), context="synchronous RMI recording"
+            self._client.get_status(), context="synchronous RMI recording"
         )
 
     def discard(self) -> Any:
         self.activate()
-        return _run_sync(self._backend.discard(), context="synchronous RMI recording")
+        return _run_sync(self._client.discard(), context="synchronous RMI recording")
 
     def close(self) -> None:
-        pass
+        if self._active:
+            _run_sync(self._client.close(), context="synchronous RMI recording")
+            self._active = False
 
 
 class _FinalizeSpinner:
@@ -134,7 +184,7 @@ class EpisodeScope:
 
     def __init__(
         self,
-        recorder: ManagedRosRecorder,
+        recorder: EpisodeRecorder,
         *,
         task: str,
         metadata: Mapping[str, Any],
@@ -159,7 +209,7 @@ class EpisodeScope:
         if self.discarded:
             return self.final_status
         self.final_status = _run_sync(
-            self._recorder._backend.discard(),
+            self._recorder._client.discard(),
             context="synchronous RMI recording",
         )
         self.discarded = True
@@ -170,7 +220,7 @@ class EpisodeScope:
             raise RuntimeError("episode scope is already entered")
         self._recorder.activate()
         self.started_status = _run_sync(
-            self._recorder._backend.start_recording(
+            self._recorder._client.start_recording(
                 task=self.task,
                 manifest_context=self.metadata,
             ),
@@ -196,7 +246,7 @@ class EpisodeScope:
                     _LOGGER.warning("Exception in recording scope: %s", exc)
                 try:
                     self.final_status = _run_sync(
-                        self._recorder._backend.discard(),
+                        self._recorder._client.discard(),
                         context="synchronous RMI recording",
                     )
                     self.discarded = True
@@ -208,7 +258,7 @@ class EpisodeScope:
             elif exc_type is None and not self.discarded:
                 with _FinalizeSpinner("Writing MCAP index, SHA-256 checksums & finalizing episode..."):
                     self.final_status = _run_sync(
-                        self._recorder._backend.stop_recording(
+                        self._recorder._client.stop_recording(
                             timeout_s=self.stop_timeout
                         ),
                         context="synchronous RMI recording",
@@ -222,7 +272,11 @@ class EpisodeScope:
 # =============================================================================
 
 class MemoryReplayBuffer:
-    """In-memory experience replay ring buffer for online RL training."""
+    """In-memory paired (observation, action) buffer for gym env / RL training.
+
+    Distinct from :class:`EpisodeRecorder`, which writes high-quality MCAP
+    episodes to disk. This buffer never persists a dataset.
+    """
 
     def __init__(self, capacity: int = 100_000) -> None:
         self.capacity = capacity
@@ -238,7 +292,7 @@ class MemoryReplayBuffer:
     ) -> MemoryEpisodeScope:
         return MemoryEpisodeScope(self, task=task, metadata=metadata or {})
 
-    def add(
+    def step(
         self,
         observation: Any,
         action: Any,
@@ -247,7 +301,7 @@ class MemoryReplayBuffer:
         done: bool = False,
         info: dict[str, Any] | None = None,
     ) -> None:
-        """Add a single transition tuple to the active replay buffer."""
+        """Append one paired observation/action transition."""
         entry = {
             "observation": observation,
             "action": action,
@@ -260,25 +314,6 @@ class MemoryReplayBuffer:
         self.buffer.append(entry)
         self._current_episode.append(entry)
 
-    def step(
-        self,
-        observation: Any,
-        action: Any,
-        reward: float = 0.0,
-        next_observation: Any | None = None,
-        done: bool = False,
-        info: dict[str, Any] | None = None,
-    ) -> None:
-        """Convenience alias for add() matching Gym step contract."""
-        self.add(
-            observation=observation,
-            action=action,
-            reward=reward,
-            next_observation=next_observation,
-            done=done,
-            info=info,
-        )
-
     def sample(self, batch_size: int) -> list[dict[str, Any]]:
         """Randomly sample a batch of transitions for policy updates."""
         import random
@@ -288,6 +323,11 @@ class MemoryReplayBuffer:
 
     def __len__(self) -> int:
         return len(self.buffer)
+
+    @property
+    def last_episode(self) -> tuple[dict[str, Any], ...]:
+        """Transitions recorded in the most recently closed episode scope."""
+        return tuple(self._current_episode)
 
     def close(self) -> None:
         pass
@@ -316,7 +356,7 @@ class MemoryEpisodeScope:
         done: bool = False,
         info: dict[str, Any] | None = None,
     ) -> None:
-        self.buffer.add(
+        self.buffer.step(
             observation=observation,
             action=action,
             reward=reward,
@@ -334,13 +374,10 @@ class MemoryEpisodeScope:
         del exc_type, exc, traceback
 
 
-# Backward compatible aliases
-Recorder = ManagedRosRecorder
-
 __all__ = [
+    "EpisodeRecorder",
     "EpisodeScope",
-    "ManagedRosRecorder",
     "MemoryEpisodeScope",
     "MemoryReplayBuffer",
-    "Recorder",
+    "RecorderServiceClient",
 ]

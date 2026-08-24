@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>piper_manipulation_workstation_launch</name>
+  <version>0.1.0</version>
+  <description>
+    Piper workstation bringup: Execution Manager, recorder, Orbbec/RealSense cameras, and leader teleop.
+  </description>
+  <maintainer email="guomning@gmail.com">Gabriel-Ning</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>episode_recorder</exec_depend>
+  <exec_depend>execution_manager</exec_depend>
+  <exec_depend>execution_manager_interfaces</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>orbbec_camera</exec_depend>
+  <exec_depend>piper_leader_teleop</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>control_msgs</test_depend>
+  <test_depend>controller_manager_msgs</test_depend>
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>rclpy</test_depend>
+  <test_depend>std_msgs</test_depend>
+  <test_depend>trajectory_msgs</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Generic, TypeVar
 
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage, Image
 
 from .config import CameraSensorConfig
 
@@ -160,9 +160,11 @@ class Sensor(Generic[ValueT]):
 class Camera(Sensor[ValueT]):
     """Timestamp-preserving camera stream.
 
-    The default value is the original ``sensor_msgs/Image`` to avoid an
-    implicit full-frame copy. Applications may inject a converter for NumPy,
-    Torch, or another policy-native representation.
+    The default value is the original ROS image message to avoid an implicit
+    full-frame copy. ``encoding: jpeg`` (also ``jpg`` / ``mjpeg``) subscribes
+    to ``sensor_msgs/CompressedImage``; otherwise ``sensor_msgs/Image``.
+    Applications may inject a converter for NumPy, Torch, or another
+    policy-native representation.
     """
 
     def __init__(
@@ -170,7 +172,7 @@ class Camera(Sensor[ValueT]):
         config: CameraSensorConfig,
         node: Any,
         *,
-        converter: Callable[[Image], ValueT] | None = None,
+        converter: Callable[[Any], ValueT] | None = None,
         history_size: int = 8,
     ) -> None:
         self.config = config
@@ -178,7 +180,7 @@ class Camera(Sensor[ValueT]):
             name=config.name,
             node=node,
             topic=config.ros_topic,
-            message_type=Image,
+            message_type=_camera_message_type(config.encoding),
             converter=converter,
             history_size=history_size,
             qos=qos_profile_sensor_data,
@@ -191,6 +193,15 @@ class Camera(Sensor[ValueT]):
 
 def _identity(value: ValueT) -> ValueT:
     return value
+
+
+_COMPRESSED_ENCODINGS = frozenset({"jpeg", "jpg", "mjpeg"})
+
+
+def _camera_message_type(encoding: str) -> Any:
+    if encoding.lower() in _COMPRESSED_ENCODINGS:
+        return CompressedImage
+    return Image
 
 
 def _node_now_s(node: Any) -> float:

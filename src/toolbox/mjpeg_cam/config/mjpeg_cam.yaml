@@ -1,0 +1,20 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Template parameters for mjpeg_cam_node. Copy into a robot bringup package and
+# override video_device / frame_id / camera_name. `/**` applies under any
+# namespace so this file can be loaded as-is.
+#
+#   ros2 launch mjpeg_cam mjpeg_cam.launch.py \
+#     video_device:=/dev/fisheye0 namespace:=left_pika_fisheye
+
+/**:
+  ros__parameters:
+    video_device: "/dev/video0"
+    frame_id: "camera_optical_frame"
+    image_width: 1280
+    image_height: 720
+    framerate: 30.0
+    compressed_topic: "image/compressed"
+    format: "jpeg"
+    camera_name: ""

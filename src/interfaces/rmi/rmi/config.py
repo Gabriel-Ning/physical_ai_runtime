@@ -52,10 +52,11 @@ class CameraSensorConfig:
 
 @dataclass(frozen=True)
 class AgentConfig:
-    """Application scheduling defaults for one EM provider-backed Agent."""
+    """Application defaults for one dynamically claimed action source."""
 
     name: str
-    provider: str
+    source_role: str
+    resources: dict[str, str]
     frequency: float | None = None
 
 
@@ -68,7 +69,6 @@ class EmbodimentConfig:
     groups: dict[str, tuple[str, ...]] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     host_roles: dict[str, dict[str, Any]] = field(default_factory=dict)
-    execution: dict[str, Any] = field(default_factory=dict)
     cameras: dict[str, CameraSensorConfig] = field(default_factory=dict)
     agents: dict[str, AgentConfig] = field(default_factory=dict)
     recording: dict[str, Any] = field(default_factory=dict)
@@ -117,48 +117,25 @@ class EmbodimentConfig:
             return joints
         return []
 
-    def get_action_endpoint(
-        self, part: str, command: str, *, provider: str | None = None
-    ) -> str | None:
-        return self._source_endpoint(part, command, "action", provider=provider)
-
-    def get_topic_endpoint(
-        self, part: str, command: str, *, provider: str | None = None
-    ) -> str | None:
-        return self._source_endpoint(part, command, "topic", provider=provider)
-
-    def _source_endpoint(
-        self,
-        part: str,
-        command: str,
-        endpoint_kind: str,
-        *,
-        provider: str | None = None,
-    ) -> str | None:
-        matches: list[str] = []
-        for source in self.execution.get("sources", []):
-            if source.get("part") != part or source.get("command") != command:
-                continue
-            if provider is not None and source.get("provider") != provider:
-                continue
-            endpoint = source.get(endpoint_kind)
-            if isinstance(endpoint, str) and endpoint:
-                matches.append(endpoint)
-        if len(matches) > 1:
-            raise ValueError(
-                f"ambiguous {endpoint_kind} for part={part!r} command={command!r}; "
-                "pass provider= to disambiguate"
-            )
-        return matches[0] if matches else None
-
     @classmethod
     def from_yaml(cls, path: str | Path) -> EmbodimentConfig:
-        with Path(path).open(encoding="utf-8") as stream:
-            return cls.from_dict(yaml.safe_load(stream))
+        path = Path(path)
+        with path.open(encoding="utf-8") as stream:
+            return cls.from_dict(yaml.safe_load(stream), source_path=path)
 
     @classmethod
-    def from_dict(cls, data: Any) -> EmbodimentConfig:
+    def from_dict(
+        cls, data: Any, *, source_path: Path | str | None = None
+    ) -> EmbodimentConfig:
         root = _mapping(data, "profile")
+        if "provider_selection" in root:
+            raise ValueError(
+                "provider_selection is removed; declare dynamic agents with "
+                "source_role and resources"
+            )
+        resolved_source = Path(source_path) if source_path is not None else None
+        root = _bind_execution_manager_routing(root, resolved_source)
+        root = _bind_recorder_stream_contract(root, resolved_source)
         metadata = _mapping(root.get("metadata"), "metadata")
         name = _string(metadata.get("name"), "metadata.name")
         raw_parts = _mapping(root.get("groups"), "groups")
@@ -265,9 +242,7 @@ class EmbodimentConfig:
             groups[group_name] = tuple(members)
 
         host_roles = _mapping(root.get("host_roles", {}), "host_roles")
-        execution = _mapping(root.get("execution_manager", {}), "execution_manager")
-        _validate_execution(execution, parts)
-        agents = _agents(root.get("agents", {}), execution)
+        agents = _agents(root.get("agents", {}), parts)
         recording = _mapping(root.get("recorder", {}), "recorder")
         features = _mapping(root.get("features", {}), "features")
         calibration = _mapping(root.get("calibration", {}), "calibration")
@@ -305,7 +280,6 @@ class EmbodimentConfig:
             groups=groups,
             metadata=dict(metadata),
             host_roles=dict(host_roles),
-            execution=dict(execution),
             cameras=cameras,
             agents=agents,
             recording=dict(recording),
@@ -314,6 +288,87 @@ class EmbodimentConfig:
             streams=dict(streams),
             raw_data=dict(root),
         )
+
+
+def _bind_execution_manager_routing(
+    root: dict[str, Any], source_path: Path | None
+) -> dict[str, Any]:
+    """Load the Robot groups from the EM execution-capability projection."""
+    reference = root.get("execution_manager_config")
+    if reference is None:
+        return root
+    if root.get("groups"):
+        raise ValueError(
+            "groups belong to the Execution Manager capability file; "
+            "do not duplicate them in the RMI profile"
+        )
+    em_path = _resolve_package_file(
+        reference, source_path, "execution_manager_config"
+    )
+    with em_path.open(encoding="utf-8") as handle:
+        em = _mapping(yaml.safe_load(handle), str(em_path))
+    bound = dict(root)
+    bound["groups"] = em["groups"]
+    return bound
+
+
+def _bind_recorder_stream_contract(
+    root: dict[str, Any], source_path: Path | None
+) -> dict[str, Any]:
+    """Resolve recorder.config package/file to the bringup stream contract."""
+    recording = root.get("recorder")
+    if not isinstance(recording, dict) or "config" not in recording:
+        return root
+    path = _resolve_package_file(recording["config"], source_path, "recorder.config")
+    bound = dict(root)
+    recorder = dict(recording)
+    recorder["contract_path"] = str(path)
+    bound["recorder"] = recorder
+    return bound
+
+
+def _resolve_package_file(
+    reference: Any, source_path: Path | None, field_name: str
+) -> Path:
+    if isinstance(reference, str):
+        candidate = Path(reference)
+        if candidate.is_file():
+            return candidate
+        if source_path is not None:
+            relative = (source_path.parent / reference).resolve()
+            if relative.is_file():
+                return relative
+        raise FileNotFoundError(f"{field_name} file not found: {reference}")
+
+    spec = _mapping(reference, field_name)
+    package = _string(spec.get("package"), f"{field_name}.package")
+    file_name = _string(spec.get("file"), f"{field_name}.file")
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        installed = Path(get_package_share_directory(package)) / file_name
+        if installed.is_file():
+            return installed
+    except Exception:
+        pass
+    repo = _repository_root(source_path)
+    for package_xml in repo.glob("src/**/package.xml"):
+        if f"<name>{package}</name>" not in package_xml.read_text(
+            encoding="utf-8"
+        ):
+            continue
+        candidate = package_xml.parent / file_name
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"{field_name} {package!r} {file_name!r} not found")
+
+
+def _repository_root(source_path: Path | None) -> Path:
+    start = source_path.resolve() if source_path is not None else Path(__file__).resolve()
+    for parent in (start, *start.parents):
+        if (parent / "apps" / "profiles").is_dir():
+            return parent
+    raise FileNotFoundError("repository root with apps/profiles not found")
 
 
 def _mapping(value: Any, path: str) -> dict[str, Any]:
@@ -342,16 +397,39 @@ def _endpoints(value: Any, path: str) -> dict[str, str]:
     return dict(endpoints)
 
 
-def _agents(value: Any, execution: dict[str, Any]) -> dict[str, AgentConfig]:
+def _agents(value: Any, parts: dict[str, PartConfig]) -> dict[str, AgentConfig]:
     raw_agents = _mapping(value, "agents")
-    providers = execution.get("providers", {})
     agents: dict[str, AgentConfig] = {}
     for name, raw_value in raw_agents.items():
         path = f"agents.{name}"
         raw_agent = _mapping(raw_value, path)
-        provider = _string(raw_agent.get("provider"), f"{path}.provider")
-        if provider not in providers:
-            raise ValueError(f"{path} references unknown provider {provider!r}")
+        role = _string(raw_agent.get("source_role"), f"{path}.source_role").upper()
+        if role not in {"POLICY", "TELEOP", "PLANNER"}:
+            raise ValueError(f"{path}.source_role must be POLICY, TELEOP, or PLANNER")
+        resources = _mapping(raw_agent.get("resources"), f"{path}.resources")
+        if not resources:
+            raise ValueError(f"{path}.resources must not be empty")
+        validated_resources: dict[str, str] = {}
+        for resource, command in resources.items():
+            command = _string(command, f"{path}.resources.{resource}")
+            if resource not in parts:
+                raise ValueError(f"{path} references unknown resource {resource!r}")
+            available = {
+                topic
+                for controller in parts[resource].controllers.values()
+                for topic in controller.ros_topics
+            }
+            if any(
+                "follow_joint_trajectory" in controller.ros_actions
+                for controller in parts[resource].controllers.values()
+            ):
+                available.add("joint_trajectory")
+            if command not in available:
+                raise ValueError(
+                    f"{path}.resources.{resource} references unsupported command "
+                    f"{command!r}"
+                )
+            validated_resources[resource] = command
         frequency = raw_agent.get("frequency")
         if frequency is not None and (
             not isinstance(frequency, (int, float))
@@ -361,70 +439,8 @@ def _agents(value: Any, execution: dict[str, Any]) -> dict[str, AgentConfig]:
             raise ValueError(f"{path}.frequency must be positive")
         agents[name] = AgentConfig(
             name=name,
-            provider=provider,
+            source_role=role,
+            resources=validated_resources,
             frequency=float(frequency) if frequency is not None else None,
         )
     return agents
-
-
-def _validate_execution(
-    execution: dict[str, Any], parts: dict[str, PartConfig]
-) -> None:
-    """Validate the optional canonical EM deployment view."""
-    if "ingress" in execution:
-        raise ValueError(
-            "execution_manager.ingress is removed; declare "
-            "execution_manager.providers and execution_manager.sources"
-        )
-    has_deployment = "providers" in execution or "sources" in execution
-    if not has_deployment:
-        return
-
-    providers = _mapping(execution.get("providers"), "execution_manager.providers")
-    sources = execution.get("sources")
-    if not providers:
-        raise ValueError("execution_manager.providers must not be empty")
-    if not isinstance(sources, list) or not sources:
-        raise ValueError("execution_manager.sources must be a non-empty list")
-
-    provider_parts: dict[str, set[str]] = {}
-    for provider_name, value in providers.items():
-        provider_path = f"execution_manager.providers.{provider_name}"
-        provider = _mapping(value, provider_path)
-        priority = provider.get("priority")
-        if not isinstance(priority, int) or isinstance(priority, bool):
-            raise TypeError(f"{provider_path}.priority must be an integer")
-        controllers = _mapping(
-            provider.get("controllers"), f"{provider_path}.controllers"
-        )
-        if not controllers:
-            raise ValueError(f"{provider_path}.controllers must not be empty")
-        provider_parts[provider_name] = set(controllers)
-        for part_name, contract in controllers.items():
-            if part_name not in parts:
-                raise ValueError(
-                    f"{provider_path} references unknown part {part_name!r}"
-                )
-            if contract not in parts[part_name].controllers:
-                raise ValueError(
-                    f"{provider_path}.controllers.{part_name} references unknown "
-                    f"controller contract {contract!r}"
-                )
-
-    for index, value in enumerate(sources):
-        source_path = f"execution_manager.sources[{index}]"
-        source = _mapping(value, source_path)
-        provider_name = _string(source.get("provider"), f"{source_path}.provider")
-        part_name = _string(source.get("part"), f"{source_path}.part")
-        command = _string(source.get("command"), f"{source_path}.command")
-        if provider_name not in providers:
-            raise ValueError(
-                f"{source_path} references unknown provider {provider_name!r}"
-            )
-        if part_name not in provider_parts[provider_name]:
-            raise ValueError(
-                f"{source_path} part {part_name!r} is not controlled by "
-                f"provider {provider_name!r}"
-            )
-        endpoint_key = "action" if command == "joint_trajectory" else "topic"
-        _string(source.get(endpoint_key), f"{source_path}.{endpoint_key}")

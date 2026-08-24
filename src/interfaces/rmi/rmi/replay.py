@@ -6,7 +6,9 @@ and command admission still go through ``agent.run()`` / ``session.act()``.
 
 Typical application form::
 
-    replay = context.make_agent("Replay", robot=robot)
+    replay = context.make_agent(
+        "Policy", robot=robot, source_instance="replay:<episode_id>"
+    )
     player = ReplayPlayer(McapActionSource(uri, topic), ...)
     with replay.run(robot) as session:
         player.open()

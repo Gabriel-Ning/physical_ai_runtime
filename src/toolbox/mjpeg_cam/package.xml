@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mjpeg_cam</name>
+  <version>0.1.0</version>
+  <description>
+    V4L2 MJPEG original-packet publisher. Publishes sensor_msgs/CompressedImage
+    with the camera JPEG (bytesused, trimmed to EOI). Does not decode on the
+    publisher host and does not use image_transport re-encode plugins.
+  </description>
+  <maintainer email="guomning@gmail.com">Gabriel-Ning</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

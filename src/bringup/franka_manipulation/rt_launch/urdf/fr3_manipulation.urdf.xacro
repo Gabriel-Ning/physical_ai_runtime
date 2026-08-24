@@ -1,0 +1,112 @@
+<?xml version="1.0"?>
+<!-- FR3 manipulation entry owned by franka_manipulation_rt_launch.
+
+     Composition only — does not fork vendor packages:
+       - Arm kinematics / meshes: upstream franka_description (unmodified)
+       - Arm ros2_control: upstream franka_hardware (unmodified)
+       - Flange adaptor + Pika gripper: pika_gripper_description (ours)
+
+     Chain:
+       fr3_link8 -> pika_adaptor_link -> Pika (prefix empty)
+
+     Actuated gripper DOF: gripper_left_joint (right finger URDF-mimic).
+     Does not use the vendor ee_id registry (franka_hand / cobot_pump). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="fr3_manipulation">
+
+  <xacro:arg name="arm_prefix" default=""/>
+  <xacro:arg name="no_prefix" default="false"/>
+  <xacro:arg name="gazebo" default="false"/>
+  <xacro:arg name="with_sc" default="false"/>
+  <xacro:arg name="description_pkg" default="franka_description"/>
+  <xacro:arg name="xyz" default="0 0 0"/>
+  <xacro:arg name="rpy" default="0 0 0"/>
+  <xacro:arg name="adaptor_xyz" default="0 0 0"/>
+  <xacro:arg name="adaptor_rpy" default="0 0 ${3*pi/4}"/>
+  <xacro:arg name="gripper_xyz" default="0 0 0.004"/>
+  <xacro:arg name="gripper_rpy" default="0 0 -${pi/2}"/>
+  <xacro:arg name="ros2_control" default="true"/>
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="robot_ip" default=""/>
+  <xacro:arg name="fake_sensor_commands" default="false"/>
+  <xacro:arg name="gripper_serial_port" default="/dev/ttyUSB0"/>
+  <xacro:arg name="load_pika_hardware" default="true"/>
+  <!-- Pika TCP + finger limits owned by this bringup (edit config/model/*.yaml). -->
+  <xacro:arg name="gripper_tcp_file"
+    default="$(find franka_manipulation_rt_launch)/config/model/gripper_tcp.yaml"/>
+  <xacro:arg name="gripper_joint_limits_file"
+    default="$(find franka_manipulation_rt_launch)/config/model/joint_limits.yaml"/>
+
+  <xacro:property name="prefix" value="$(arg arm_prefix)"/>
+  <xacro:property name="modified_prefix" value="${prefix + '_' if prefix else ''}"/>
+
+  <xacro:include filename="$(find franka_description)/robots/common/franka_robot.xacro"/>
+  <xacro:include filename="$(find pika_gripper_description)/urdf/franka_pika_adaptor.xacro"/>
+  <xacro:include filename="$(find pika_gripper_description)/urdf/pika_gripper.xacro"/>
+  <xacro:include filename="$(find pika_gripper_description)/urdf/pika_gripper.ros2_control.xacro"/>
+  <xacro:include filename="$(find franka_hardware)/ros2_control/franka_arm.ros2_control.xacro"/>
+  <xacro:include filename="$(find franka_hardware)/ros2_control/franka_arm_hardware_plugins.xacro"/>
+
+  <xacro:if value="$(arg gazebo)">
+    <link name="world"/>
+    <joint name="world_joint" type="fixed">
+      <origin xyz="$(arg xyz)" rpy="$(arg rpy)"/>
+      <parent link="world"/>
+      <child link="${modified_prefix}fr3_link0"/>
+    </joint>
+  </xacro:if>
+
+  <xacro:franka_robot
+    robot_type="fr3"
+    hand="false"
+    ee_id="none"
+    with_sc="$(arg with_sc)"
+    no_prefix="$(arg no_prefix)"
+    arm_prefix="${modified_prefix}"
+    description_pkg="$(arg description_pkg)"
+    connected_to="base"
+    xyz="$(arg xyz)"
+    rpy="$(arg rpy)"/>
+
+  <xacro:franka_pika_adaptor
+    prefix=""
+    parent="${modified_prefix}fr3_link8"
+    xyz="$(arg adaptor_xyz)"
+    rpy="$(arg adaptor_rpy)"/>
+
+  <xacro:pika_gripper
+    prefix=""
+    parent="pika_adaptor_link"
+    tcp_file="$(arg gripper_tcp_file)"
+    joint_limits_file="$(arg gripper_joint_limits_file)">
+    <origin xyz="$(arg gripper_xyz)" rpy="$(arg gripper_rpy)"/>
+  </xacro:pika_gripper>
+
+  <xacro:if value="$(arg ros2_control)">
+    <xacro:franka_arm_ros2_control
+      robot_type="fr3"
+      include_effort_command="true"
+      include_finger_joint="false"
+      arm_prefix="${modified_prefix}">
+      <hardware_plugin>
+        <xacro:if value="$(arg use_fake_hardware)">
+          <xacro:franka_mock_hardware_plugin
+            fake_sensor_commands="$(arg fake_sensor_commands)"/>
+        </xacro:if>
+        <xacro:unless value="$(arg use_fake_hardware)">
+          <xacro:franka_real_hardware_plugin
+            robot_ip="$(arg robot_ip)"
+            arm_prefix="${modified_prefix}"/>
+        </xacro:unless>
+      </hardware_plugin>
+    </xacro:franka_arm_ros2_control>
+    <xacro:if value="$(arg load_pika_hardware)">
+      <xacro:pika_gripper_ros2_control
+        name="PikaGripperHardware"
+        prefix=""
+        serial_port="$(arg gripper_serial_port)"
+        joint_limits_file="$(arg gripper_joint_limits_file)"
+        use_fake_hardware="$(arg use_fake_hardware)"/>
+    </xacro:if>
+  </xacro:if>
+
+</robot>

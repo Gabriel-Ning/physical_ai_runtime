@@ -1,20 +1,14 @@
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
 
-import pytest
-from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import TwistStamped
+from execution_manager_interfaces.action import LeasedFollowJointTrajectory
+from execution_manager_interfaces.msg import LeasedJointReference, LeasedPoseReference
 from rmi import ActionProviderClient, EmbodimentConfig
-from trajectory_msgs.msg import JointTrajectory
+from rmi.selection import EndpointBinding, LeaseGrant
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-PROFILE = (
-    Path(__file__).parents[4]
-    / "apps"
-    / "profiles"
-    / "marvin_bimanual.yaml"
-)
+PROFILE = Path(__file__).parents[4] / "apps" / "profiles" / "marvin_bimanual.yaml"
 
 
 class FakePublisher:
@@ -28,17 +22,15 @@ class FakePublisher:
 class FakeNode:
     def __init__(self):
         self.publishers = []
-        self.timers = []
+        self.destroyed_publishers = []
 
     def create_publisher(self, message_type, endpoint, qos):
         publisher = FakePublisher()
         self.publishers.append((message_type, endpoint, qos, publisher))
         return publisher
 
-    def create_timer(self, period_sec, callback):
-        timer = SimpleNamespace(period_sec=period_sec, callback=callback)
-        self.timers.append(timer)
-        return timer
+    def destroy_publisher(self, publisher):
+        self.destroyed_publishers.append(publisher)
 
     def get_clock(self):
         return SimpleNamespace(
@@ -49,149 +41,169 @@ class FakeNode:
 
 
 class FakeActionClient:
-    instances: ClassVar[list] = []
+    instance = None
 
     def __init__(self, node, action_type, endpoint):
-        del node, action_type
+        del node
+        assert action_type is LeasedFollowJointTrajectory
         self.endpoint = endpoint
         self.goals = []
-        self.__class__.instances.append(self)
+        self.__class__.instance = self
 
     def server_is_ready(self):
         return True
 
-    def send_goal_async(self, goal):
+    def send_goal_async(self, goal, **kwargs):
+        del kwargs
         self.goals.append(goal)
         future = asyncio.get_running_loop().create_future()
-        handle = SimpleNamespace(accepted=True)
-        handle.get_result_async = self.get_result_async
-        handle.cancel_goal_async = self.cancel_goal_async
-        future.set_result(handle)
-        return future
-
-    def get_result_async(self):
-        future = asyncio.get_running_loop().create_future()
-        future.set_result(
-            SimpleNamespace(status=GoalStatus.STATUS_SUCCEEDED, result="complete")
-        )
-        return future
-
-    def cancel_goal_async(self):
-        future = asyncio.get_running_loop().create_future()
-        future.set_result(SimpleNamespace(goals_canceling=[True]))
+        future.set_result(SimpleNamespace(accepted=True))
         return future
 
 
-def test_policy_provider_publishes_to_em_gateway_not_controller_endpoint():
-    node = FakeNode()
-    provider = ActionProviderClient.from_profile(
-        EmbodimentConfig.from_yaml(PROFILE), "Policy", node
+def _grant(command="joint_reference", *, action=False):
+    endpoint = (
+        "/action_sources/planner/left_arm/follow_joint_trajectory"
+        if action
+        else "/action_sources/policy/left_arm/joint_reference"
     )
-    reference = JointTrajectory()
-
-    provider.send("left_arm", "joint_reference", reference)
-
-    endpoints = [entry[1] for entry in node.publishers]
-    assert "/execution/left_arm/joint_reference" in endpoints
-    publisher = next(entry[3] for entry in node.publishers if entry[1] == endpoints[0])
-    assert reference in publisher.messages
-
-
-def test_policy_provider_converts_ros_free_values_to_stamped_native_message():
-    node = FakeNode()
-    provider = ActionProviderClient.from_profile(
-        EmbodimentConfig.from_yaml(PROFILE), "Policy", node
+    return LeaseGrant(
+        "lease-1",
+        {
+            ("left_arm", command): EndpointBinding(
+                "left_arm", command, endpoint, action
+            )
+        },
     )
 
-    provider.send_joint_reference(
-        "left_arm",
-        [f"Joint{i}_L" for i in range(1, 8)],
-        [[0.0] * 7, [0.1] * 7],
-        [0.02, 0.08],
-    )
 
-    message = next(
-        publisher.messages[-1]
-        for _, endpoint, _, publisher in node.publishers
-        if endpoint == "/execution/left_arm/joint_reference"
-    )
-    assert isinstance(message, JointTrajectory)
-    assert message.header.stamp.sec == 123
-    assert len(message.points) == 2
-    assert message.points[1].time_from_start.nanosec == 80_000_000
-
-
-def test_teleop_cartesian_and_twist_are_separate_providers():
+def test_streaming_command_is_top_level_stamped_lease_envelope():
     node = FakeNode()
     profile = EmbodimentConfig.from_yaml(PROFILE)
-    cartesian = ActionProviderClient.from_profile(
-        profile, "TeleopCartesian_Left", node
+    client = ActionProviderClient(
+        "policy", node, {"left_arm": "joint_reference"}, profile=profile
     )
-    twist_provider = ActionProviderClient.from_profile(
-        profile, "TeleopTwist_Left", node
-    )
-    twist = TwistStamped()
+    client.bind(_grant())
+    trajectory = JointTrajectory()
+    trajectory.joint_names = list(profile.parts["left_arm"].joint_names)
+    trajectory.points = [JointTrajectoryPoint(positions=[0.0] * 7)]
 
-    twist_provider.send("left_arm", "twist_reference", twist)
+    client.send("left_arm", "joint_reference", trajectory)
 
-    assert cartesian.commands["left_arm"] == frozenset({"pose_reference"})
-    assert twist_provider.commands["left_arm"] == frozenset({"twist_reference"})
-    assert any(twist in publisher.messages for *_, publisher in node.publishers)
+    envelope = node.publishers[0][3].messages[0]
+    assert isinstance(envelope, LeasedJointReference)
+    assert envelope.lease_id == "lease-1"
+    assert envelope.header.stamp.sec == 123
+    assert envelope.command.header.stamp.sec == 123
+    assert envelope.command.joint_names == trajectory.joint_names
 
 
-def test_planner_provider_uses_em_trajectory_action():
-    FakeActionClient.instances.clear()
+def test_streaming_joint_reference_accepts_bare_position_list():
     node = FakeNode()
-    provider = ActionProviderClient.from_profile(
-        EmbodimentConfig.from_yaml(PROFILE),
-        "Planner",
+    profile = EmbodimentConfig.from_yaml(PROFILE)
+    client = ActionProviderClient(
+        "policy", node, {"left_arm": "joint_reference"}, profile=profile
+    )
+    client.bind(_grant())
+
+    client.send("left_arm", "joint_reference", [0.1] * 7)
+
+    command = node.publishers[0][3].messages[0].command
+    assert command.joint_names == list(profile.parts["left_arm"].joint_names)
+    assert list(command.points[0].positions) == [0.1] * 7
+
+
+def test_unbind_destroys_session_publishers():
+    node = FakeNode()
+    profile = EmbodimentConfig.from_yaml(PROFILE)
+    client = ActionProviderClient(
+        "policy", node, {"left_arm": "joint_reference"}, profile=profile
+    )
+    client.bind(_grant())
+    client.send("left_arm", "joint_reference", [0.1] * 7)
+    publisher = node.publishers[0][3]
+
+    client.unbind()
+
+    assert node.destroyed_publishers == [publisher]
+    assert client._publishers == {}
+
+
+def test_streaming_pose_reference_accepts_single_cartesian_state():
+    node = FakeNode()
+    profile = EmbodimentConfig.from_yaml(PROFILE)
+    client = ActionProviderClient(
+        "teleop", node, {"left_arm": "pose_reference"}, profile=profile
+    )
+    client.bind(_grant("pose_reference"))
+    pose = SimpleNamespace(
+        position_xyz=(0.1, 0.2, 0.3),
+        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+    )
+
+    client.send("left_arm", "pose_reference", pose)
+
+    envelope = node.publishers[0][3].messages[0]
+    assert isinstance(envelope, LeasedPoseReference)
+    assert envelope.lease_id == "lease-1"
+    assert len(envelope.command.points) == 1
+    assert envelope.command.points[0].point.pose.position.z == 0.3
+    assert envelope.command.points[0].point.pose.orientation.w == 1.0
+
+
+def test_unbound_client_cannot_publish():
+    client = ActionProviderClient(
+        "policy", FakeNode(), {"left_arm": "joint_reference"}
+    )
+    try:
+        client.send("left_arm", "joint_reference", JointTrajectory())
+    except RuntimeError as error:
+        assert "no active lease" in str(error)
+    else:
+        raise AssertionError("unbound client accepted a command")
+
+
+def test_fork_has_independent_lease_binding():
+    node = FakeNode()
+    profile = EmbodimentConfig.from_yaml(PROFILE)
+    client = ActionProviderClient(
+        "policy", node, {"left_arm": "joint_reference"}, profile=profile
+    )
+    first = client.fork()
+    second = client.fork()
+    first.bind(_grant())
+    second.bind(LeaseGrant("lease-2", _grant().endpoints))
+
+    first.send("left_arm", "joint_reference", [0.1] * 7)
+    second.send("left_arm", "joint_reference", [0.2] * 7)
+
+    assert node.publishers[0][3].messages[0].lease_id == "lease-1"
+    assert node.publishers[1][3].messages[0].lease_id == "lease-2"
+
+
+def test_jtc_goal_carries_same_lease_and_resource():
+    node = FakeNode()
+    profile = EmbodimentConfig.from_yaml(PROFILE)
+    client = ActionProviderClient(
+        "planner",
         node,
+        {"left_arm": "joint_trajectory"},
+        profile=profile,
         action_client_factory=FakeActionClient,
     )
-
-    asyncio.run(provider.send("left_arm", "joint_trajectory", JointTrajectory()))
-
-    assert FakeActionClient.instances[0].endpoint == (
-        "/execution/left_arm/follow_joint_trajectory"
+    client.bind(_grant("joint_trajectory", action=True))
+    trajectory = SimpleNamespace(
+        points=[SimpleNamespace(positions=[0.0] * 7, time_from_start_s=0.1)],
+        valid=True,
     )
-    assert "/execution/left_arm/trajectory_guard_heartbeat" in [
-        entry[1] for entry in node.publishers
-    ]
 
-
-def test_planner_provider_waits_for_terminal_trajectory_result():
-    FakeActionClient.instances.clear()
-    provider = ActionProviderClient.from_profile(
-        EmbodimentConfig.from_yaml(PROFILE),
-        "Planner",
-        FakeNode(),
-        action_client_factory=FakeActionClient,
-    )
-    trajectory = {
-        "points": [
-            {"positions": [0.0] * 7, "time_from_start_s": 0.1},
-            {"positions": [0.1] * 7, "time_from_start_s": 0.2},
-        ]
-    }
-
-    result = asyncio.run(
-        provider.execute_joint_trajectory(
-            "left_arm",
-            trajectory,
-            [f"Joint{i}_L" for i in range(1, 8)],
-            timeout_sec=1.0,
+    asyncio.run(
+        client.start_joint_trajectory(
+            "left_arm", trajectory, list(profile.parts["left_arm"].joint_names)
         )
     )
 
-    assert result == "complete"
-
-
-def test_provider_rejects_another_providers_part_or_command():
-    provider = ActionProviderClient.from_profile(
-        EmbodimentConfig.from_yaml(PROFILE), "TeleopCartesian_Left", FakeNode()
-    )
-
-    with pytest.raises(KeyError, match="does not control"):
-        provider.send("right_arm", "pose_reference", JointTrajectory())
-    with pytest.raises(KeyError, match="no 'joint_reference' source"):
-        provider.send("left_arm", "joint_reference", JointTrajectory())
+    goal = FakeActionClient.instance.goals[0]
+    assert goal.lease_id == "lease-1"
+    assert goal.resource == "left_arm"
+    assert goal.header.stamp.sec == 123

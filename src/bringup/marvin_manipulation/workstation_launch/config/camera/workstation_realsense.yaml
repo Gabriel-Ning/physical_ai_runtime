@@ -1,0 +1,72 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Workstation RealSense cameras on AA. Wrist Pika cameras stay on RT.
+#
+# Head D435I: serial 243222071293, USB 3.2 port 4-2, PID 0B3A.
+# Third-person / side D435I: swapped 2026-08-23, serial 405622076349,
+# USB 3.2 port 4-1, PID 0B3A. ASIC / udev serial is 252443061412.
+# ROS serial_no uses the librealsense serial.
+#
+# Launch both:
+#   ros2 launch marvin_manipulation_workstation_launch realsense_camera.launch.py
+
+head_d435:
+  camera:
+    ros__parameters:
+      camera_name: "head_d435"
+      serial_no: "_243222071293"
+      base_frame_id: "head_d435_link"
+      enable_color: true
+      enable_depth: true
+      enable_infra: false
+      enable_infra1: false
+      enable_infra2: false
+      enable_gyro: false
+      enable_accel: false
+      enable_sync: true
+      rgb_camera:
+        color_profile: "1280x720x30"
+        color_format: "RGB8"
+        global_time_enabled: true
+      depth_module:
+        depth_profile: "1280x720x30"
+        depth_format: "Z16"
+        global_time_enabled: true
+        frames_queue_size: 8
+      align_depth:
+        enable: true
+        frames_queue_size: 8
+      pointcloud:
+        enable: false
+      clip_distance: -1.0
+
+third_person_d435:
+  camera:
+    ros__parameters:
+      camera_name: "third_person_d435"
+      serial_no: "_405622076349"
+      base_frame_id: "third_person_d435_link"
+      enable_color: true
+      enable_depth: true
+      enable_infra: false
+      enable_infra1: false
+      enable_infra2: false
+      enable_gyro: false
+      enable_accel: false
+      enable_sync: true
+      rgb_camera:
+        color_profile: "1280x720x30"
+        color_format: "RGB8"
+        global_time_enabled: true
+      depth_module:
+        depth_profile: "1280x720x30"
+        depth_format: "Z16"
+        global_time_enabled: true
+        frames_queue_size: 8
+      align_depth:
+        enable: true
+        frames_queue_size: 8
+      pointcloud:
+        enable: false
+      clip_distance: -1.0

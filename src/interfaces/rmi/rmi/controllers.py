@@ -1,14 +1,23 @@
-"""Direct ros2_control controller clients and controller_manager client."""
+"""Internal/test-only ros2_control diagnostics.
+
+Production applications must command through Agent/Session and the Execution
+Manager lease path. This module is intentionally not exported by ``rmi``.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from typing import Any
 
 from action_msgs.msg import GoalStatus
 from control_msgs.action import FollowJointTrajectory, ParallelGripperCommand
-from controller_manager_msgs.srv import ListControllers, SwitchController
+from controller_manager_msgs.srv import (
+    ListControllers,
+    ListHardwareComponents,
+    SwitchController,
+)
 from geometry_msgs.msg import TwistStamped
 from moveit_msgs.msg import CartesianTrajectory
 from rclpy.action import ActionClient
@@ -18,14 +27,7 @@ from std_msgs.msg import Bool, Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory
 
 from .config import ControllerConfig
-
-
-class ControllerClientError(RuntimeError):
-    """A controller endpoint was unavailable or rejected a command."""
-
-
-class TrajectoryCanceledError(ControllerClientError):
-    """A trajectory goal reached the terminal CANCELED status."""
+from .errors import ControllerClientError, TrajectoryCanceledError
 
 
 def _command_qos() -> QoSProfile:
@@ -180,7 +182,7 @@ class JointTrajectoryControllerClient:
         """Cancel the currently tracked goal, if one exists.
 
         Already-terminal goals (succeeded/aborted/canceled) often return an
-        empty ``goals_canceling`` set. Treat that as a no-op so EM handovers
+        empty ``goals_canceling`` set. Treat that as a no-op so Execution Manager handovers
         after a completed trajectory do not fail.
         """
         with self._guard_lock:
@@ -266,7 +268,7 @@ class GripperControllerClient:
     async def cancel(self) -> None:
         """Cancel the currently tracked gripper goal, if one exists.
 
-        Empty ``goals_canceling`` means the goal is already terminal; EM
+        Empty ``goals_canceling`` means the goal is already terminal; Execution Manager
         handovers treat that as success.
         """
         if self._goal_handle is None:
@@ -379,13 +381,15 @@ def make_controller_client_factory(
             return GripperControllerClient(
                 node, config, timeout_sec, action_client_factory
             )
+        if contract == "joint_space_reference":
+            # Provider routes always publish JointTrajectory on action_sources.
+            # Execution Manager adapts to ForwardCommandController inputs downstream.
+            return JointSpaceReferenceControllerClient(node, config)
         if (
             config.implementation
             == "forward_command_controller/ForwardCommandController"
         ):
             return ForwardCommandControllerClient(node, config)
-        if contract == "joint_space_reference":
-            return JointSpaceReferenceControllerClient(node, config)
         if contract == "task_space_reference":
             return TaskSpaceReferenceControllerClient(node, config)
         raise ValueError(
@@ -408,52 +412,42 @@ def _positive_timeout(timeout_sec: float) -> float:
     return timeout_sec
 
 
+async def _sleep(seconds: float) -> None:
+    """Sleep that works under both asyncio loops and rclpy executor Tasks.
+
+    Some callers run inside rclpy ``Task``s, which are awaitable but do not
+    install an asyncio running loop. ``asyncio.sleep`` therefore fails there;
+    fall back to a short thread sleep so executor workers can still poll.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        time.sleep(seconds)
+        return
+    await asyncio.sleep(seconds)
+
+
 async def _wait_until_ready(ready: Any, timeout_sec: float, endpoint_name: str) -> None:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout_sec
+    deadline = time.monotonic() + timeout_sec
     while not ready():
-        remaining = deadline - loop.time()
+        remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             raise TimeoutError(f"{endpoint_name} unavailable after {timeout_sec:g}s")
-        await asyncio.sleep(min(0.05, remaining))
+        await _sleep(min(0.05, remaining))
 
 
 async def _bounded(awaitable: Any, timeout_sec: float, operation: str) -> Any:
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout_sec
+    deadline = time.monotonic() + timeout_sec
     while not awaitable.done():
-        remaining = deadline - loop.time()
+        remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             awaitable.cancel()
             raise TimeoutError(f"{operation} timed out after {timeout_sec:g}s")
-        await asyncio.sleep(min(0.01, remaining))
+        await _sleep(min(0.01, remaining))
     exception = awaitable.exception()
     if exception is not None:
         raise exception
     return awaitable.result()
-from controller_manager_msgs.srv import (
-    ListControllers,
-    ListHardwareComponents,
-    SetHardwareComponentState,
-    SwitchController,
-)
-from geometry_msgs.msg import TwistStamped
-from moveit_msgs.msg import CartesianTrajectory
-from rclpy.action import ActionClient
-from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, Float64MultiArray
-from trajectory_msgs.msg import JointTrajectory
-
-from .config import ControllerConfig
-
-
-class ControllerClientError(RuntimeError):
-    """A controller endpoint was unavailable or rejected a command."""
-
-
-class TrajectoryCanceledError(ControllerClientError):
-    """A trajectory goal reached the terminal CANCELED status."""
 
 
 class ControllerManagerError(RuntimeError):
@@ -482,7 +476,6 @@ class ControllerManagerClient:
             ListControllers, f"{manager}/list_controllers"
         )
         self._list_hw_client: Any | None = None
-        self._set_hw_client: Any | None = None
 
     def _get_list_hw_client(self) -> Any:
         if self._list_hw_client is None:
@@ -493,16 +486,6 @@ class ControllerManagerClient:
             except Exception:
                 pass
         return self._list_hw_client
-
-    def _get_set_hw_client(self) -> Any:
-        if self._set_hw_client is None:
-            try:
-                self._set_hw_client = self._node.create_client(
-                    SetHardwareComponentState, f"{self._manager}/set_hardware_component_state"
-                )
-            except Exception:
-                pass
-        return self._set_hw_client
 
     async def get_hardware_diagnostics(self) -> list[str]:
         """Query hardware component states and return diagnostic descriptions for non-active components."""
@@ -528,58 +511,6 @@ class ControllerManagerClient:
             return diagnostics
         except Exception:
             return []
-
-    async def ensure_hardware_active(self) -> list[str]:
-        """Automatically attempt to configure and activate any inactive/unconfigured hardware components."""
-        list_client = self._get_list_hw_client()
-        set_client = self._get_set_hw_client()
-        if list_client is None or set_client is None:
-            return []
-        if not list_client.service_is_ready() or not set_client.service_is_ready():
-            try:
-                await asyncio.gather(
-                    self._wait_for_service(list_client, "list_hardware_components"),
-                    self._wait_for_service(set_client, "set_hardware_component_state"),
-                )
-            except Exception:
-                return []
-
-        activated: list[str] = []
-        try:
-            from lifecycle_msgs.msg import State
-
-            listed = await self._call(
-                list_client, ListHardwareComponents.Request(), "list_hardware_components"
-            )
-            for comp in listed.component:
-                state_id = comp.state.id if hasattr(comp.state, "id") else 0
-                state_label = comp.state.label if hasattr(comp.state, "label") else str(comp.state)
-                if state_label == "unconfigured" or state_id == State.PRIMARY_STATE_UNCONFIGURED:
-                    # Transition unconfigured -> inactive -> active
-                    req_inact = SetHardwareComponentState.Request()
-                    req_inact.name = comp.name
-                    req_inact.target_state.id = State.PRIMARY_STATE_INACTIVE
-                    req_inact.target_state.label = "inactive"
-                    res = await self._call(set_client, req_inact, "set_hardware_component_state")
-                    if res.ok:
-                        req_act = SetHardwareComponentState.Request()
-                        req_act.name = comp.name
-                        req_act.target_state.id = State.PRIMARY_STATE_ACTIVE
-                        req_act.target_state.label = "active"
-                        res_act = await self._call(set_client, req_act, "set_hardware_component_state")
-                        if res_act.ok:
-                            activated.append(comp.name)
-                elif state_label == "inactive" or state_id == State.PRIMARY_STATE_INACTIVE:
-                    req_act = SetHardwareComponentState.Request()
-                    req_act.name = comp.name
-                    req_act.target_state.id = State.PRIMARY_STATE_ACTIVE
-                    req_act.target_state.label = "active"
-                    res_act = await self._call(set_client, req_act, "set_hardware_component_state")
-                    if res_act.ok:
-                        activated.append(comp.name)
-        except Exception:
-            pass
-        return activated
 
     async def switch_controller(
         self,

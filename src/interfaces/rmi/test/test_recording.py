@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-from rmi import Recorder
+from rmi import EpisodeRecorder
 
 
 class FakeRecorder:
@@ -10,6 +10,16 @@ class FakeRecorder:
 
     async def activate(self):
         self.calls.append(("activate",))
+
+    async def prepare(self):
+        self.calls.append(("prepare",))
+
+    async def close(self):
+        self.calls.append(("close",))
+
+    async def wait_ready(self, *, timeout_s):
+        self.calls.append(("wait_ready", timeout_s))
+        return SimpleNamespace(state="ready")
 
     async def start_recording(self, *, task, manifest_context):
         self.calls.append(("start", task, dict(manifest_context)))
@@ -30,7 +40,7 @@ class FakeRecorder:
 
 def test_episode_scope_is_synchronous_and_forwards_per_episode_metadata():
     sdk = FakeRecorder()
-    recorder = Recorder(sdk)
+    recorder = EpisodeRecorder(sdk)
 
     with recorder.episode(
         task="pick",
@@ -42,14 +52,29 @@ def test_episode_scope_is_synchronous_and_forwards_per_episode_metadata():
     assert episode.final_status.episode_path == "/episodes/episode_1"
     assert sdk.calls == [
         ("activate",),
+        ("prepare",),
         ("start", "pick", {"policy": "diffusion"}),
         ("stop", 2.0),
     ]
 
 
+def test_recorder_context_prepares_once_and_releases_on_exit():
+    sdk = FakeRecorder()
+
+    with EpisodeRecorder(sdk) as recorder:
+        assert recorder.wait_ready(timeout_s=1.5).state == "ready"
+
+    assert sdk.calls == [
+        ("activate",),
+        ("prepare",),
+        ("wait_ready", 1.5),
+        ("close",),
+    ]
+
+
 def test_episode_discards_when_application_body_raises():
     sdk = FakeRecorder()
-    recorder = Recorder(sdk)
+    recorder = EpisodeRecorder(sdk)
 
     with (
         pytest.raises(RuntimeError, match="policy failed"),
@@ -63,7 +88,7 @@ def test_episode_discards_when_application_body_raises():
 
 def test_episode_can_be_discarded_explicitly_without_finalizing():
     sdk = FakeRecorder()
-    recorder = Recorder(sdk)
+    recorder = EpisodeRecorder(sdk)
 
     with recorder.episode(task="pick", stop_timeout=3.0) as episode:
         status = episode.discard()
@@ -72,13 +97,14 @@ def test_episode_can_be_discarded_explicitly_without_finalizing():
     assert episode.discarded
     assert sdk.calls == [
         ("activate",),
+        ("prepare",),
         ("start", "pick", {}),
         ("discard",),
     ]
 
 
 def test_episode_cannot_be_discarded_outside_its_context():
-    episode = Recorder(FakeRecorder()).episode(task="pick")
+    episode = EpisodeRecorder(FakeRecorder()).episode(task="pick")
 
     with pytest.raises(RuntimeError, match="not active"):
         episode.discard()
@@ -89,7 +115,7 @@ def test_discard_failure_does_not_mask_application_error():
         async def discard(self):
             raise RuntimeError("discard failed")
 
-    recorder = Recorder(FailingDiscardRecorder())
+    recorder = EpisodeRecorder(FailingDiscardRecorder())
 
     with (
         pytest.raises(RuntimeError, match="policy failed"),
@@ -114,6 +140,7 @@ def test_memory_replay_buffer_step_and_sample():
             )
 
     assert len(buffer) == 10
+    assert len(buffer.last_episode) == 10
     sample = buffer.sample(batch_size=4)
     assert len(sample) == 4
     assert all("observation" in item and "action" in item for item in sample)
@@ -121,7 +148,7 @@ def test_memory_replay_buffer_step_and_sample():
 
 
 def test_episode_validates_task_and_timeout_before_starting():
-    recorder = Recorder(FakeRecorder())
+    recorder = EpisodeRecorder(FakeRecorder())
 
     with pytest.raises(ValueError, match="task"):
         recorder.episode(task="")

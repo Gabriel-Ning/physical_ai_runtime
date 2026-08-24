@@ -1,0 +1,85 @@
+metadata: {name: marvin_bimanual, version: "2.0"}
+
+# Admission compares the envelope Header stamp with the EM ROS clock. This
+# bounds delayed packet pollution; it is not a control-loop latency target.
+max_command_age_s: 0.25
+
+groups:
+  left_arm:
+    type: arm
+    joint_names: [Joint1_L, Joint2_L, Joint3_L, Joint4_L, Joint5_L, Joint6_L, Joint7_L]
+    base_frame: Base_L
+    flange_frame: flange_L
+    tcp_frame: left_pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_trajectory
+    controllers:
+      joint_trajectory:
+        name: left_arm_jtc
+        implementation: joint_trajectory_controller/JointTrajectoryController
+        command_interface: position
+        ros_actions: {follow_joint_trajectory: /execution/left_arm/follow_joint_trajectory}
+        ros_topics: {trajectory_guard_heartbeat: /execution/left_arm/trajectory_guard_heartbeat}
+      joint_space_reference:
+        name: left_arm_jspc
+        implementation: manipulation_position_controllers/JointSpacePositionController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/left_arm/joint_reference}
+      task_space_reference:
+        name: left_arm_tskpc
+        implementation: manipulation_position_controllers/TaskSpaceKinematicPositionController
+        command_interface: position
+        ros_topics: {pose_reference: /execution/left_arm/pose_reference, twist_reference: /execution/left_arm/twist_reference}
+  left_gripper:
+    type: parallel_gripper
+    joint_names: [left_gripper_left_joint]
+    parent_group: left_arm
+    base_frame: flange_L
+    tcp_frame: left_pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: left_pika_gripper_fwd
+        implementation: forward_command_controller/ForwardCommandController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/left_gripper/joint_reference}
+  right_arm:
+    type: arm
+    joint_names: [Joint1_R, Joint2_R, Joint3_R, Joint4_R, Joint5_R, Joint6_R, Joint7_R]
+    base_frame: Base_R
+    flange_frame: flange_R
+    tcp_frame: right_pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_trajectory
+    controllers:
+      joint_trajectory:
+        name: right_arm_jtc
+        implementation: joint_trajectory_controller/JointTrajectoryController
+        command_interface: position
+        ros_actions: {follow_joint_trajectory: /execution/right_arm/follow_joint_trajectory}
+        ros_topics: {trajectory_guard_heartbeat: /execution/right_arm/trajectory_guard_heartbeat}
+      joint_space_reference:
+        name: right_arm_jspc
+        implementation: manipulation_position_controllers/JointSpacePositionController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/right_arm/joint_reference}
+      task_space_reference:
+        name: right_arm_tskpc
+        implementation: manipulation_position_controllers/TaskSpaceKinematicPositionController
+        command_interface: position
+        ros_topics: {pose_reference: /execution/right_arm/pose_reference, twist_reference: /execution/right_arm/twist_reference}
+  right_gripper:
+    type: parallel_gripper
+    joint_names: [right_gripper_left_joint]
+    parent_group: right_arm
+    base_frame: flange_R
+    tcp_frame: right_pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: right_pika_gripper_fwd
+        implementation: forward_command_controller/ForwardCommandController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/right_gripper/joint_reference}

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from controller_manager_msgs.srv import ListControllers, SwitchController
-from rmi import ControllerManagerError, ControllerManagerClient
+from rmi.controllers import ControllerManagerError, ControllerManagerClient
 
 
 class FakeServiceClient:

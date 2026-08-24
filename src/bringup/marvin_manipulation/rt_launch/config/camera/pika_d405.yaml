@@ -1,0 +1,65 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Pika wrist Intel RealSense D405 (RGB-D). Model stream is 848x480 RGB8 + Z16
+# @ 30 Hz, hardware-synced, depth aligned to color
+# (`.../aligned_depth_to_color/image_raw`). Namespaces / serials / frames below
+# are Marvin gamma site identity; copy this file to another robot and change
+# those three.
+# Same physical Pika cable as USB2 ID_PATH usb-0:7.* (left) / usb-0:9.* (right): see 99-pika.rules.
+
+left_pika_d405:
+  camera:
+    ros__parameters:
+      camera_name: "left_pika_d405"
+      serial_no: "_315122272176"
+      base_frame_id: "left_pika_d405_link"
+      enable_color: true
+      enable_depth: true
+      enable_infra: false
+      enable_infra1: false
+      enable_infra2: false
+      enable_sync: true
+      rgb_camera:
+        color_profile: "848x480x30"
+        color_format: "RGB8"
+        global_time_enabled: true
+      depth_module:
+        depth_profile: "848x480x30"
+        depth_format: "Z16"
+        global_time_enabled: true
+        frames_queue_size: 2
+      align_depth:
+        enable: true
+        frames_queue_size: 2
+      pointcloud:
+        enable: false
+      clip_distance: -1.0
+
+right_pika_d405:
+  camera:
+    ros__parameters:
+      camera_name: "right_pika_d405"
+      serial_no: "_315122272081"
+      base_frame_id: "right_pika_d405_link"
+      enable_color: true
+      enable_depth: true
+      enable_infra: false
+      enable_infra1: false
+      enable_infra2: false
+      enable_sync: true
+      rgb_camera:
+        color_profile: "848x480x30"
+        color_format: "RGB8"
+        global_time_enabled: true
+      depth_module:
+        depth_profile: "848x480x30"
+        depth_format: "Z16"
+        global_time_enabled: true
+        frames_queue_size: 2
+      align_depth:
+        enable: true
+        frames_queue_size: 2
+      pointcloud:
+        enable: false
+      clip_distance: -1.0

@@ -1,0 +1,33 @@
+# Copyright 2026 Physical AI Runtime contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Pika wrist Sunplus DECXIN fisheye (USB 1bcf:2cd1). Model stream is original
+# MJPEG 1280x720 @ 30 Hz via mjpeg_cam (see that package's config/mjpeg_cam.yaml).
+# video_device / frame_id below are Marvin gamma site identity (udev
+# /dev/pika_left_fisheye left, /dev/pika_right_fisheye right, udev ID_PATH usb-0:7 / usb-0:9).
+# Gripper on the same cable: /dev/pika_left_gripper / /dev/pika_right_gripper.
+# D405 on the same physical cable is USB3: config/camera/pika_d405.yaml.
+
+left_pika_fisheye:
+  camera:
+    ros__parameters:
+      camera_name: "left_pika_fisheye"
+      video_device: "/dev/pika_left_fisheye"
+      frame_id: "left_pika_fisheye_link"
+      image_width: 1280
+      image_height: 720
+      framerate: 30.0
+      compressed_topic: "image/compressed"
+      format: "jpeg"
+
+right_pika_fisheye:
+  camera:
+    ros__parameters:
+      camera_name: "right_pika_fisheye"
+      video_device: "/dev/pika_right_fisheye"
+      frame_id: "right_pika_fisheye_link"
+      image_width: 1280
+      image_height: 720
+      framerate: 30.0
+      compressed_topic: "image/compressed"
+      format: "jpeg"

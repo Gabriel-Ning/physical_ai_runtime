@@ -1,0 +1,15 @@
+schema_version: 1
+streams:
+  # Application-selected authority and command facts.
+  - {id: authority_status, topic: /execution_manager/authority_status, expected_type: execution_manager_interfaces/msg/AuthorityStatus, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: transient_local, depth: 1}}
+  - {id: authority_events, topic: /execution_manager/authority_events, expected_type: execution_manager_interfaces/msg/AuthorityEvent, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 100}}
+  - {id: source_policy_arm, topic: /action_sources/policy/arm/joint_reference, expected_type: execution_manager_interfaces/msg/LeasedJointReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_policy_end_effector, topic: /action_sources/policy/end_effector/joint_reference, expected_type: execution_manager_interfaces/msg/LeasedJointReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_policy_arm, topic: /execution_trace/policy/arm/joint_reference, expected_type: execution_manager_interfaces/msg/LeasedJointReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_arm, topic: /execution/arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_end_effector, topic: /execution/end_effector/joint_reference, expected_type: std_msgs/msg/Float64MultiArray, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+
+  - {id: robot_joint_states, topic: /joint_states, expected_type: sensor_msgs/msg/JointState, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: pika_d405_color, topic: /pika_d405/camera/color/image_raw, expected_type: sensor_msgs/msg/Image, required: false, start_gate: false, qos: {mode: sensor_data}}
+  - {id: pika_d405_depth, topic: /pika_d405/camera/depth/image_rect_raw, expected_type: sensor_msgs/msg/Image, required: false, start_gate: false, qos: {mode: sensor_data}}
+  - {id: pika_fisheye_color, topic: /pika_fisheye/image/compressed, expected_type: sensor_msgs/msg/CompressedImage, required: false, start_gate: false, qos: {mode: sensor_data}}

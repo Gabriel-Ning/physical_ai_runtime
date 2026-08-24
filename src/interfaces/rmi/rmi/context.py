@@ -6,25 +6,18 @@ import threading
 from collections.abc import Mapping
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState as RosJointState
 
-from .provider import ActionProviderClient
-from .agent import Agent, Robot
+from .agent import Agent
 from .config import EmbodimentConfig
-from .execution import LocalExecutionManager
+from .provider import ActionProviderClient
+from .robot import Robot
+from .selection import AuthorityClient, ExecutionManagerClient
 from .sensing import Camera, Sensor, _node_now_s
 
-if TYPE_CHECKING:
-    from .planning import (
-        CartesianStreamer,
-        JointStreamer,
-        PlannerCatalog,
-        Planner,
-        Resolver,
-    )
 
 class Context:
     """Shared ROS resources and factories for one RMI application process."""
@@ -38,17 +31,22 @@ class Context:
         timeout_sec: float = 5.0,
         action_client_factory: Any | None = None,
         state_topic: str = "/joint_states",
-        planner_catalog: PlannerCatalog | None = None,
+        provider_selector: Any | None = None,
+        recorder_client_factory: Any | None = None,
         owns_node: bool = False,
     ) -> None:
         self.profile = profile
         self.node = node
-        self.execution = LocalExecutionManager(profile, node=node)
+        self.provider_selector: AuthorityClient = (
+            provider_selector
+            if provider_selector is not None
+            else ExecutionManagerClient(profile, node, timeout_sec=timeout_sec)
+        )
         # Node clock keeps robot-state receive times comparable with sensor
         # facades (and correct under use_sim_time).
         self.robot = Robot(
             profile,
-            self.execution,
+            self.provider_selector,
             clock=lambda: _node_now_s(node),
         )
         self._timeout_sec = timeout_sec
@@ -62,7 +60,7 @@ class Context:
         self._sensor_specs: dict[str, tuple[str, Any, int]] = {}
         self._recorder = None
         self._recorder_config = None
-        self._planner_catalog = planner_catalog
+        self._recorder_client_factory = recorder_client_factory
         self._executor = None
         self._spin_thread = None
         self._state_subscription = node.create_subscription(
@@ -74,13 +72,6 @@ class Context:
         if spin_node:
             self._start_executor()
 
-    def _catalog(self):
-        if self._planner_catalog is None:
-            from .planning import PlannerCatalog
-
-            self._planner_catalog = PlannerCatalog()
-        return self._planner_catalog
-
     @classmethod
     def from_profile(
         cls,
@@ -91,8 +82,14 @@ class Context:
         timeout_sec: float = 5.0,
         action_client_factory: Any | None = None,
         state_topic: str = "/joint_states",
-        planner_catalog: PlannerCatalog | None = None,
+        recorder_client_factory: Any | None = None,
     ) -> Context:
+        """Create an application Context from an embodiment profile.
+
+        If ``node`` is omitted, this object owns the created node and the
+        process-global rclpy context; closing it calls ``rclpy.shutdown()``.
+        Processes that host other ROS nodes must pass their own node.
+        """
         config = _load_profile(profile)
         owns_node = False
         if node is None:
@@ -109,12 +106,15 @@ class Context:
             timeout_sec=timeout_sec,
             action_client_factory=action_client_factory,
             state_topic=state_topic,
-            planner_catalog=planner_catalog,
+            provider_selector=ExecutionManagerClient(
+                config, node, timeout_sec=timeout_sec
+            ),
+            recorder_client_factory=recorder_client_factory,
             owns_node=owns_node,
         )
 
     def is_ready(self, *, check_cameras: bool = False) -> bool:
-        """Check whether the embodiment is ready to observe and act."""
+        """Check observation readiness; this does not require the Execution Manager."""
         if not self.robot.is_ready():
             return False
         if check_cameras:
@@ -128,16 +128,20 @@ class Context:
         timeout: float = 10.0,
         check_frequency: float = 50.0,
         *,
-        check_hardware: bool = True,
+        check_hardware: bool = False,
         check_cameras: bool = False,
+        require_execution_manager: bool = False,
     ) -> None:
-        """Wait until the entire embodiment context (robot + optional cameras) is ready."""
+        """Wait for RT state/health and optional sensors, without acquiring control."""
         # 1. Wait for robot body and hardware readiness
         self.robot.wait_until_ready(
             timeout=timeout,
             check_frequency=check_frequency,
             check_hardware=check_hardware,
         )
+
+        if require_execution_manager:
+            self.provider_selector.require_execution_manager(timeout_sec=timeout)
 
         # 2. If check_cameras is requested, instantiate declared cameras and wait for them
         if check_cameras and hasattr(self.profile, "cameras") and self.profile.cameras:
@@ -147,83 +151,6 @@ class Context:
             for cam in self._cameras.values():
                 cam.wait_until_ready(timeout=timeout)
 
-    def register_planner(
-        self,
-        name: str,
-        factory: Any,
-        *,
-        display_name: str = "",
-        warmup_on_create: bool = True,
-    ) -> None:
-        """Register a lazy adapter factory for this application process."""
-        self._catalog().register(
-            name,
-            factory,
-            display_name=display_name,
-            warmup_on_create=warmup_on_create,
-        )
-
-    def make_planner(self, name: str) -> Planner:
-        """Construct or reuse a pure planner; this never grants control authority."""
-        return self._catalog().make(name)
-
-    def register_resolver(
-        self,
-        name: str,
-        factory: Any,
-        *,
-        display_name: str = "",
-        warmup_on_create: bool = True,
-    ) -> None:
-        self._catalog().register_resolver(
-            name,
-            factory,
-            display_name=display_name,
-            warmup_on_create=warmup_on_create,
-        )
-
-    def make_resolver(self, name: str) -> Resolver:
-        return self._catalog().make_resolver(name)
-
-    def register_joint_streamer(
-        self,
-        name: str,
-        factory: Any,
-        *,
-        display_name: str = "",
-        warmup_on_create: bool = True,
-    ) -> None:
-        self._catalog().register_joint_streamer(
-            name,
-            factory,
-            display_name=display_name,
-            warmup_on_create=warmup_on_create,
-        )
-
-    def make_joint_streamer(self, name: str) -> JointStreamer:
-        return self._catalog().make_joint_streamer(name)
-
-    def register_cartesian_streamer(
-        self,
-        name: str,
-        factory: Any,
-        *,
-        display_name: str = "",
-        warmup_on_create: bool = True,
-    ) -> None:
-        self._catalog().register_cartesian_streamer(
-            name,
-            factory,
-            display_name=display_name,
-            warmup_on_create=warmup_on_create,
-        )
-
-    def make_cartesian_streamer(self, name: str) -> CartesianStreamer:
-        return self._catalog().make_cartesian_streamer(name)
-
-    def available_planners(self) -> list[str]:
-        return self._catalog().available()
-
     def make_agent(
         self,
         name: str,
@@ -231,12 +158,15 @@ class Context:
         robot: Robot | None = None,
         sensors: list[Sensor[Any]] | tuple[Sensor[Any], ...] = (),
         frequency: float | None = None,
+        source_instance: str | None = None,
+        metadata: Mapping[str, str] | None = None,
     ) -> Agent:
         """Construct or reuse an Agent with fixed observation sources."""
         target_robot = robot if robot is not None else self.robot
         requested_sensors = tuple(sensors)
         agent_config = self.profile.agents.get(name)
-        provider = agent_config.provider if agent_config is not None else name
+        if agent_config is None:
+            raise KeyError(f"agent {name!r} is not declared in the application profile")
         configured_frequency = (
             agent_config.frequency if agent_config is not None else None
         )
@@ -247,25 +177,30 @@ class Context:
                 agent._robot is not target_robot
                 or agent.sensors != requested_sensors
                 or agent.frequency != requested_frequency
+                or agent.source_instance != (source_instance or name)
+                or agent.metadata != dict(metadata or {})
             ):
                 raise ValueError(
                     f"agent {name!r} already exists with different robot, sensors, "
-                    "or frequency"
+                    "frequency, source_instance, or metadata"
                 )
             return agent
-        client = ActionProviderClient.from_profile(
-            self.profile,
-            provider,
+        client = ActionProviderClient(
+            name,
             self.node,
-            self._timeout_sec,
+            agent_config.resources,
+            profile=self.profile,
+            timeout_sec=self._timeout_sec,
             action_client_factory=self._action_client_factory,
         )
         self._agents[name] = Agent(
             name,
             client,
             self.profile,
-            self.execution,
-            provider=provider,
+            source_role=agent_config.source_role,
+            source_instance=source_instance,
+            metadata=dict(metadata or {}),
+            resources=agent_config.resources,
             frequency=requested_frequency,
             robot=target_robot,
             sensors=requested_sensors,
@@ -344,111 +279,41 @@ class Context:
     def make_recorder(
         self,
         *,
-        type: str = "mcap",
         config: Any | None = None,
+        client: Any | None = None,
         node_name: str = "/episode_recorder",
         autostart: bool = True,
-        capacity: int = 100_000,
     ) -> Any:
-        """Construct the recorder facade for offline MCAP dataset or online RL replay buffer."""
-        if type == "memory":
-            from .recording import MemoryReplayBuffer
-
-            return MemoryReplayBuffer(capacity=capacity)
-
+        """Construct the MCAP episode-recorder client; never starts the server."""
         if self._recorder is not None:
             if config is not None and config is not self._recorder_config:
                 raise ValueError(
                     "recorder already exists; configure it once via make_recorder()"
                 )
             return self._recorder
-        from episode_recorder import (
-            Recorder as BackendRecorder,
-            RecorderConfig,
-            RosRecorderBackend,
-        )
+        from .recording import EpisodeRecorder
 
-        from .recording import ManagedRosRecorder
-
-        stream_config_uri = None
-        if config is None:
-            values = dict(self.profile.recording)
-            profile_name = values.get("profile")
-            if profile_name and not values.get("profile_dir") and not values.get("stream_config_uri"):
-                found_path = None
-                # 1. Search in robot bringup package config/recording
-                bringup_pkg = (
-                    self.profile.host_roles.get("rt_host", {})
-                    .get("bringup", {})
-                    .get("package")
-                )
-                if bringup_pkg:
-                    candidate = (
-                        Path(__file__).resolve().parents[3]
-                        / "bringup"
-                        / bringup_pkg
-                        / "config"
-                        / "recording"
-                        / f"{profile_name}.yaml"
-                    )
-                    if candidate.is_file():
-                        found_path = candidate
-                    else:
-                        try:
-                            from ament_index_python.packages import (
-                                get_package_share_directory,
-                            )
-
-                            share_cand = (
-                                Path(get_package_share_directory(bringup_pkg))
-                                / "config"
-                                / "recording"
-                                / f"{profile_name}.yaml"
-                            )
-                            if share_cand.is_file():
-                                found_path = share_cand
-                        except Exception:
-                            pass
-
-                # 2. Search in episode_recorder package share
-                if found_path is None:
-                    try:
-                        from ament_index_python.packages import (
-                            get_package_share_directory,
-                        )
-
-                        share_rec = (
-                            Path(get_package_share_directory("episode_recorder"))
-                            / "config"
-                            / "profiles"
-                            / f"{profile_name}.yaml"
-                        )
-                        if share_rec.is_file():
-                            found_path = share_rec
-                    except Exception:
-                        pass
-
-                if found_path is not None:
-                    stream_config_uri = str(found_path.resolve())
-                    values["stream_config_uri"] = stream_config_uri
-            import inspect
-
-            valid_keys = inspect.signature(RecorderConfig.__init__).parameters.keys()
-            filtered_values = {k: v for k, v in values.items() if k in valid_keys and k != "self"}
-            recorder_config = RecorderConfig(**filtered_values)
-        else:
-            recorder_config = config
-        self._recorder_config = recorder_config
-        backend = BackendRecorder(
-            recorder_config, RosRecorderBackend(self.node, node_name)
-        )
-        self._recorder = ManagedRosRecorder(
-            backend,
+        if client is None:
+            factory = self._recorder_client_factory or _make_episode_recorder_client
+            client = factory(
+                self.node,
+                node_name=node_name,
+                config=config,
+                profile_values=dict(self.profile.recording),
+            )
+        self._recorder_config = config
+        self._recorder = EpisodeRecorder(
+            client,
             autostart=autostart,
-            stream_config_uri=stream_config_uri,
             node_name=node_name,
         )
         return self._recorder
+
+    def make_replay_buffer(self, *, capacity: int = 100_000) -> Any:
+        """Construct an in-memory (observation, action) buffer for gym / RL."""
+        from .recording import MemoryReplayBuffer
+
+        return MemoryReplayBuffer(capacity=capacity)
 
     def close(self) -> None:
         if self._closed:
@@ -483,7 +348,7 @@ class Context:
             except Exception:
                 pass
         try:
-            self.execution.close()
+            self.provider_selector.close()
         except Exception:
             pass
         if hasattr(self.node, "destroy_subscription"):
@@ -494,6 +359,13 @@ class Context:
         if self._owns_node and hasattr(self.node, "destroy_node"):
             try:
                 self.node.destroy_node()
+            except Exception:
+                pass
+            try:
+                import rclpy
+
+                if rclpy.ok():
+                    rclpy.shutdown()
             except Exception:
                 pass
 
@@ -520,7 +392,6 @@ class Context:
             daemon=True,
         )
         self._spin_thread.start()
-
 
 
 def _resolve_profile_path(profile_path: str | Path) -> Path:
@@ -568,3 +439,80 @@ def _load_profile(
     raise TypeError("profile must be EmbodimentConfig, mapping, or path")
 
 
+def _make_episode_recorder_client(
+    node: Any,
+    *,
+    node_name: str,
+    config: Any | None,
+    profile_values: dict[str, Any],
+) -> Any:
+    """Build the installed episode_recorder SDK client for an existing server."""
+    import inspect
+
+    from episode_recorder import (
+        Recorder as EpisodeRecorderClient,
+    )
+    from episode_recorder import (
+        RecorderConfig,
+        RosRecorderBackend,
+    )
+
+    recorder_config = config
+    if recorder_config is None:
+        valid_keys = inspect.signature(RecorderConfig.__init__).parameters
+        values = {
+            key: value
+            for key, value in profile_values.items()
+            if key != "self" and key in valid_keys
+        }
+        if values.get("profile") and not (
+            values.get("profile_dir") or values.get("contract_path")
+        ):
+            values["contract_path"] = str(
+                _resolve_recording_profile(str(values["profile"]))
+            )
+        recorder_config = RecorderConfig(**values)
+    return EpisodeRecorderClient(
+        recorder_config,
+        RosRecorderBackend(node, node_name),
+    )
+
+
+def _resolve_recording_profile(profile: str) -> Path:
+    """Resolve one recorder stream profile from ROS shares or this workspace."""
+    filename = f"{profile}.yaml"
+    install_candidates: list[Path] = []
+    source_candidates: list[Path] = []
+
+    try:
+        from ament_index_python.packages import get_packages_with_prefixes
+
+        for package, prefix in get_packages_with_prefixes().items():
+            candidate = Path(prefix) / "share" / package / "config" / "recording" / filename
+            if candidate.is_file():
+                install_candidates.append(candidate.resolve())
+    except (ImportError, OSError):
+        pass
+
+    if install_candidates:
+        if len(install_candidates) > 1:
+            rendered = ", ".join(str(path) for path in sorted(install_candidates))
+            raise RuntimeError(
+                f"recorder profile {profile!r} is ambiguous across ROS packages: {rendered}"
+            )
+        return install_candidates[0]
+
+    workspace_root = Path(__file__).resolve().parents[4]
+    for candidate in workspace_root.glob(f"src/**/config/recording/{filename}"):
+        if candidate.is_file():
+            source_candidates.append(candidate.resolve())
+
+    if not source_candidates:
+        raise FileNotFoundError(
+            f"recorder profile {profile!r} was not found under ROS package shares "
+            "or src/**/config/recording"
+        )
+    if len(source_candidates) > 1:
+        rendered = ", ".join(str(path) for path in sorted(source_candidates))
+        raise RuntimeError(f"recorder profile {profile!r} is ambiguous: {rendered}")
+    return source_candidates[0]

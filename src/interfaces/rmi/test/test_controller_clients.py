@@ -4,15 +4,15 @@ from types import SimpleNamespace
 import pytest
 from action_msgs.msg import GoalStatus
 from moveit_msgs.msg import CartesianTrajectory
-from rmi import (
+from rmi.controllers import (
     ControllerClientError,
-    ControllerConfig,
     ForwardCommandControllerClient,
     GripperControllerClient,
     JointSpaceReferenceControllerClient,
     JointTrajectoryControllerClient,
     TaskSpaceReferenceControllerClient,
 )
+from rmi.config import ControllerConfig
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 

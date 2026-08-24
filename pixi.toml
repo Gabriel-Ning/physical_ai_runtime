@@ -97,6 +97,9 @@ ros-jazzy-ruckig = ">=0.9.2,<0.10"
 # RT controller binaries. Do not overlay a local src/controller checkout.
 ros-jazzy-manipulation-position-controllers = "==0.3.1"
 ros-jazzy-joint-trajectory-controller-guard = "==0.1.0"
+# Execution Manager binaries. Do not overlay a local src/execution checkout.
+ros-jazzy-execution-manager-interfaces = "==0.1.0"
+ros-jazzy-execution-manager = "==0.1.0"
 # pinocchio's CMake find_dependency(Qhull) requires the CLI tools under
 # $PREFIX/bin (qhull, qconvex, …). Keep an explicit pin so installs that
 # clobber/drop those binaries can be repaired by reinstalling this package.
@@ -111,7 +114,8 @@ ros-jazzy-teleop-twist-joy = ">=2.6.5,<3"
 ros-jazzy-joy-linux = ">=3.3.0,<4"
 
 # ── Recording / visualization / debug ────────────────────────────────────────
-ros-jazzy-episode-recorder = "==0.4.0"
+# Episode recorder binary. Do not overlay a local src/recording checkout.
+ros-jazzy-episode-recorder = "==0.5.0"
 ros-jazzy-foxglove-bridge = "*"
 # Time-series debug outside RViz (ROS topic streaming plugins included).
 ros-jazzy-plotjuggler-ros = "*"
@@ -123,6 +127,8 @@ ros-jazzy-launch-testing = "*"
 ros-jazzy-launch-pytest = "*"
 # franka_gripper (and similar) find_package this under BUILD_TESTING=ON.
 ros-jazzy-ament-cmake-clang-format = "*"
+ros-jazzy-kinematics-interface-kdl = "*"
+ros-jazzy-ffmpeg-image-transport = "*"
 
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
@@ -147,10 +153,12 @@ build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 # (non-unittest.TestCase) test with zero error output. Force pytest so
 # ament_python test suites are actually collected and run.
 test = "bash -c 'colcon test --python-testing pytest && colcon test-result --verbose'"
+benchmark-em-relay = "bash -c 'source install/setup.bash && python scripts/benchmark_em_relay.py'"
 clean = "rm -rf build install log"
-# Kill leftover ROS 2 processes locally and on the RT host (beta), including
-# orphan robot_state_publisher / joint_state_publisher that steal /joint_states.
-# STOP_ROS_REMOTE=0 → local only. STOP_ROS_REMOTE_HOST overrides beta SSH target.
+# Kill leftover ROS 2 processes (launch, CM, cameras, JTC guard, RViz, ...).
+# Always restarts the ros2 daemon. STOP_ROS_REMOTE=1 also runs this script on
+# the RT host (STOP_ROS_REMOTE_HOST, default gamma@192.168.1.102).
+# On an RT host that only has the cpu env: pixi run -e cpu stop
 stop = "bash scripts/stop_ros.sh"
 # Time-series inspector (alongside / instead of RViz). Same ROS_DOMAIN_ID.
 pj = "ros2 run plotjuggler plotjuggler"
@@ -161,6 +169,7 @@ lint = "ruff check --no-cache src"
 teleop = "python apps/teleop.py"
 record = "python apps/record.py"
 replay = "python apps/replay.py"
+eval = "python apps/eval.py"
 
 # ── GPU feature (default environment) ────────────────────────────────────────
 #

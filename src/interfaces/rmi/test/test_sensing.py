@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from rclpy.qos import qos_profile_sensor_data
 from rmi import Camera, CameraSensorConfig, Sensor
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Float64MultiArray
 
 
@@ -66,6 +66,31 @@ def test_camera_preserves_source_receive_time_and_raw_message_without_copy():
     assert frame.frame_id == "head_optical_frame"
     assert frame.sequence == 1
     assert node.subscriptions[0].qos is qos_profile_sensor_data
+
+
+def test_camera_jpeg_encoding_subscribes_to_compressed_image():
+    node = FakeNode()
+    camera = Camera(
+        CameraSensorConfig(
+            name="fisheye",
+            ros_topic="/pika_fisheye/image/compressed",
+            encoding="jpeg",
+        ),
+        node,
+    )
+    message = CompressedImage()
+    message.header.stamp.sec = 7
+    message.header.frame_id = "pika_fisheye_link"
+    message.format = "jpeg"
+    message.data = [0xFF, 0xD8, 0xFF, 0xD9]
+
+    node.subscriptions[0].callback(message)
+    frame = camera.frame
+
+    assert node.subscriptions[0].message_type is CompressedImage
+    assert frame.value is message
+    assert frame.source_time_s == 7.0
+    assert frame.frame_id == "pika_fisheye_link"
 
 
 def test_camera_converter_and_bounded_history_are_applied_once_per_message():

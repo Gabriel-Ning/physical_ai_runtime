@@ -1,118 +1,89 @@
-"""Workstation-side clients for one Action Provider's EM gateway endpoints.
-
-:class:`ActionProviderClient` is the **command-plane** client: it publishes
-native ROS commands to deployment-declared gateway endpoints under one
-provider name. It is not :class:`~rmi.ProviderLifecycle` (the EM-side
-``start``/``stop``/``reset`` hooks).
-"""
+"""Lease-bound command client used by one RMI ControlSession."""
 
 from __future__ import annotations
 
-import math
+import asyncio
 from collections.abc import Mapping
-from itertools import pairwise
-from types import MappingProxyType
 from typing import Any
 
-from geometry_msgs.msg import TwistStamped
-from moveit_msgs.msg import (
-    CartesianPoint,
-    CartesianTrajectory,
-    CartesianTrajectoryPoint,
+from action_msgs.msg import GoalStatus
+from execution_manager_interfaces.action import LeasedFollowJointTrajectory
+from execution_manager_interfaces.msg import (
+    LeasedJointReference,
+    LeasedPoseReference,
+    LeasedTwistReference,
 )
+from geometry_msgs.msg import TwistStamped
+from moveit_msgs.msg import CartesianPoint, CartesianTrajectory, CartesianTrajectoryPoint
+from rclpy.action import ActionClient
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
-from .config import ControllerConfig, EmbodimentConfig
-from .controllers import make_controller_client_factory
+from .config import EmbodimentConfig
+from .contracts import PoseHorizonResult, ResolveResult
+from .errors import ControllerClientError, TrajectoryCanceledError
+from .selection import EndpointBinding, LeaseGrant
+
+
+def _command_qos() -> QoSProfile:
+    return QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
 
 
 class ActionProviderClient:
-    """Native ROS command clients bound to one profile-declared provider.
-
-    Unlike :class:`rmi.Robot`, these clients target Execution Manager source
-    endpoints. They therefore preserve arbitration and generation fencing
-    instead of commanding ros2_control controllers directly.
-    """
+    """Publishes typed leased commands only to endpoints returned by EM."""
 
     def __init__(
         self,
         name: str,
         node: Any,
-        controllers: Mapping[str, Any],
-        commands: Mapping[str, frozenset[str]],
+        resources: Mapping[str, str],
         *,
         profile: EmbodimentConfig | None = None,
+        timeout_sec: float = 5.0,
+        action_client_factory: Any = ActionClient,
     ) -> None:
         self.name = name
         self._node = node
-        self.controllers = MappingProxyType(dict(controllers))
-        self.commands = MappingProxyType(dict(commands))
+        self.resources = dict(resources)
         self.profile = profile
+        self._timeout_sec = timeout_sec
+        self._action_client_factory = action_client_factory
+        self._lease_id = ""
+        self._bindings: dict[tuple[str, str], EndpointBinding] = {}
+        self._publishers: dict[tuple[str, str], Any] = {}
+        self._action_clients: dict[str, Any] = {}
+        self._goal_handles: dict[str, Any] = {}
 
-    @classmethod
-    def from_profile(
-        cls,
-        profile: EmbodimentConfig,
-        provider: str,
-        node: Any,
-        timeout_sec: float = 5.0,
-        *,
-        action_client_factory: Any | None = None,
-    ) -> ActionProviderClient:
-        try:
-            provider_config = profile.execution["providers"][provider]
-        except KeyError as exc:
-            raise KeyError(f"unknown action provider {provider!r}") from exc
-
-        endpoints: dict[str, dict[str, dict[str, str]]] = {}
-        for source in profile.execution.get("sources", []):
-            if source["provider"] != provider:
-                continue
-            part_endpoints = endpoints.setdefault(
-                source["part"], {"actions": {}, "topics": {}}
-            )
-            if source["command"] == "joint_trajectory":
-                part_endpoints["actions"]["follow_joint_trajectory"] = source[
-                    "action"
-                ]
-            else:
-                part_endpoints["topics"][source["command"]] = source["topic"]
-
-        configured_parts = set(provider_config["controllers"])
-        missing = configured_parts - set(endpoints)
-        if missing:
-            raise ValueError(
-                f"provider {provider!r} has no sources for parts {sorted(missing)!r}"
-            )
-
-        factory = make_controller_client_factory(
-            node,
-            timeout_sec,
-            *(() if action_client_factory is None else (action_client_factory,)),
+    def fork(self) -> ActionProviderClient:
+        """Create an independent lease binding for a concurrent Session."""
+        return ActionProviderClient(
+            self.name,
+            self._node,
+            self.resources,
+            profile=self.profile,
+            timeout_sec=self._timeout_sec,
+            action_client_factory=self._action_client_factory,
         )
-        controllers: dict[str, Any] = {}
-        commands: dict[str, frozenset[str]] = {}
-        for part, contract in provider_config["controllers"].items():
-            route = endpoints[part]
-            topics = dict(route["topics"])
-            part_controller = profile.parts[part].controllers[contract]
-            heartbeat = part_controller.ros_topics.get("trajectory_guard_heartbeat")
-            if heartbeat:
-                topics["trajectory_guard_heartbeat"] = heartbeat
-            source_config = ControllerConfig(
-                name=f"{provider}:{part}",
-                implementation=part_controller.implementation,
-                command_interface=part_controller.command_interface,
-                ros_actions=route["actions"],
-                ros_topics=topics,
-            )
-            controllers[part] = factory(part, contract, source_config)
-            commands[part] = frozenset(
-                source["command"]
-                for source in profile.execution["sources"]
-                if source["provider"] == provider and source["part"] == part
-            )
-        return cls(provider, node, controllers, commands, profile=profile)
+
+    def bind(self, grant: LeaseGrant) -> None:
+        if self._lease_id:
+            raise RuntimeError("command client is already bound to a lease")
+        self._lease_id = grant.lease_id
+        self._bindings = dict(grant.endpoints)
+
+    def unbind(self) -> None:
+        if hasattr(self._node, "destroy_publisher"):
+            for publisher in self._publishers.values():
+                self._node.destroy_publisher(publisher)
+        for client in self._action_clients.values():
+            destroy = getattr(client, "destroy", None)
+            if destroy is not None:
+                destroy()
+        self._lease_id = ""
+        self._bindings.clear()
+        self._publishers.clear()
+        self._action_clients.clear()
+        self._goal_handles.clear()
 
     def send_joint_reference(
         self,
@@ -121,12 +92,7 @@ class ActionProviderClient:
         positions: list[list[float]],
         times_from_start_sec: list[float],
     ) -> None:
-        if not positions or len(positions) != len(times_from_start_sec):
-            raise ValueError("positions and times_from_start_sec must align")
-        if not joint_names or any(len(values) != len(joint_names) for values in positions):
-            raise ValueError("joint reference positions must align with joint_names")
         message = JointTrajectory()
-        message.header.stamp = self._node.get_clock().now().to_msg()
         message.joint_names = list(joint_names)
         for values, time_sec in zip(positions, times_from_start_sec):
             point = JointTrajectoryPoint()
@@ -143,14 +109,7 @@ class ActionProviderClient:
         times_from_start_sec: list[float],
         frame_id: str,
     ) -> None:
-        if not positions or not (
-            len(positions) == len(orientations) == len(times_from_start_sec)
-        ):
-            raise ValueError(
-                "positions, orientations, and times_from_start_sec must align"
-            )
         message = CartesianTrajectory()
-        message.header.stamp = self._node.get_clock().now().to_msg()
         message.header.frame_id = frame_id
         for position, orientation, time_sec in zip(
             positions, orientations, times_from_start_sec
@@ -169,31 +128,58 @@ class ActionProviderClient:
         self.send(part, "pose_reference", message)
 
     def send_twist_reference(
-        self,
-        part: str,
-        linear: list[float],
-        angular: list[float],
-        frame_id: str,
+        self, part: str, linear: list[float], angular: list[float], frame_id: str
     ) -> None:
         if len(linear) != 3 or len(angular) != 3:
             raise ValueError("Cartesian twist linear and angular must be length 3")
         message = TwistStamped()
-        message.header.stamp = self._node.get_clock().now().to_msg()
         message.header.frame_id = frame_id
         message.twist.linear.x, message.twist.linear.y, message.twist.linear.z = linear
         message.twist.angular.x, message.twist.angular.y, message.twist.angular.z = angular
         self.send(part, "twist_reference", message)
 
-    async def execute_joint_trajectory(
-        self,
-        part: str,
-        trajectory: Any,
-        joint_names: list[str],
-        timeout_sec: float,
-    ) -> Any:
-        """Execute a complete trajectory and wait for its terminal result."""
-        handle = await self.start_joint_trajectory(part, trajectory, joint_names)
-        return await self.wait_joint_trajectory(part, handle, timeout_sec)
+    def send(self, part: str, command: str, message: Any) -> None:
+        self._require_binding(part, command)
+        _reject_invalid_result(message)
+        if isinstance(message, ResolveResult) and command != "joint_reference":
+            raise ValueError("ResolveResult requires command='joint_reference'")
+        if isinstance(message, PoseHorizonResult) and command != "pose_reference":
+            raise ValueError("PoseHorizonResult requires command='pose_reference'")
+        now = self._node.get_clock().now().to_msg()
+        if command == "joint_reference":
+            payload = (
+                message
+                if isinstance(message, JointTrajectory)
+                else _joint_trajectory_from_spec(message, self._joint_names(part), False)
+            )
+            envelope = LeasedJointReference()
+        elif command == "pose_reference":
+            payload = (
+                message
+                if isinstance(message, CartesianTrajectory)
+                else _cartesian_trajectory_from_spec(
+                    message, self._base_frame(part), self._tcp_frame(part)
+                )
+            )
+            envelope = LeasedPoseReference()
+        elif command == "twist_reference":
+            payload = (
+                message
+                if isinstance(message, TwistStamped)
+                else _twist_stamped_from_spec(message, self._base_frame(part))
+            )
+            envelope = LeasedTwistReference()
+        else:
+            raise KeyError(f"unsupported streaming command {command!r}")
+        # EM admission uses the envelope stamp; controllers use the payload
+        # stamp. Streaming references are dispatched now, so stamp both at the
+        # same send boundary.
+        if hasattr(payload, "header"):
+            payload.header.stamp = now
+        envelope.header.stamp = now
+        envelope.lease_id = self._lease_id
+        envelope.command = payload
+        self._publisher(part, command, type(envelope)).publish(envelope)
 
     async def start_joint_trajectory(
         self,
@@ -202,84 +188,107 @@ class ActionProviderClient:
         joint_names: list[str],
         feedback_callback: Any | None = None,
     ) -> Any:
-        """Send and accept a trajectory without claiming terminal success."""
-        client = self._client(part, "joint_trajectory")
-        message = _joint_trajectory_from_spec(trajectory, joint_names)
-        return await client.send(message, feedback_callback=feedback_callback)
+        binding = self._require_binding(part, "joint_trajectory")
+        trajectory = _joint_trajectory_from_spec(trajectory, joint_names, True)
+        client = self._action_clients.get(part)
+        if client is None:
+            client = self._action_client_factory(
+                self._node, LeasedFollowJointTrajectory, binding.endpoint
+            )
+            self._action_clients[part] = client
+        await _wait_ready(client, self._timeout_sec)
+        goal = LeasedFollowJointTrajectory.Goal()
+        goal.header.stamp = self._node.get_clock().now().to_msg()
+        goal.lease_id = self._lease_id
+        goal.resource = part
+        goal.trajectory = trajectory
+        future = (
+            client.send_goal_async(goal)
+            if feedback_callback is None
+            else client.send_goal_async(goal, feedback_callback=feedback_callback)
+        )
+        handle = await _bounded(future, self._timeout_sec, "send leased trajectory")
+        if not handle.accepted:
+            raise ControllerClientError("Execution Manager rejected trajectory")
+        self._goal_handles[part] = handle
+        return handle
 
     async def wait_joint_trajectory(
         self, part: str, handle: Any, timeout_sec: float
     ) -> Any:
-        """Wait for a previously accepted trajectory's terminal result."""
-        client = self._client(part, "joint_trajectory")
-        return await client.wait_for_result(handle, timeout_sec=timeout_sec)
+        wrapped = await _bounded(
+            handle.get_result_async(), timeout_sec, "wait for leased trajectory"
+        )
+        self._goal_handles.pop(part, None)
+        if wrapped.status == GoalStatus.STATUS_SUCCEEDED:
+            return wrapped.result
+        if wrapped.status == GoalStatus.STATUS_CANCELED:
+            raise TrajectoryCanceledError("trajectory goal was canceled")
+        raise ControllerClientError(
+            wrapped.result.error_string or f"trajectory status {wrapped.status}"
+        )
 
     async def cancel_joint_trajectory(self, part: str) -> None:
-        """Cancel this provider's active trajectory for ``part``."""
-        await self._client(part, "joint_trajectory").cancel()
-
-    def send(self, part: str, command: str, message: Any) -> Any:
-        """Send one native ROS command through this provider's EM gateway."""
-        client = self._client(part, command)
-        now_msg = self._node.get_clock().now().to_msg()
-        if command == "joint_trajectory":
-            if hasattr(message, "header") and message.header.stamp.sec == 0 and message.header.stamp.nanosec == 0:
-                message.header.stamp = now_msg
-            return client.send(message)
-        if command == "joint_reference":
-            if not isinstance(message, JointTrajectory):
-                part_joints = (
-                    self.profile.parts[part].joint_names
-                    if self.profile and part in self.profile.parts
-                    else []
-                )
-                message = _joint_trajectory_from_spec(
-                    message, part_joints, require_increasing_time=False
-                )
-            if message.header.stamp.sec == 0 and message.header.stamp.nanosec == 0:
-                message.header.stamp = now_msg
-            return client.send(message)
-        if command == "pose_reference":
-            if not isinstance(message, CartesianTrajectory):
-                base_frame = (
-                    self.profile.parts[part].base_frame
-                    if self.profile and part in self.profile.parts
-                    else "base_link"
-                )
-                tcp_frame = (
-                    self.profile.parts[part].tcp_frame
-                    if self.profile and part in self.profile.parts
-                    else ""
-                )
-                message = _cartesian_trajectory_from_spec(
-                    message, base_frame, tcp_frame
-                )
-            if message.header.stamp.sec == 0 and message.header.stamp.nanosec == 0:
-                message.header.stamp = now_msg
-            return client.send_pose(message)
-        if command == "twist_reference":
-            if not isinstance(message, TwistStamped):
-                base_frame = (
-                    self.profile.parts[part].base_frame
-                    if self.profile and part in self.profile.parts
-                    else "base_link"
-                )
-                message = _twist_stamped_from_spec(message, base_frame)
-            if message.header.stamp.sec == 0 and message.header.stamp.nanosec == 0:
-                message.header.stamp = now_msg
-            return client.send_twist(message)
-        raise KeyError(f"unsupported provider command {command!r}")
-
-    def _client(self, part: str, command: str) -> Any:
-        try:
-            client = self.controllers[part]
-        except KeyError as exc:
-            raise KeyError(f"provider {self.name!r} does not control part {part!r}") from exc
-        if command not in self.commands[part]:
-            raise KeyError(
-                f"provider {self.name!r} has no {command!r} source for part {part!r}"
+        handle = self._goal_handles.pop(part, None)
+        if handle is not None:
+            await _bounded(
+                handle.cancel_goal_async(), self._timeout_sec, "cancel trajectory"
             )
-        return client
+
+    def _publisher(self, part: str, command: str, message_type: Any) -> Any:
+        key = (part, command)
+        publisher = self._publishers.get(key)
+        if publisher is None:
+            publisher = self._node.create_publisher(
+                message_type, self._bindings[key].endpoint, _command_qos()
+            )
+            self._publishers[key] = publisher
+        return publisher
+
+    def _require_binding(self, part: str, command: str) -> EndpointBinding:
+        if not self._lease_id:
+            raise RuntimeError("command client has no active lease")
+        try:
+            return self._bindings[(part, command)]
+        except KeyError as exc:
+            raise KeyError(
+                f"lease has no {command!r} binding for resource {part!r}"
+            ) from exc
+
+    def _joint_names(self, part: str) -> list[str]:
+        return list(self.profile.parts[part].joint_names) if self.profile else []
+
+    def _base_frame(self, part: str) -> str:
+        return (self.profile.parts[part].base_frame or "base_link") if self.profile else "base_link"
+
+    def _tcp_frame(self, part: str) -> str:
+        return (self.profile.parts[part].tcp_frame or "") if self.profile else ""
+
+
+async def _wait_ready(client: Any, timeout: float) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not client.server_is_ready():
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError("leased trajectory action unavailable")
+        await asyncio.sleep(0.01)
+
+
+async def _bounded(future: Any, timeout: float, operation: str) -> Any:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not future.done():
+        if asyncio.get_running_loop().time() >= deadline:
+            future.cancel()
+            raise TimeoutError(f"{operation} timed out")
+        await asyncio.sleep(0.01)
+    exception = future.exception()
+    if exception is not None:
+        raise exception
+    return future.result()
+
+
+def _reject_invalid_result(value: Any) -> None:
+    if value is not None and hasattr(value, "valid") and not bool(value.valid):
+        raise ValueError(f"cannot send invalid planning result: {getattr(value, 'reason', '')}")
 
 
 def _set_duration(duration: Any, seconds: float) -> None:
@@ -291,220 +300,72 @@ def _set_duration(duration: Any, seconds: float) -> None:
 def _joint_trajectory_from_spec(
     trajectory: Any,
     default_joint_names: list[str],
-    *,
-    require_increasing_time: bool = True,
+    require_increasing_time: bool,
 ) -> JointTrajectory:
     if isinstance(trajectory, JointTrajectory):
         message = trajectory
-        if not message.joint_names:
-            message.joint_names = list(default_joint_names)
-        return message
-
-    # Object with .points (JointHorizonResult, PlanResult)
-    if hasattr(trajectory, "points") and not isinstance(trajectory, JointTrajectory):
-        in_names = list(
-            getattr(trajectory, "joint_names", default_joint_names)
-            or default_joint_names
-        )
-        target_names = list(default_joint_names) if default_joint_names else in_names
-        indices = (
-            [in_names.index(n) for n in target_names]
-            if set(target_names).issubset(set(in_names))
-            else list(range(len(in_names)))
-        )
-        out_names = [in_names[i] for i in indices]
-
-        message = JointTrajectory()
-        message.joint_names = out_names
-        for p in trajectory.points:
-            point = JointTrajectoryPoint()
-            pos = list(getattr(p, "positions", []))
-            point.positions = [float(pos[i]) for i in indices] if pos else []
-            vel = list(getattr(p, "velocities", []) or [])
-            point.velocities = [float(vel[i]) for i in indices] if vel else []
-            acc = list(getattr(p, "accelerations", []) or [])
-            point.accelerations = [float(acc[i]) for i in indices] if acc else []
-            _set_duration(point.time_from_start, getattr(p, "time_from_start_s", 0.0))
-            message.points.append(point)
-        return message
-
-    # Object with .positions (ResolveResult)
-    if hasattr(trajectory, "positions") and not hasattr(trajectory, "points"):
-        in_names = list(
-            getattr(trajectory, "joint_names", default_joint_names)
-            or default_joint_names
-        )
-        target_names = list(default_joint_names) if default_joint_names else in_names
-        indices = (
-            [in_names.index(n) for n in target_names]
-            if set(target_names).issubset(set(in_names))
-            else list(range(len(in_names)))
-        )
-        out_names = [in_names[i] for i in indices]
-
-        message = JointTrajectory()
-        message.joint_names = out_names
-        point = JointTrajectoryPoint()
-        pos = list(trajectory.positions)
-        point.positions = [float(pos[i]) for i in indices] if pos else []
-        vel = list(getattr(trajectory, "velocities", []) or [])
-        point.velocities = [float(vel[i]) for i in indices] if vel else []
-        acc = list(getattr(trajectory, "accelerations", []) or [])
-        point.accelerations = [float(acc[i]) for i in indices] if acc else []
-        _set_duration(point.time_from_start, getattr(trajectory, "time_from_start_s", 0.0))
-        message.points.append(point)
-        return message
-
-    if isinstance(trajectory, (list, tuple)):
+    elif isinstance(trajectory, (list, tuple)):
         message = JointTrajectory()
         message.joint_names = list(default_joint_names)
-        if trajectory and isinstance(trajectory[0], (list, tuple)):
-            # 2D list: list of waypoints [[q1, q2, ...], [q1, q2, ...]]
-            for i, row in enumerate(trajectory):
-                point = JointTrajectoryPoint()
-                point.positions = [
-                    float(x) for x in row[: len(default_joint_names)]
-                ]
-                _set_duration(point.time_from_start, (i + 1) * 0.01)
-                message.points.append(point)
-        else:
-            # 1D list: single waypoint [q1, q2, ...]
-            point = JointTrajectoryPoint()
-            point.positions = [
-                float(x) for x in trajectory[: len(default_joint_names)]
-            ]
-            message.points.append(point)
-        return message
-
-    if isinstance(trajectory, dict):
+        point = JointTrajectoryPoint()
+        point.positions = [float(value) for value in trajectory]
+        message.points.append(point)
+    else:
         message = JointTrajectory()
-        message.joint_names = list(
-            trajectory.get("joint_names") or default_joint_names
-        )
-        points = trajectory.get("points")
-        if not points:
-            raise ValueError("trajectory must include non-empty points")
-        for value in points:
-            if isinstance(value, JointTrajectoryPoint):
-                point = value
-            else:
-                if not isinstance(value, dict):
-                    raise TypeError("trajectory points must be mappings or ROS points")
-                point = JointTrajectoryPoint()
-                point.positions = [float(item) for item in value["positions"]]
-                point.velocities = [float(item) for item in value.get("velocities", [])]
-                point.accelerations = [
-                    float(item) for item in value.get("accelerations", [])
-                ]
-                _set_duration(
-                    point.time_from_start, value.get("time_from_start_s", 0.0)
-                )
+        message.joint_names = list(getattr(trajectory, "joint_names", None) or default_joint_names)
+        for value in getattr(trajectory, "points", []):
+            point = JointTrajectoryPoint()
+            point.positions = [float(x) for x in value.positions]
+            if getattr(value, "velocities", None) is not None:
+                point.velocities = [float(x) for x in value.velocities]
+            if getattr(value, "accelerations", None) is not None:
+                point.accelerations = [float(x) for x in value.accelerations]
+            _set_duration(point.time_from_start, getattr(value, "time_from_start_s", 0.0))
             message.points.append(point)
-        return message
-
-    raise TypeError(f"cannot convert {type(trajectory)} to JointTrajectory")
+    if not message.joint_names or not message.points:
+        raise ValueError("joint trajectory requires joint_names and points")
+    previous = -1.0
+    for point in message.points:
+        if len(point.positions) != len(message.joint_names):
+            raise ValueError("joint trajectory positions do not match joint_names")
+        current = float(point.time_from_start.sec) + float(point.time_from_start.nanosec) * 1e-9
+        if require_increasing_time and current <= previous:
+            raise ValueError("trajectory time_from_start must be strictly increasing")
+        previous = current
+    return message
 
 
 def _cartesian_trajectory_from_spec(
-    trajectory: Any,
-    default_frame_id: str = "base_link",
-    default_child_frame: str = "",
+    value: Any, base_frame: str, tcp_frame: str
 ) -> CartesianTrajectory:
-    if isinstance(trajectory, CartesianTrajectory):
-        return trajectory
-
     message = CartesianTrajectory()
-    message.header.frame_id = default_frame_id
-    if default_child_frame:
-        message.tracked_frame = default_child_frame
-
-    # PoseHorizonResult
-    if hasattr(trajectory, "points"):
-        message.header.frame_id = getattr(trajectory, "frame_id", default_frame_id) or default_frame_id
-        for p in trajectory.points:
-            pt = CartesianTrajectoryPoint()
-            pos = getattr(p, "position_xyz", getattr(p, "positions", None))
-            if pos is not None:
-                pt.point.pose.position.x = float(pos[0])
-                pt.point.pose.position.y = float(pos[1])
-                pt.point.pose.position.z = float(pos[2])
-            ori = getattr(p, "orientation_wxyz", getattr(p, "orientations", None))
-            if ori is not None:
-                pt.point.pose.orientation.w = float(ori[0])
-                pt.point.pose.orientation.x = float(ori[1])
-                pt.point.pose.orientation.y = float(ori[2])
-                pt.point.pose.orientation.z = float(ori[3])
-            _set_duration(pt.time_from_start, getattr(p, "time_from_start_s", 0.0))
-            message.points.append(pt)
-        return message
-
-    # CartesianState
-    if hasattr(trajectory, "position_xyz"):
-        pt = CartesianTrajectoryPoint()
-        pos = trajectory.position_xyz
-        pt.point.pose.position.x = float(pos[0])
-        pt.point.pose.position.y = float(pos[1])
-        pt.point.pose.position.z = float(pos[2])
-        ori = trajectory.orientation_wxyz
-        if ori is not None:
-            pt.point.pose.orientation.w = float(ori[0])
-            pt.point.pose.orientation.x = float(ori[1])
-            pt.point.pose.orientation.y = float(ori[2])
-            pt.point.pose.orientation.z = float(ori[3])
-        message.points.append(pt)
-        return message
-
-    # dict format
-    if isinstance(trajectory, dict):
-        message.header.frame_id = trajectory.get("frame_id", default_frame_id)
-        for val in trajectory.get("points", []):
-            pt = CartesianTrajectoryPoint()
-            if "position" in val:
-                p = val["position"]
-                pt.point.pose.position.x = float(p[0])
-                pt.point.pose.position.y = float(p[1])
-                pt.point.pose.position.z = float(p[2])
-            if "orientation" in val:
-                q = val["orientation"]
-                pt.point.pose.orientation.w = float(q[0])
-                pt.point.pose.orientation.x = float(q[1])
-                pt.point.pose.orientation.y = float(q[2])
-                pt.point.pose.orientation.z = float(q[3])
-            _set_duration(pt.time_from_start, val.get("time_from_start_s", 0.0))
-            message.points.append(pt)
-        return message
-
-    raise TypeError(f"cannot convert {type(trajectory)} to CartesianTrajectory")
+    message.header.frame_id = base_frame
+    message.tracked_frame = tcp_frame
+    items = getattr(value, "points", None)
+    if items is None and hasattr(value, "position_xyz") and hasattr(
+        value, "orientation_wxyz"
+    ):
+        items = [value]
+    for item in items or []:
+        point = CartesianTrajectoryPoint()
+        point.point.pose.position.x, point.point.pose.position.y, point.point.pose.position.z = item.position_xyz
+        w, x, y, z = item.orientation_wxyz
+        point.point.pose.orientation.w = w
+        point.point.pose.orientation.x = x
+        point.point.pose.orientation.y = y
+        point.point.pose.orientation.z = z
+        _set_duration(point.time_from_start, getattr(item, "time_from_start_s", 0.0))
+        message.points.append(point)
+    if not message.points:
+        raise ValueError("pose reference requires points")
+    return message
 
 
-def _twist_stamped_from_spec(
-    twist: Any, default_frame_id: str = "base_link"
-) -> TwistStamped:
-    if isinstance(twist, TwistStamped):
-        return twist
-
+def _twist_stamped_from_spec(value: Any, base_frame: str) -> TwistStamped:
     message = TwistStamped()
-    message.header.frame_id = default_frame_id
-
-    if isinstance(twist, (list, tuple)) and len(twist) >= 6:
-        message.twist.linear.x = float(twist[0])
-        message.twist.linear.y = float(twist[1])
-        message.twist.linear.z = float(twist[2])
-        message.twist.angular.x = float(twist[3])
-        message.twist.angular.y = float(twist[4])
-        message.twist.angular.z = float(twist[5])
-        return message
-
-    if isinstance(twist, dict):
-        message.header.frame_id = twist.get("frame_id", default_frame_id)
-        lin = twist.get("linear", [0.0, 0.0, 0.0])
-        ang = twist.get("angular", [0.0, 0.0, 0.0])
-        message.twist.linear.x = float(lin[0])
-        message.twist.linear.y = float(lin[1])
-        message.twist.linear.z = float(lin[2])
-        message.twist.angular.x = float(ang[0])
-        message.twist.angular.y = float(ang[1])
-        message.twist.angular.z = float(ang[2])
-        return message
-
-    raise TypeError(f"cannot convert {type(twist)} to TwistStamped")
+    message.header.frame_id = base_frame
+    linear = getattr(value, "linear", (0.0, 0.0, 0.0))
+    angular = getattr(value, "angular", (0.0, 0.0, 0.0))
+    message.twist.linear.x, message.twist.linear.y, message.twist.linear.z = linear
+    message.twist.angular.x, message.twist.angular.y, message.twist.angular.z = angular
+    return message
