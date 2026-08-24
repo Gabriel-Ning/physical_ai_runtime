@@ -153,7 +153,6 @@ build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 # (non-unittest.TestCase) test with zero error output. Force pytest so
 # ament_python test suites are actually collected and run.
 test = "bash -c 'colcon test --python-testing pytest && colcon test-result --verbose'"
-benchmark-em-relay = "bash -c 'source install/setup.bash && python scripts/benchmark_em_relay.py'"
 clean = "rm -rf build install log"
 # Kill leftover ROS 2 processes (launch, CM, cameras, JTC guard, RViz, ...).
 # Always restarts the ros2 daemon. STOP_ROS_REMOTE=1 also runs this script on
