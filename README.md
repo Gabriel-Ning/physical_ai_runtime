@@ -3,8 +3,8 @@
 A Pixi-managed **ROS 2 Jazzy workspace** for Physical AI systems. The repository
 owns the shared development environment, RMI Python SDK, reusable controllers,
 robot RT bringup composition, host setup and architecture contracts. Teleop,
-planning, recording and example application repositories are imported into the
-ownership-oriented `src/` layout when needed.
+planning and recording repositories are imported into the ownership-oriented
+`src/` layout when needed.
 
 Host setup notes live under [`docs/`](docs/):
 
@@ -119,17 +119,15 @@ eval "$(pixi shell-hook --frozen)"             # robot CPU stack (default)
 `[activation.env]` via the shell hook. `CLOUDXR_DIR` is set only in the
 `curobo` environment.
 
-### 4. Clone functional packages and examples
+### 4. Clone functional packages
 
-Import baseline functional packages from `necessary.repos`. Import the optional
-flat `runtime_resources` application checkout separately from `example.repos`.
+Import baseline functional packages from `necessary.repos`.
 Use [`vcs`](https://github.com/dirk-thomas/vcstool) (already in the Pixi env)
-for both — **do not** add the checkouts as git submodules, and **do not** commit
+— **do not** add the checkouts as git submodules, and **do not** commit
 them back into this template.
 
 | Manifest | Purpose | Checkout roots |
 | --- | --- | --- |
-| this repo | examples and `src/rt_launch` bringups | `src/rt_launch`, `examples/` |
 | `repos/necessary.repos` | Workstation teleop / motion-planning / recorder | `src/teleop`, `src/motion_planning`, `src/recording` |
 | `src/embodiments` submodule | Owned Marvin / Piper / Pika, plus pinned Franka vendor trees | [`phy_ai_runtime_embodiments`](https://github.com/Gabriel-Ning/phy_ai_runtime_embodiments) (HTTPS nested submodules) |
 | `repos/embodiment.repos` | Vendor Hikvision (not required for RT bringup) | `src/embodiments/sensors/hikvision_ros2` |
@@ -140,8 +138,6 @@ import `necessary.repos` or Hikvision.
 
 ```bash
 vcs import src < repos/necessary.repos
-# Optional example applications
-vcs import src < repos/example.repos
 # Owned embodiments + pinned Franka (HTTPS nested submodules)
 git submodule update --init --recursive -- src/embodiments
 # Vendor Hikvision
@@ -162,10 +158,15 @@ Pixi env (`pixi install -e curobo`).
 
 ### 5. Build / test / clean
 
+`build` / `test` / `clean` / `stop` are **runtime** tasks (colcon + the robot
+CPU stack). They are not available in `lerobot`. `default` and `cpu` include
+the same `runtime` feature, so `pixi run build` and `pixi run -e cpu build`
+are equivalent.
+
 ```bash
-pixi run build
-pixi run test
-pixi run clean   # removes colcon build/ install/ log/
+pixi run -e runtime build
+pixi run -e runtime test
+pixi run -e runtime clean   # removes colcon build/ install/ log/
 ```
 
 Default build type is `Release`. After the first successful build,
