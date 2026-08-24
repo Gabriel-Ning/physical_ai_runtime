@@ -1,25 +1,40 @@
-# Pika wrist cable (Marvin gamma). Gripper CH340 and fisheye share one USB2
-# hub per cable. Neither chip has a unique USB serial, and /dev/ttyUSB* /
-# /dev/video* numbers swap on replug.
+# Pika wrist cable. Gripper CH340 and fisheye share one USB2 hub per cable.
+# Neither chip has a unique USB serial, and /dev/ttyUSB* / /dev/video* numbers
+# swap on replug.
 #
 # Left/right id is the host USB2 port in ID_PATH (device property, not a
 # parent KERNELS mix — ATTRS+KERNELS must match the same parent, so hub
-# KERNELS=="3-9" never fired next to ATTRS{idVendor}).
+# KERNELS never fired next to ATTRS{idVendor}).
 #
-#   left  cable  usb-0:7.*  -> /dev/pika_left_gripper  /dev/pika_left_fisheye
-#   right cable  usb-0:9.*  -> /dev/pika_right_gripper /dev/pika_right_fisheye
+# Host topologies (append a block when a new desk is wired; unused ID_PATH
+# globs are harmless on other machines):
+#
+#   Marvin gamma
+#     left  cable  usb-0:7.*  -> /dev/pika_left_gripper  /dev/pika_left_fisheye
+#     right cable  usb-0:9.*  -> /dev/pika_right_gripper /dev/pika_right_fisheye
+#
+#   Franka beta (single cable under host port 6)
+#     left  cable  usb-0:6.*  -> /dev/pika_left_gripper  /dev/pika_left_fisheye
+#       fisheye  1bcf:2cd1  ID_PATH=...-usb-0:6.1:1.0
+#       gripper  1a86:7522  ID_PATH=...-usb-0:6.4:1.0
 #
 # D405 on the same physical cable is USB3; identify it by librealsense serial
-# in config/camera/pika_d405.yaml. After rewiring, update the ID_PATH globs
-# here together with that YAML.
+# in the bringup camera YAML. After rewiring, update the ID_PATH globs here
+# together with that YAML.
 #
 # MODE 0666: SSH RT sessions are not a seat; dialout 0660 fails until re-login.
 
 # Gripper (QinHeng CH340 1a86:7522)
 KERNEL=="ttyUSB*", SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", MODE:="0666", GROUP:="dialout"
+# Marvin gamma
 KERNEL=="ttyUSB*", SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:7.*", SYMLINK+="pika_left_gripper"
 KERNEL=="ttyUSB*", SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:9.*", SYMLINK+="pika_right_gripper"
+# Franka beta
+KERNEL=="ttyUSB*", SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7522", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:6.*", SYMLINK+="pika_left_gripper"
 
 # Fisheye (Sunplus DECXIN 1bcf:2cd1). index 0 is the capture node.
+# Marvin gamma
 KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:7.*", SYMLINK+="pika_left_fisheye", SYMLINK+="fisheye0", MODE="0666"
 KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:9.*", SYMLINK+="pika_right_fisheye", SYMLINK+="fisheye1", MODE="0666"
+# Franka beta
+KERNEL=="video[0-9]*", SUBSYSTEM=="video4linux", ATTRS{idVendor}=="1bcf", ATTRS{idProduct}=="2cd1", ATTR{index}=="0", ENV{ID_PATH}=="pci-0000:00:14.0-usb-0:6.*", SYMLINK+="pika_left_fisheye", SYMLINK+="fisheye0", MODE="0666"
