@@ -1,3 +1,5 @@
+# Site overlay for RT with_right_gripper:=false. Default profile stays
+# apps/profiles/marvin_bimanual.yaml.
 metadata:
   name: "marvin_bimanual"
   embodiment_type: "bimanual_humanoid"
@@ -22,22 +24,22 @@ host_roles:
 # Routing table lives in the workstation EM config. RMI only consumes it.
 execution_manager_config:
   package: "marvin_manipulation_workstation_launch"
-  file: "config/execution_manager.yaml"
+  file: "config/execution_manager_no_right_gripper.yaml"
 
 compound_groups:
   left_manipulator:
     included_groups: ["left_arm", "left_gripper"]
   right_manipulator:
-    included_groups: ["right_arm", "right_gripper"]
+    included_groups: ["right_arm"]
   dual_arm:
     included_groups: ["left_arm", "right_arm"]
   dual_manipulator:
-    included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
+    included_groups: ["left_arm", "left_gripper", "right_arm"]
 
 agents:
   Policy:
     source_role: POLICY
-    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference}
     frequency: 30.0
   Planner:
     source_role: PLANNER
@@ -49,7 +51,7 @@ agents:
     frequency: 30.0
   TeleopJoint_Right:
     source_role: TELEOP
-    resources: {right_arm: joint_reference, right_gripper: joint_reference}
+    resources: {right_arm: joint_reference}
     frequency: 30.0
   TeleopCartesian_Left:
     source_role: TELEOP
@@ -133,10 +135,11 @@ features:
       source: "sensors.cameras.third_person_d435"
     "observation.state":
       type: "vector"
-      shape: [16]
+      # 7 left arm + 1 left gripper + 7 right arm (no right gripper).
+      shape: [15]
       units: "rad"
   action:
     "action":
       type: "vector"
-      shape: [16]
+      shape: [15]
       command_contract: "joint_reference"

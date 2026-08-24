@@ -11,9 +11,9 @@ mkdir -p build install log/ros data .pixi
 pixi_env="${PIXI_ENVIRONMENT_NAME:-default}"
 printf '%s\n' "${pixi_env}" > .pixi/environment
 
-if [[ "${pixi_env}" == "default" ]]; then
+if [[ "${pixi_env}" == "curobo" ]]; then
   if [[ -z "${CLOUDXR_DIR:-}" ]]; then
-    echo "Missing CLOUDXR_DIR in the default GPU environment" >&2
+    echo "Missing CLOUDXR_DIR in the curobo GPU environment" >&2
     exit 1
   fi
   mkdir -p "${CLOUDXR_DIR}"
@@ -44,7 +44,7 @@ echo "  pixi env:  ${pixi_env}"
 echo "  python:    $(command -v python)"
 echo "  ros2:      $(command -v ros2)"
 echo "  colcon:    $(command -v colcon)"
-if [[ "${pixi_env}" == "default" ]]; then
+if [[ "${pixi_env}" == "curobo" ]]; then
   echo "  cloudxr:   ${CLOUDXR_DIR}"
 fi
 if [[ "${pixi_env}" == "cpu" ]]; then

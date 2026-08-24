@@ -24,11 +24,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 from mcap.reader import make_reader
 from rclpy.serialization import deserialize_message
@@ -37,7 +35,7 @@ from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory as RosJointTrajectory
 
 import rmi
-from rmi.planning import PlanPoint, PlanResult
+from rmi import PlanPoint, PlanResult
 
 
 class ProgressBar:
@@ -336,7 +334,13 @@ def main() -> None:
 
     # 5. Phase 2: High-Rate 1:1 Policy Replay Loop
     print(f"\n[4/4] Phase 2: Activating JSIC Controller & Replaying Actions ({total_frames} frames @ {native_hz:.1f} Hz)...")
-    policy_agent = ctx.make_agent("Policy", frequency=native_hz)
+    episode_id = ep_path.stem
+    policy_agent = ctx.make_agent(
+        "Policy",
+        frequency=native_hz,
+        source_instance=f"replay:{episode_id}",
+        metadata={"episode_id": episode_id, "mode": "replay"},
+    )
 
     try:
         with policy_agent.run(robot) as session:

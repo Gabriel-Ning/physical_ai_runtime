@@ -181,6 +181,18 @@ def test_fork_has_independent_lease_binding():
     assert node.publishers[1][3].messages[0].lease_id == "lease-2"
 
 
+def test_none_action_client_factory_defaults_to_rclpy_action_client():
+    from rclpy.action import ActionClient
+
+    client = ActionProviderClient(
+        "planner",
+        FakeNode(),
+        {"left_arm": "joint_trajectory"},
+        action_client_factory=None,
+    )
+    assert client._action_client_factory is ActionClient
+
+
 def test_jtc_goal_carries_same_lease_and_resource():
     node = FakeNode()
     profile = EmbodimentConfig.from_yaml(PROFILE)

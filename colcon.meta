@@ -1,0 +1,3 @@
+names:
+  rmi:
+    python-testing: pytest

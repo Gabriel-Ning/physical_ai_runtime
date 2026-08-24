@@ -7,21 +7,24 @@ metadata:
 host_roles:
   rt_host:
     bringup:
-      package: "piper_manipulation_controller_bringup"
+      package: "piper_manipulation_rt_launch"
       launch_file: "rt_stack.launch.py"
       arguments:
         left_end_effector: "piper_gripper"
         right_end_effector: "piper_gripper"
     owns: ["ros2_control", "local_safety"]
-  policy_host:
+  workstation_host:
     bringup:
-      package: "piper_manipulation_controller_bringup"
-      launch_file: "workstation_stack.launch.py"
+      package: "piper_manipulation_workstation_launch"
+      launch_file: "piper_workstation.launch.py"
       arguments:
-        with_cameras: true
+        with_execution_manager: true
+        with_orbbec: true
+        with_realsense: true
         with_leaders: true
         with_recorder: true
-    owns: ["sensors", "teleoperators", "rmi", "execution_manager", "episode_recorder_client"]
+        max_command_age_s: 0.25
+    owns: ["sensors", "teleoperators", "rmi", "execution_manager", "action_provider_nodes", "application_nodes", "episode_recorder_client"]
 
 groups:
   left_arm:
@@ -124,128 +127,38 @@ compound_groups:
   dual_manipulator:
     included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
 
-execution_manager:
-  providers:
-    Policy:
-      priority: 10
-      controllers:
-        left_arm: joint_space_reference
-        right_arm: joint_space_reference
-        left_gripper: joint_space_reference
-        right_gripper: joint_space_reference
-    Planner:
-      priority: 15
-      controllers:
-        left_arm: joint_trajectory
-        right_arm: joint_trajectory
-    TeleopJoint_Left:
-      priority: 100
-      controllers:
-        left_arm: joint_space_reference
-        left_gripper: joint_space_reference
-    TeleopJoint_Right:
-      priority: 100
-      controllers:
-        right_arm: joint_space_reference
-        right_gripper: joint_space_reference
-    TeleopCartesian_Left:
-      priority: 100
-      controllers:
-        left_arm: task_space_reference
-    TeleopCartesian_Right:
-      priority: 100
-      controllers:
-        right_arm: task_space_reference
-    TeleopTwist_Left:
-      priority: 100
-      controllers:
-        left_arm: task_space_reference
-    TeleopTwist_Right:
-      priority: 100
-      controllers:
-        right_arm: task_space_reference
-  sources:
-    - provider: Policy
-      part: left_arm
-      command: joint_reference
-      topic: "/execution/left_arm/joint_reference"
-    - provider: Policy
-      part: right_arm
-      command: joint_reference
-      topic: "/execution/right_arm/joint_reference"
-    - provider: Policy
-      part: left_gripper
-      command: joint_reference
-      topic: "/execution/left_gripper/joint_reference"
-    - provider: Policy
-      part: right_gripper
-      command: joint_reference
-      topic: "/execution/right_gripper/joint_reference"
-    - provider: Planner
-      part: left_arm
-      command: joint_trajectory
-      action: "/execution/left_arm/follow_joint_trajectory"
-    - provider: Planner
-      part: right_arm
-      command: joint_trajectory
-      action: "/execution/right_arm/follow_joint_trajectory"
-    - provider: TeleopJoint_Left
-      part: left_arm
-      command: joint_reference
-      topic: "/execution/left_arm/joint_reference"
-    - provider: TeleopJoint_Left
-      part: left_gripper
-      command: joint_reference
-      topic: "/execution/left_gripper/joint_reference"
-    - provider: TeleopJoint_Right
-      part: right_arm
-      command: joint_reference
-      topic: "/execution/right_arm/joint_reference"
-    - provider: TeleopJoint_Right
-      part: right_gripper
-      command: joint_reference
-      topic: "/execution/right_gripper/joint_reference"
-    - provider: TeleopCartesian_Left
-      part: left_arm
-      command: pose_reference
-      topic: "/execution/left_arm/pose_reference"
-    - provider: TeleopCartesian_Right
-      part: right_arm
-      command: pose_reference
-      topic: "/execution/right_arm/pose_reference"
-    - provider: TeleopTwist_Left
-      part: left_arm
-      command: twist_reference
-      topic: "/execution/left_arm/twist_reference"
-    - provider: TeleopTwist_Right
-      part: right_arm
-      command: twist_reference
-      topic: "/execution/right_arm/twist_reference"
-
 agents:
   Policy:
-    provider: Policy
+    source_role: POLICY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
   Planner:
-    provider: Planner
+    source_role: PLANNER
+    resources: {left_arm: joint_trajectory, right_arm: joint_trajectory}
     frequency: 30.0
   TeleopJoint_Left:
-    provider: TeleopJoint_Left
+    source_role: TELEOP
+    resources: {left_arm: joint_reference, left_gripper: joint_reference}
     frequency: 200.0
   TeleopJoint_Right:
-    provider: TeleopJoint_Right
+    source_role: TELEOP
+    resources: {right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 200.0
   TeleopCartesian_Left:
-    provider: TeleopCartesian_Left
+    source_role: TELEOP
+    resources: {left_arm: pose_reference}
     frequency: 100.0
   TeleopCartesian_Right:
-    provider: TeleopCartesian_Right
+    source_role: TELEOP
+    resources: {right_arm: pose_reference}
     frequency: 100.0
   TeleopTwist_Left:
-    provider: TeleopTwist_Left
+    source_role: TELEOP
+    resources: {left_arm: twist_reference}
     frequency: 100.0
   TeleopTwist_Right:
-    provider: TeleopTwist_Right
+    source_role: TELEOP
+    resources: {right_arm: twist_reference}
     frequency: 100.0
 
 sensors:
@@ -260,6 +173,7 @@ sensors:
 recorder:
   profile: "rmi_piper_bimanual"
   root_dir: "data/episodes"
+  experiment_name: "piper_bimanual"
   task: "bimanual_manipulation"
   episodes: 5
   rate_hz: 50.0

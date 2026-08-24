@@ -7,14 +7,21 @@ metadata:
 host_roles:
   rt_host:
     bringup:
-      package: "franka_manipulation_controller_bringup"
+      package: "franka_manipulation_rt_launch"
       launch_file: "rt_stack.launch.py"
       arguments:
         use_fake_hardware: true
         use_rviz: false
     owns: ["ros2_control", "local_safety"]
-  policy_host:
-    owns: ["rmi", "execution_manager", "policy_client", "orchestrator", "episode_recorder_client"]
+  workstation_host:
+    bringup:
+      package: "franka_manipulation_workstation_launch"
+      launch_file: "franka_workstation.launch.py"
+      arguments:
+        with_execution_manager: true
+        with_recorder: true
+        max_command_age_s: 0.25
+    owns: ["rmi", "execution_manager", "action_provider_nodes", "application_nodes", "episode_recorder_client"]
 
 groups:
   arm:
@@ -68,75 +75,26 @@ compound_groups:
   manipulator:
     included_groups: ["arm", "end_effector"]
 
-execution_manager:
-  providers:
-    Policy:
-      priority: 10
-      controllers:
-        arm: joint_space_reference
-        end_effector: joint_space_reference
-    Planner:
-      priority: 15
-      controllers:
-        arm: joint_trajectory
-    TeleopJoint:
-      priority: 100
-      controllers:
-        arm: joint_space_reference
-        end_effector: joint_space_reference
-    TeleopCartesian:
-      priority: 100
-      controllers:
-        arm: task_space_reference
-    TeleopTwist:
-      priority: 100
-      controllers:
-        arm: task_space_reference
-  sources:
-    - provider: Policy
-      part: arm
-      command: joint_reference
-      topic: "/execution/arm/joint_reference"
-    - provider: Policy
-      part: end_effector
-      command: joint_reference
-      topic: "/execution/end_effector/joint_reference"
-    - provider: Planner
-      part: arm
-      command: joint_trajectory
-      action: "/execution/arm/follow_joint_trajectory"
-    - provider: TeleopJoint
-      part: arm
-      command: joint_reference
-      topic: "/execution/arm/joint_reference"
-    - provider: TeleopJoint
-      part: end_effector
-      command: joint_reference
-      topic: "/execution/end_effector/joint_reference"
-    - provider: TeleopCartesian
-      part: arm
-      command: pose_reference
-      topic: "/execution/arm/pose_reference"
-    - provider: TeleopTwist
-      part: arm
-      command: twist_reference
-      topic: "/execution/arm/twist_reference"
-
 agents:
   Policy:
-    provider: Policy
+    source_role: POLICY
+    resources: {arm: joint_reference, end_effector: joint_reference}
     frequency: 30.0
   Planner:
-    provider: Planner
+    source_role: PLANNER
+    resources: {arm: joint_trajectory}
     frequency: 30.0
   TeleopJoint:
-    provider: TeleopJoint
+    source_role: TELEOP
+    resources: {arm: joint_reference, end_effector: joint_reference}
     frequency: 30.0
   TeleopCartesian:
-    provider: TeleopCartesian
+    source_role: TELEOP
+    resources: {arm: pose_reference}
     frequency: 30.0
   TeleopTwist:
-    provider: TeleopTwist
+    source_role: TELEOP
+    resources: {arm: twist_reference}
     frequency: 30.0
 
 sensors:
@@ -154,8 +112,8 @@ sensors:
       resolution: [480, 848]
       qos_profile: "sensor_data"
     wrist_fisheye:
-      ros_topic: "/pika_fisheye/image_raw"
-      encoding: "rgb8"
+      ros_topic: "/pika_fisheye/image/compressed"
+      encoding: "jpeg"
       fps: 30
       resolution: [720, 1280]
       qos_profile: "sensor_data"

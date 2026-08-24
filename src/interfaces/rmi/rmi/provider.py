@@ -47,7 +47,10 @@ class ActionProviderClient:
         self.resources = dict(resources)
         self.profile = profile
         self._timeout_sec = timeout_sec
-        self._action_client_factory = action_client_factory
+        # Context passes None when no override is configured; keep rclpy ActionClient.
+        self._action_client_factory = (
+            ActionClient if action_client_factory is None else action_client_factory
+        )
         self._lease_id = ""
         self._bindings: dict[tuple[str, str], EndpointBinding] = {}
         self._publishers: dict[tuple[str, str], Any] = {}

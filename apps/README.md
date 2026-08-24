@@ -105,7 +105,17 @@ pixi run replay --profile piper_bimanual.yaml \
 
 ---
 
-## 4. Embodiment Profiles (`apps/profiles/`)
+## 4. `pixi run eval` — Read-only Deployment Evaluation
+
+Checks joint-state availability and age, hardware diagnostics, camera readiness,
+and the current provider allocation map without acquiring control or publishing a
+command:
+
+```bash
+pixi run eval --profile piper_bimanual.yaml --duration 10 --check-cameras
+```
+
+## 5. Embodiment Profiles (`apps/profiles/`)
 
 All applications are fully decoupled and driven by YAML Embodiment Profiles stored in [apps/profiles/](file:///home/gn/Documents/Git_Space/physical_ai_runtime/apps/profiles/):
 

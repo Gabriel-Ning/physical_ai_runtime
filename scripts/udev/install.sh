@@ -36,6 +36,10 @@ for src in "${rules[@]}"; do
   echo "Installed ${DEST_DIR}/${base}"
 done
 
+if [[ -f "${DEST_DIR}/99-pika.rules" ]]; then
+  rm -f "${DEST_DIR}/99-pika-fisheye.rules" "${DEST_DIR}/99-pika-gripper.rules"
+fi
+
 udevadm control --reload-rules
 echo "Reloaded udev rules."
 echo "If a device name did not change yet, unplug/replug it or reboot."

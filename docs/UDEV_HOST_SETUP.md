@@ -41,7 +41,7 @@ not change yet, unplug/replug it or reboot.
 | `99-can-piper1.rules` | gs_usb serial → **`piper1`** (right Piper follower), 1 Mbps, `txqueuelen=1000` |
 | `99-obsensor-libusb.rules` | Orbbec (obsensor) USB permissions / vendor symlinks |
 | `99-realsense-libusb.rules` | Intel RealSense USB permissions |
-| `99-pika-fisheye.rules` | Pika UVC fisheye → **`fisheye0`/`fisheye1`**. **Site-specific (Marvin gamma RT host USB `3-9.1` left / `3-7.1` right); expect to change after rewiring.** Single-cam rule is commented. |
+| `99-pika.rules` | Pika wrist cable on Marvin gamma. Left/right = `ID_PATH` **`usb-0:7.*` / `usb-0:9.*`**. Names: `/dev/pika_left_gripper`, `/dev/pika_right_gripper`, `/dev/pika_left_fisheye`, `/dev/pika_right_fisheye`. Never `/dev/ttyUSB*`. |
 
 Serials in the CAN rules are site-specific identities of the USB-CAN dongles
 used with this workspace. Applications select `piper0` / `piper1` by name; they
@@ -49,15 +49,28 @@ do not own the host mechanism that creates those names. Camera rules grant
 device access for the Pixi/prefix drivers; physical serials and namespaces stay
 in application config.
 
-`99-pika-fisheye.rules` currently pins Marvin **gamma** RT-host USB ports. Treat
-it as provisional: after rewiring, update the rule **and**
-`marvin_manipulation_controller_bringup/config/hardware/marvin_host.yaml` /
-`config/camera/marvin_cameras.yaml` together.
+`99-pika.rules` pins Marvin **gamma** by each Pika cable's host USB2 port in
+`ID_PATH` (left `usb-0:7.*`, right `usb-0:9.*`). Fisheye and gripper share that
+prefix. Do not match hub `KERNELS` together with chip `ATTRS` — udev requires
+those to be the same parent, so the symlink never appears. D405 on the same
+physical cable is USB3 and is identified by librealsense serial in
+`marvin_manipulation_rt_launch/config/camera/pika_d405.yaml`. After rewiring,
+update the `ID_PATH` globs **and** that YAML together.
+
+`MODE 0666` is required on an SSH RT host: default `dialout` 0660 fails until
+the user is in that group **and** has re-logged. After installing:
+
+```bash
+sudo udevadm trigger --subsystem-match=tty --action=add
+sudo udevadm trigger --subsystem-match=video4linux --action=add
+ls -l /dev/pika_left_gripper /dev/pika_right_gripper \
+      /dev/pika_left_fisheye /dev/pika_right_fisheye
+```
 
 ### Piper bringup example (after udev)
 
 ```bash
-ros2 launch piper_manipulation_controller_bringup \
+ros2 launch piper_manipulation_rt_launch \
   controller_bringup.launch.py \
   arms:=left use_fake_hardware:=false \
   left_can_interface:=piper0 left_end_effector:=piper_gripper

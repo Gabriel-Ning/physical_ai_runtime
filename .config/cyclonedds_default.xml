@@ -18,7 +18,7 @@
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
       <Peers>
-        <Peer address="192.168.1.101" />
+        <Peer address="192.168.1.102" />
       </Peers>
     </Discovery>
     <Internal>

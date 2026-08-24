@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
-import sys
 import threading
 import time
 from contextlib import ExitStack
@@ -27,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectory
 
@@ -65,14 +64,24 @@ def verify_cameras(node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 
         def _cb(msg: Any):
             if not results[c_id]:
                 results[c_id] = True
-                w, h, enc = getattr(msg, "width", 0), getattr(msg, "height", 0), getattr(msg, "encoding", "raw")
-                frames_info[c_id] = f"{w}x{h}, {enc}" if w and h else enc
+                w, h = getattr(msg, "width", 0), getattr(msg, "height", 0)
+                enc = getattr(msg, "encoding", None) or getattr(msg, "format", "raw")
+                nbytes = len(getattr(msg, "data", b""))
+                frames_info[c_id] = (
+                    f"{w}x{h}, {enc}" if w and h else f"{enc}, {nbytes} B"
+                )
         return _cb
 
     for cam_id, cfg in cameras_cfg.items():
         topic = cfg.get("ros_topic")
         if topic:
-            subscriptions.append(node.create_subscription(Image, topic, _make_cb(cam_id), qos))
+            encoding = str(cfg.get("encoding", "rgb8")).lower()
+            msg_type = (
+                CompressedImage if encoding in ("jpeg", "jpg", "mjpeg") else Image
+            )
+            subscriptions.append(
+                node.create_subscription(msg_type, topic, _make_cb(cam_id), qos)
+            )
 
     t_end = time.monotonic() + timeout_sec
     while time.monotonic() < t_end and not all(results.values()):
@@ -211,7 +220,7 @@ def main() -> None:
         verify_cameras(ctx.node, cameras_cfg, timeout_sec=3.0)
 
     # 4. Activate MCAP Recorder Backend
-    recorder = ctx.make_recorder(type="mcap", autostart=True)
+    recorder = ctx.make_recorder(autostart=True)
     recorder.activate()
 
     robot = ctx.robot
@@ -255,15 +264,33 @@ def main() -> None:
                 with ExitStack() as stack:
                     for name, cfg in teleoperators.items():
                         agent = ctx.make_agent(cfg["target_agent"], frequency=rate_hz)
-                        session = stack.enter_context(agent.run(robot, parts=[cfg["arm_part"], cfg["gripper_part"]]))
-                        ctx.node.create_subscription(JointTrajectory, cfg["arm_source"], _relay(session, cfg["arm_part"]), qos)
-                        ctx.node.create_subscription(JointTrajectory, cfg["gripper_source"], _relay(session, cfg["gripper_part"]), qos)
+                        session = stack.enter_context(
+                            agent.run(
+                                robot,
+                                parts=[cfg["arm_part"], cfg["gripper_part"]],
+                                preempt=True,
+                            )
+                        )
+                        arm_sub = ctx.node.create_subscription(
+                            JointTrajectory,
+                            cfg["arm_source"],
+                            _relay(session, cfg["arm_part"]),
+                            qos,
+                        )
+                        gripper_sub = ctx.node.create_subscription(
+                            JointTrajectory,
+                            cfg["gripper_source"],
+                            _relay(session, cfg["gripper_part"]),
+                            qos,
+                        )
+                        stack.callback(ctx.node.destroy_subscription, gripper_sub)
+                        stack.callback(ctx.node.destroy_subscription, arm_sub)
 
                     # Engage 0-G float on physical teleop devices
                     set_teleop_preempt(ctx.node, teleoperators, True)
 
-                    print(f"\n  🔴 RECORDING ACTIVE! Manipulate master arms to demonstrate task.")
-                    print(f"  >> Press [ENTER] in console when episode is COMPLETE.\n")
+                    print("\n  🔴 RECORDING ACTIVE! Manipulate master arms to demonstrate task.")
+                    print("  >> Press [ENTER] in console when episode is COMPLETE.\n")
                     stop_thread.start()
 
                     step_count = 0

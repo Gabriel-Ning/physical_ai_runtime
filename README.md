@@ -1,22 +1,26 @@
 # Physical AI Runtime
 
-A Pixi-managed **ROS 2 Jazzy workspace template** for Physical AI systems.
-Everyone starts from this shared baseline: install the locked environment, clone
-the necessary packages into `src/`, then optionally pull the Marvin example to
-learn the layout and develop on top. Domain and application packages stay in
-their own repositories; this workspace owns the Pixi/colcon scaffolding, docs,
-and small reusable toolbox packages.
+A Pixi-managed **ROS 2 Jazzy workspace** for Physical AI systems. The repository
+owns the shared development environment, RMI Python SDK, reusable controllers,
+robot RT bringup composition, host setup and architecture contracts. Teleop,
+planning, recording and example application repositories are imported into the
+ownership-oriented `src/` layout when needed.
 
 Host setup notes live under [`docs/`](docs/):
 
+- [Current repository architecture](docs/ARCHITECTURE.md)
+- [Marvin validation status and current gates](docs/MARVIN_VALIDATION_STATUS.md)
+- [Dynamic authority design rationale](docs/EM_RMI_DYNAMIC_AUTHORITY_PROPOSAL.md)
+- [Episode Recorder lifecycle](docs/EPISODE_RECORDER.md)
 - [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
 - [CPU / isolcpus / RT host setup](docs/CPU_HOST_SETUP.md)
 - [udev CAN aliases](docs/UDEV_HOST_SETUP.md)
 
 ## Features
 
-- **Pixi**: locked multi-env workspace — **default = GPU** (PyPI + CloudXR),
-  optional **`cpu`** env (conda-only)
+- **Pixi**: locked multi-env workspace — **default = robot CPU stack** (previous
+  `cpu` env), optional **`cpu`** (same packages + RT host profile), **`curobo`**
+  (CUDA 13 / CloudXR), **`lerobot`** (policy training stack)
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
 - **Ownership-based `src/` layout**: external domain/application repositories
@@ -48,7 +52,7 @@ Use HTTPS (not SSH) for cloning.
 
 ### 2. Initialize the environment
 
-Default install is the **GPU** environment:
+Default install is the **robot CPU stack** (previous `cpu` environment):
 
 ```bash
 pixi install --locked
@@ -93,25 +97,27 @@ environment and sources `install/setup.bash` when it exists. Leaving the
 directory deactivates it.
 
 `.envrc` follows the env you used for setup: `pixi run setup` writes
-`.pixi/environment` (`default` or `cpu`), and Direnv activates that same
-env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=default` if needed.
+`.pixi/environment` (`default`, `runtime`, or `cpu`), and Direnv activates
+that same env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=curobo` if needed.
 
 Pixi selects the dependency environment before `setup.sh` starts. Use
-`pixi run setup` for GPU or `pixi run -e cpu setup` for CPU; the setup script
-then applies environment-specific resources (GPU: `CLOUDXR_DIR`; CPU: RT host
-governor / isolcpus — [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
+`pixi run setup` for the robot stack or `pixi run -e cpu setup` on an RT
+host; the setup script then applies environment-specific resources
+(`curobo`: `CLOUDXR_DIR`; `cpu`: RT host governor / isolcpus —
+[docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 
 Without Direnv:
 
 ```bash
-eval "$(pixi shell-hook --frozen)"           # GPU (default)
-# eval "$(pixi shell-hook --frozen -e cpu)"  # CPU
+eval "$(pixi shell-hook --frozen)"             # robot CPU stack (default)
+# eval "$(pixi shell-hook --frozen -e cpu)"    # same packages + RT host profile
+# eval "$(pixi shell-hook --frozen -e curobo)" # CUDA 13 / CloudXR
 # or: source .envrc
 ```
 
 `WORKSPACE_ROOT` and `RMW_IMPLEMENTATION` come from `pixi.toml`
 `[activation.env]` via the shell hook. `CLOUDXR_DIR` is set only in the
-default (GPU) environment.
+`curobo` environment.
 
 ### 4. Clone functional packages and examples
 
@@ -151,8 +157,8 @@ vcs pull src
 ```
 
 See each package README for launches, CloudXR setup, and tests.
-`isaacteleop_toolbox` and the motion-planner adapters need the default GPU
-Pixi env (`pixi install`, not `-e cpu`).
+`isaacteleop_toolbox` and the motion-planner adapters need the `curobo`
+Pixi env (`pixi install -e curobo`).
 
 ### 5. Build / test / clean
 

@@ -84,18 +84,18 @@ On a configured cpu host these bringups pin **only** `ros2_control_node`:
 
 | App | Package |
 |---|---|
-| Franka | `franka_manipulation_controller_bringup` |
-| Marvin | `marvin_manipulation_controller_bringup` |
-| Piper | `piper_manipulation_controller_bringup` |
+| Franka | `franka_manipulation_rt_launch` |
+| Marvin | `marvin_manipulation_rt_launch` |
+| Piper | `piper_manipulation_rt_launch` |
 
 ```bash
 # Franka example
-ros2 launch franka_manipulation_controller_bringup \
+ros2 launch franka_manipulation_rt_launch \
   controller_bringup.launch.py \
   use_fake_hardware:=false robot_ip:=192.168.2.101
 
 # Piper example (SocketCAN names from udev — see docs/UDEV_HOST_SETUP.md)
-ros2 launch piper_manipulation_controller_bringup \
+ros2 launch piper_manipulation_rt_launch \
   controller_bringup.launch.py \
   arms:=left use_fake_hardware:=false \
   left_can_interface:=piper0 left_end_effector:=piper_gripper
@@ -187,6 +187,6 @@ the workstation, not on this host.
 - Colocation evidence (Marvin + Hik on this class of host):
   [COLOCATION_VALIDATION.md](COLOCATION_VALIDATION.md)
 - Bringups:
-  - [`franka_manipulation_controller_bringup`](../src/rt_launch/franka_manipulation_controller_bringup/README.md)
-  - [`marvin_manipulation_controller_bringup`](../src/rt_launch/marvin_manipulation_controller_bringup/README.md)
-  - [`piper_manipulation_controller_bringup`](../src/rt_launch/piper_manipulation_controller_bringup/README.md)
+  - [`franka_manipulation/rt_launch`](../src/bringup/franka_manipulation/rt_launch/README.md)
+  - [`marvin_manipulation_rt_launch`](../src/bringup/marvin_manipulation/rt_launch/README.md)
+  - [`piper_manipulation_rt_launch`](../src/bringup/piper_manipulation/rt_launch/README.md)
