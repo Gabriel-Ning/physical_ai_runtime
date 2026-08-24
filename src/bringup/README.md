@@ -64,6 +64,25 @@ ros2 launch marvin_manipulation_workstation_launch workstation_stack.launch.py
 腕部相机在 RT `rt_stack.launch.py` / `pika_camera_bringup.launch.py`。
 Workstation 常驻 Execution Manager 和 recorder，并默认起 head D435 + 第三人称 D435。
 
+## Franka RT host (beta)
+
+RT 用 Pixi `cpu` 环境。夹爪 / 鱼眼走 `/dev/pika_left_gripper`、`/dev/pika_left_fisheye`，不要 `/dev/ttyUSB*`。
+
+```bash
+ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
+  use_fake_hardware:=false \
+  robot_ip:=192.168.2.101 \
+  use_rviz:=false
+```
+
+Workstation（EM / recorder）：
+
+```bash
+ros2 launch franka_manipulation_workstation_launch franka_workstation.launch.py
+```
+
+细节：`franka_manipulation/rt_launch/README.md`。DDS 用本机 Cyclone 文件，不要直接用 Marvin 的 `cyclonedds_default.xml`。
+
 ## Camera validation (Piper)
 
 Profile topics (`apps/profiles/piper_bimanual.yaml`):

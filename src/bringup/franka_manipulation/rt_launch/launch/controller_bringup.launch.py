@@ -278,7 +278,7 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "gripper_serial_port",
-                default_value="/dev/ttyUSB0",
+                default_value="/dev/pika_left_gripper",
                 description="Serial device for the attached Pika gripper.",
             ),
             DeclareLaunchArgument(

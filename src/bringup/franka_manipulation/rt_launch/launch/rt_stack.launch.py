@@ -5,8 +5,8 @@
 Always launches:
   - controller_bringup.launch.py (ros2_control, FCI, Pika gripper, safety guard)
 
-Optionally launches (when ``with_cameras:=true``):
-  - camera_bringup.launch.py     (RealSense D405 + Sunplus Fisheye cameras)
+Optionally launches (when ``with_cameras:=true``, default):
+  - camera_bringup.launch.py     (RealSense D405 + Sunplus Fisheye on RT host)
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def generate_launch_description() -> LaunchDescription:
         }.items(),
     )
 
-    # 2. Camera Perception Stack (Optional, default false)
+    # 2. Camera Perception Stack (Pika wrist D405 + fisheye on RT host)
     cameras = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_share, "launch", "camera_bringup.launch.py")
@@ -80,16 +80,18 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "gripper_serial_port",
-                default_value="/dev/ttyUSB0",
+                default_value="/dev/pika_left_gripper",
                 description="Serial device for the attached Pika gripper.",
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
 
-            # Optional Perception Cameras parameters
+            # Pika wrist cameras on RT host (Franka + one Pika cable)
             DeclareLaunchArgument(
                 "with_cameras",
-                default_value="false",
-                description="Whether to launch Pika wrist perception cameras (D405 + Fisheye).",
+                default_value="true",
+                description=(
+                    "Launch Pika wrist perception cameras (D405 + Fisheye) on RT host."
+                ),
             ),
             DeclareLaunchArgument(
                 "camera_config",

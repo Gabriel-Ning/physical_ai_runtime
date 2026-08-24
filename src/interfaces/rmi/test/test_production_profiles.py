@@ -33,7 +33,7 @@ def test_every_agent_resource_is_an_em_capability(profile_name):
 @pytest.mark.parametrize(
     "path",
     [
-        "src/bringup/franka_manipulation/workstation_launch/config/recording/rmi_fr3_policy.yaml",
+        "src/bringup/franka_manipulation/workstation_launch/config/recording/franka_manipulation.yaml",
         "src/bringup/marvin_manipulation/workstation_launch/config/recording/marvin_manipulation.yaml",
         "src/bringup/piper_manipulation/workstation_launch/config/recording/rmi_piper_bimanual.yaml",
     ],

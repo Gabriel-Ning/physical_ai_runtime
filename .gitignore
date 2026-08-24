@@ -46,6 +46,7 @@ MUJOCO_LOG.TXT
 !/docs/CLOCK_SYNC.md
 !/docs/CPU_HOST_SETUP.md
 !/docs/UDEV_HOST_SETUP.md
+!/docs/FRANKA_RT_COMMUNICATION.md
 
 # Editor and operating-system noise
 .vscode/*

@@ -1,11 +1,11 @@
 # Copyright 2026 physical_ai_runtime
 # SPDX-License-Identifier: Apache-2.0
-"""Perception camera bringup for Franka FR3 + Pika Gripper setup.
+"""Perception camera bringup for Franka FR3 + Pika Gripper (RT host).
 
-Loads camera configurations (resolution, framerate, stream formats) from
-``config/camera/pika_cameras.yaml``.
+Loads camera configurations from ``config/camera/pika_cameras.yaml``
+(Franka beta site identity: D405 serial + udev fisheye path).
 
-Launches:
+Launches on the RT host (same split as Marvin wrist cameras):
   1. RealSense D405 (Wrist Depth/RGB): realsense2_camera
   2. Sunplus DECXIN Fisheye (Wrist RGB): mjpeg_cam (original JPEG)
 
@@ -115,7 +115,8 @@ def generate_launch_description() -> LaunchDescription:
                 "fisheye_device",
                 default_value="",
                 description=(
-                    "Optional Fisheye device node override (e.g. /dev/video12). "
+                    "Optional Fisheye device node override "
+                    "(e.g. /dev/pika_left_fisheye). "
                     "Empty uses value from camera_config."
                 ),
             ),

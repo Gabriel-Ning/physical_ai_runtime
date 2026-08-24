@@ -1,147 +1,88 @@
 # FR3 + Pika RT bringup
 
-RT-host stack for one Franka FR3:
+当前架构（与 Marvin 同一套边界）：
 
 ```text
-workstation (planner / policy / teleop)
-  --DDS-->  execution_manager
-              -> inactive route controllers
-                   JSIC / TSJIC / JTC
-              -> this package: xacro + ros2_control_node
+Policy / Teleop / Planner  (workstation, RMI)
+        -> Execution Manager claim/lease
+        -> /execution/<resource>/...
+        -> ros2_control on RT host
+        -> FR3 + Pika
 ```
 
-This package owns FR3+Pika composition (no vendor `franka.launch.py` fork)
-and the three manipulation controllers:
+- workstation 常驻 C++ Execution Manager；RMI 是 Python client SDK
+- 本包只起 `xacro` + `ros2_control_node` + 腕部相机
+- 不在 RT 上启 EM、recorder、规划器或应用节点
+- 路由控制器启动时全部 **inactive**；EM claim 成功后才切换
 
-- `urdf/fr3_manipulation.urdf.xacro` — assembly entry (this package)
-- `config/model/gripper_tcp.yaml` / `config/model/joint_limits.yaml` — Pika TCP +
-  finger travel for this bringup (overrides `pika_gripper_description` defaults)
-- `config/controller/` — controller_manager + route controllers (real + fake)
-- Arm URDF / `franka_hardware` — upstream, unmodified, not maintained here
-- Pika gripper + `pika_adaptor` — `pika_gripper_description` (ours)
-
-Planning (cuRobo) stays on the workstation. Do not import `motion_planner_core`
-on the RT host. cuRobo robot YAMLs live in `curobo_robot_models`
-(`src/motion_planning/motion_planners/curobo_robot_models`), not in this RT package.
-If you change `config/model/gripper_tcp.yaml` or `config/model/joint_limits.yaml`, regenerate
-`curobo_robot_models/config/fr3_manipulation.yml` on the workstation (see that
-package README).
-
-All route controllers start **inactive**. The Execution Manager activates one after a provider
-acquires control.
-
-Launch commands (visualize / fake / real): see [../README.md](../README.md).
-Use a **pixi-activated** shell so `ROS_DOMAIN_ID=1` and CycloneDDS are set.
-Shortcut: `pixi run rmi-fr3-fake-rt`.
+Launch 命令见 [../README.md](../README.md)。RT 主机用 Pixi **`cpu`** 环境；workstation 用 `default` / `runtime`。
 
 ## Controllers that are spawned
 
 Serialized: `joint_state_broadcaster` → inactive `franka_arm_tsjic` /
-`franka_arm_jsic` / `franka_arm_jtc`. If `load_pika_hardware:=true`, also
-`pika_gripper_fwd`.
+`franka_arm_jsic` / `franka_arm_jtc`。`load_pika_hardware:=true` 时还有
+`pika_gripper_fwd`（同样 inactive）。
 
-**Not spawned:** `franka_robot_state_broadcaster`. Planning and the Execution Manager only need
-`/joint_states`. The vendor broadcaster is FCI diagnostics (`FrankaRobotState`,
-wrench, O_T_EE) and is not on the RMI path.
+**Not spawned:** `franka_robot_state_broadcaster`。EM / RMI 只需要 `/joint_states`。
 
 ## Joint-state remap
-
-JSB is remapped so hardware joints do not publish directly on `/joint_states`:
 
 ```text
 joint_state_broadcaster  --remap-->  /franka/joint_states
 joint_state_publisher    source_list:
                            franka/joint_states
-                           franka_gripper/joint_states   # unused if no gripper
+                           franka_gripper/joint_states
                          --> /joint_states
 ```
 
-The Execution Manager and `rmi.Context` subscribe to `/joint_states`.
+## Fake vs real
 
-## Pika without hardware
-
-URDF still includes the Pika adaptor + `pika_gripper_tcp` for planning.
-`load_pika_hardware:=false` skips Pika `ros2_control` and `pika_gripper_fwd`
-(no serial). Use Planner with `parts=[arm]` only.
-
-## Fake vs real controllers
-
-| Provider | Real HW | Fake HW |
+| Role | Real HW | Fake HW |
 |---|---|---|
-| Policy | `franka_arm_jsic` effort | same name, JSPC position |
-| Teleop | `franka_arm_tsjic` effort | same name, TSKPC position |
-| Planner | `franka_arm_jtc` effort | same name, JTC position |
+| Policy | `franka_arm_jsic` effort | 同名，位置 |
+| Teleop | `franka_arm_tsjic` effort | 同名，位置 |
+| Planner | `franka_arm_jtc` effort | 同名，位置 |
 
-`use_fake_hardware:=true` loads `config/controller/controllers_fake.yaml`. Names and
-topics stay the same.
+`use_fake_hardware:=true` 加载 `config/controller/controllers_fake.yaml`。名字和 `/execution/...` endpoint 不变。
 
-Controller endpoints are under `/execution/<group>/`.
-`/execution_manager/authority_status` and `/execution_manager/authority_events`
-are authority telemetry only, not command paths.
-inputs.
+## Perception cameras
 
-Topics:
+腕部相机在 **RT**。默认 `with_cameras:=true`。
 
-- `/execution/arm/joint_reference`
-- `/execution/arm/pose_reference`
-- `/execution/arm/twist_reference`
-- `/execution/arm/follow_joint_trajectory`
-- `/execution/end_effector/joint_reference` (if `load_pika_hardware:=true`)
+- D405：`/pika_d405/camera/color/image_raw`，`/pika_d405/camera/aligned_depth_to_color/image_raw`（serial `_323622270897`，用 `rs-enumerate-devices`）
+- 鱼眼：`/pika_fisheye/image/compressed`
 
-## Workstation (after RT is up)
+设备节点：`/dev/pika_left_gripper`、`/dev/pika_left_fisheye`（udev `usb-0:6.*`）。不要用 `/dev/ttyUSB*` / `/dev/video*`。
 
-The RT stack does not launch the Execution Manager or planner. Workstation composition uses the
-`fr3_pika_single_arm` RMI profile
-(`apps/profiles/fr3_pika_single_arm.yaml`).
-That profile still lists the old controller-named command topics; update it
-after this RT topic lock. Keep `use_rviz:=false` on the RT host; open RViz on
-the workstation with Fixed Frame `fr3_link0`.
-
-## Perception Cameras
-
-When `with_cameras:=true`, `rt_stack.launch.py` includes `camera_bringup.launch.py` to stream:
-- **RealSense D405**: `/pika_d405/camera/color/image_raw`, `/pika_d405/camera/aligned_depth_to_color/image_raw`
-- **Sunplus Fisheye**: `/pika_fisheye/image/compressed` (`sensor_msgs/CompressedImage`, original MJPEG)
-
-Parameters (resolution, framerate, formats) are configured in `config/camera/pika_cameras.yaml`.
+Hikvision 挂 workstation，尚未接入。
 
 ## CPU affinity
 
-On the **real RT host**, do not disable CPU affinity (`cpu_affinity:=none`). Allow `RT_CM_CPU_AFFINITY` or the real-time profile to pin `ros2_control_node` to dedicated RT isolated cores (see [docs/CPU_HOST_SETUP.md](../../../../docs/CPU_HOST_SETUP.md)). Only use `cpu_affinity:=none` during local fake hardware simulation on developer workstations.
+真机 RT 不要 `cpu_affinity:=none`。空值走 `RT_CM_CPU_AFFINITY`（见 [docs/CPU_HOST_SETUP.md](../../../../docs/CPU_HOST_SETUP.md)）。
+
+仓库里 `scripts/rt_cpu_profile.env` 默认仍是 Marvin 8 核。**beta 本机**改成 Franka preset `12-15`，不要把这份主机文件提交回公共默认。
 
 ## Distributed DDS
 
-Workstation and RT host must share:
+Workstation 和 RT 必须同：
 
 - `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`
-- `ROS_DOMAIN_ID=1` (from pixi `[activation.env]`)
-- `CYCLONEDDS_URI` pointing at `.config/cyclonedds_default.xml`
+- `ROS_DOMAIN_ID=1`（Pixi `[activation.env]`）
+- `CYCLONEDDS_URI` 指向本机 Cyclone 文件
 
-Bind Cyclone to the **robot LAN** (not WiFi/VPN). Example: workstation
-`192.168.1.13`, RT host `192.168.1.100`. If `ros2 topic list` is empty, the
-usual cause is domain 0 vs 1 (RT launched without pixi activation) or DDS
-exiting via the wrong NIC.
+绑定 **机器人网**。beta 本机地址是 `192.168.1.100`；不要把 Marvin 的 `cyclonedds_default.xml`（`192.168.1.13` / peer `192.168.1.102`）直接用在这台机器上。从 `.config/cyclonedds_template.xml` 拷一份本机配置。
 
 ```bash
 ros2 daemon stop
-ros2 topic list   # expect /joint_states, /franka/joint_states, ...
+ros2 topic list
 ```
 
 ## Check
-
-This RT bringup does not start the Execution Manager. After `rt_stack.launch.py`:
 
 ```bash
 ros2 control list_controllers
 ros2 topic echo /joint_states --once
 ```
 
-`franka_arm_*` and `pika_gripper_fwd` (if loaded) must be `inactive`.
-`/execution_manager/authority_status` appears only after the workstation Execution Manager launch.
-
-## Scope
-
-- single FR3
-- Pika URDF/TCP for planning; hardware optional
-- effort on real HW, position on fake HW
-- no planner process on the RT host
+`franka_arm_*` 和 `pika_gripper_fwd` 必须是 `inactive`。
+`/execution_manager/authority_status` 只在 workstation 起 EM 之后出现。

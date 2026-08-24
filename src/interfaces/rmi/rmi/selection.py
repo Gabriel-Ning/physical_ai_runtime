@@ -8,7 +8,12 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Protocol
 
-from execution_manager_interfaces.msg import AuthorityEvent, AuthorityStatus, ResourceClaim
+from execution_manager_interfaces.msg import (
+    AuthorityEvent,
+    AuthorityStatus,
+    ResourceAuthority,
+    ResourceClaim,
+)
 from execution_manager_interfaces.srv import ClaimControl, ReleaseControl
 from diagnostic_msgs.msg import KeyValue
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -17,6 +22,13 @@ CLAIM_SERVICE = "/execution_manager/claim"
 RELEASE_SERVICE = "/execution_manager/release"
 AUTHORITY_STATUS_TOPIC = "/execution_manager/authority_status"
 AUTHORITY_EVENTS_TOPIC = "/execution_manager/authority_events"
+
+_AUTHORITY_STATE_NAME = {
+    int(ResourceAuthority.UNOWNED): "UNOWNED",
+    int(ResourceAuthority.TRANSITIONING): "TRANSITIONING",
+    int(ResourceAuthority.OWNED): "OWNED",
+    int(ResourceAuthority.FAULT): "FAULT",
+}
 
 
 class SourceRole(IntEnum):
@@ -50,6 +62,48 @@ class LeaseGrant:
     endpoints: dict[tuple[str, str], EndpointBinding]
 
 
+@dataclass(frozen=True)
+class AuthoritySnapshot:
+    """Read-only view of EM authority status for application startup checks."""
+
+    resources: dict[str, dict[str, Any]]
+
+    @property
+    def faults(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name, item in self.resources.items()
+            if int(item.get("authority_state", ResourceAuthority.UNOWNED))
+            == int(ResourceAuthority.FAULT)
+        )
+
+    @property
+    def owned(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name, item in self.resources.items()
+            if int(item.get("authority_state", ResourceAuthority.UNOWNED))
+            == int(ResourceAuthority.OWNED)
+        )
+
+    @property
+    def unowned(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name, item in self.resources.items()
+            if int(item.get("authority_state", ResourceAuthority.UNOWNED))
+            == int(ResourceAuthority.UNOWNED)
+        )
+
+    def state_name(self, resource: str) -> str:
+        item = self.resources.get(resource)
+        if item is None:
+            return "UNKNOWN"
+        return _AUTHORITY_STATE_NAME.get(
+            int(item.get("authority_state", -1)), "UNKNOWN"
+        )
+
+
 class ExecutionManagerUnavailableError(RuntimeError):
     pass
 
@@ -70,6 +124,17 @@ class AuthorityClient(Protocol):
     def release(self, lease_id: str) -> None: ...
 
     def get_allocations(self) -> dict[str, dict[str, Any]]: ...
+
+    def describe_authority(self) -> AuthoritySnapshot: ...
+
+    def clear_fault(
+        self,
+        resources: dict[str, str],
+        *,
+        source_role: SourceRole | str | int = SourceRole.POLICY,
+        source_instance: str = "rmi_clear_fault",
+        force: bool = False,
+    ) -> AuthoritySnapshot: ...
 
     def get_events(self, *, lease_id: str | None = None) -> list[AuthorityEvent]: ...
 
@@ -190,6 +255,78 @@ class ExecutionManagerClient:
             return {}
         return {resource: dict(value) for resource, value in self._allocations.items()}
 
+    def describe_authority(self) -> AuthoritySnapshot:
+        """Return the latest EM authority snapshot (empty if status is stale)."""
+        return AuthoritySnapshot(self.get_allocations())
+
+    def clear_fault(
+        self,
+        resources: dict[str, str],
+        *,
+        source_role: SourceRole | str | int = SourceRole.POLICY,
+        source_instance: str = "rmi_clear_fault",
+        force: bool = False,
+    ) -> AuthoritySnapshot:
+        """Clear FAULT on ``resources`` via preempt claim + immediate release.
+
+        Application startup may call this when the operator is about to start a
+        session after an RT fault / restart left EM in FAULT. Controllers may
+        remain active until the next real claim; authority returns to UNOWNED.
+
+        When ``force`` is true, preempt-claim/release all given resources even if
+        the local status cache does not yet show FAULT.
+        """
+        if not resources:
+            raise ValueError("clear_fault requires at least one resource")
+        if not source_instance:
+            raise ValueError("source_instance must not be empty")
+        snapshot = self.describe_authority()
+        if force:
+            targets = dict(resources)
+        else:
+            targets = {
+                name: contract
+                for name, contract in resources.items()
+                if int(
+                    snapshot.resources.get(name, {}).get(
+                        "authority_state", ResourceAuthority.UNOWNED
+                    )
+                )
+                == int(ResourceAuthority.FAULT)
+            }
+        if not targets:
+            return snapshot
+        grant = self.claim(
+            source_role,
+            source_instance,
+            targets,
+            preempt=True,
+            metadata={"reason": "clear_fault"},
+        )
+        self.release(grant.lease_id)
+        deadline = time.monotonic() + self._timeout_sec
+        while time.monotonic() < deadline:
+            snapshot = self.describe_authority()
+            pending = False
+            for name in targets:
+                item = snapshot.resources.get(name)
+                if item is None:
+                    continue
+                state = int(item.get("authority_state", ResourceAuthority.UNOWNED))
+                if state == int(ResourceAuthority.FAULT):
+                    pending = True
+                    break
+                if (
+                    state == int(ResourceAuthority.OWNED)
+                    and item.get("source_instance") == source_instance
+                ):
+                    pending = True
+                    break
+            if not pending:
+                return snapshot
+            time.sleep(0.01)
+        return self.describe_authority()
+
     def get_events(self, *, lease_id: str | None = None) -> list[AuthorityEvent]:
         if lease_id is None:
             return list(self._events)
@@ -240,6 +377,7 @@ __all__ = [
     "AUTHORITY_STATUS_TOPIC",
     "CLAIM_SERVICE",
     "RELEASE_SERVICE",
+    "AuthoritySnapshot",
     "EndpointBinding",
     "ExecutionManagerUnavailableError",
     "LeaseGrant",

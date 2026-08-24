@@ -1,10 +1,18 @@
 # Copyright 2026 physical_ai_runtime
 # SPDX-License-Identifier: Apache-2.0
 #
-# Perception Camera Parameters for Pika Gripper setup on Franka FR3 (Standard 30 Hz Profile).
-# Includes:
-#   1. RealSense D405 (Wrist Close-range RGB-D @ 30Hz, 848x480)
-#   2. Sunplus DECXIN Fisheye (Wrist Ultra-wide RGB @ 30Hz, 1280x720)
+# Pika wrist cameras on Franka beta RT host (same cable topology pattern as
+# Marvin; namespaces stay singular for single-arm FR3).
+#
+#   1. RealSense D405 — 848x480 RGB8 + Z16 @ 30 Hz, hardware-synced, depth
+#      aligned to color (`.../aligned_depth_to_color/image_raw`).
+#   2. Sunplus DECXIN fisheye — original MJPEG 1280x720 @ 30 Hz via mjpeg_cam.
+#
+# Site identity (Franka beta):
+#   D405 serial_no from `rs-enumerate-devices` (not udev ID_SERIAL_SHORT —
+#   those can disagree). Fisheye / gripper udev ID_PATH usb-0:6.* in
+#   scripts/udev/rules.d/99-pika.rules → /dev/pika_left_fisheye,
+#   /dev/pika_left_gripper. Do not use raw /dev/video* / /dev/ttyUSB*.
 
 pika_d405:
   camera:
@@ -17,17 +25,18 @@ pika_d405:
       enable_infra: false
       enable_infra1: false
       enable_infra2: false
-      enable_sync: false
-      # Standard 30 FPS profile for D405:
-      depth_module:
+      enable_sync: true
+      rgb_camera:
         color_profile: "848x480x30"
         color_format: "RGB8"
+        global_time_enabled: true
+      depth_module:
         depth_profile: "848x480x30"
         depth_format: "Z16"
         global_time_enabled: true
         frames_queue_size: 2
       align_depth:
-        enable: false
+        enable: true
         frames_queue_size: 2
       pointcloud:
         enable: false
@@ -37,7 +46,7 @@ pika_fisheye:
   camera:
     ros__parameters:
       camera_name: "pika_fisheye"
-      video_device: "/dev/video12"
+      video_device: "/dev/pika_left_fisheye"
       frame_id: "pika_fisheye_link"
       image_width: 1280
       image_height: 720

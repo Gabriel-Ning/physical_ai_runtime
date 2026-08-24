@@ -53,6 +53,7 @@ class Context:
         self._action_client_factory = action_client_factory
         self._owns_node = owns_node
         self._closed = False
+        self._execution_prepared = False
         self._agents: dict[str, Agent] = {}
         self._cameras: dict[str, Camera[Any]] = {}
         self._camera_history_sizes: dict[str, int] = {}
@@ -131,8 +132,14 @@ class Context:
         check_hardware: bool = False,
         check_cameras: bool = False,
         require_execution_manager: bool = False,
+        prepare_execution: bool = True,
     ) -> None:
-        """Wait for RT state/health and optional sensors, without acquiring control."""
+        """Wait for RT state/health and optional sensors, without acquiring control.
+
+        When ``prepare_execution`` is true (default), also runs one-shot application
+        startup authority recovery: clear leftover EM FAULT after RT faults/restarts.
+        Session claim during the run does not auto-recover.
+        """
         # 1. Wait for robot body and hardware readiness
         self.robot.wait_until_ready(
             timeout=timeout,
@@ -140,8 +147,10 @@ class Context:
             check_hardware=check_hardware,
         )
 
-        if require_execution_manager:
+        if require_execution_manager or prepare_execution:
             self.provider_selector.require_execution_manager(timeout_sec=timeout)
+        if prepare_execution:
+            self.prepare_execution(timeout_sec=timeout)
 
         # 2. If check_cameras is requested, instantiate declared cameras and wait for them
         if check_cameras and hasattr(self.profile, "cameras") and self.profile.cameras:
@@ -150,6 +159,57 @@ class Context:
                     self.make_camera(cam_name)
             for cam in self._cameras.values():
                 cam.wait_until_ready(timeout=timeout)
+
+    def prepare_execution(self, *, timeout_sec: float | None = None) -> Any:
+        """One-shot app-start authority check: clear FAULT, leave OWNED alone.
+
+        Call at application startup (``wait_until_ready`` does this by default).
+        Do not call mid-run to paper over live switch failures — those stay FAULT
+        until the operator restarts the app or explicitly preempts.
+        """
+        import time
+
+        from execution_manager_interfaces.msg import ResourceAuthority
+
+        from .selection import AuthoritySnapshot
+
+        timeout = self._timeout_sec if timeout_sec is None else timeout_sec
+        if timeout <= 0.0:
+            raise ValueError("timeout_sec must be positive")
+        if self._execution_prepared:
+            describe = getattr(self.provider_selector, "describe_authority", None)
+            if describe is not None:
+                return describe()
+            return AuthoritySnapshot({})
+
+        self.provider_selector.require_execution_manager(timeout_sec=timeout)
+        describe = getattr(self.provider_selector, "describe_authority", None)
+        clear_fault = getattr(self.provider_selector, "clear_fault", None)
+        if describe is None or clear_fault is None:
+            self._execution_prepared = True
+            return AuthoritySnapshot({})
+
+        deadline = time.monotonic() + timeout
+        snapshot = describe()
+        while not snapshot.resources and time.monotonic() < deadline:
+            time.sleep(0.01)
+            snapshot = describe()
+
+        resources = _profile_command_contracts(self.profile)
+        faulted = {
+            name: contract
+            for name, contract in resources.items()
+            if int(
+                snapshot.resources.get(name, {}).get(
+                    "authority_state", ResourceAuthority.UNOWNED
+                )
+            )
+            == int(ResourceAuthority.FAULT)
+        }
+        if faulted:
+            snapshot = clear_fault(faulted)
+        self._execution_prepared = True
+        return snapshot
 
     def make_agent(
         self,
@@ -439,6 +499,14 @@ def _load_profile(
     raise TypeError("profile must be EmbodimentConfig, mapping, or path")
 
 
+def _profile_command_contracts(profile: EmbodimentConfig) -> dict[str, str]:
+    """Union of Agent resource→contract maps declared in the application profile."""
+    resources: dict[str, str] = {}
+    for agent in profile.agents.values():
+        resources.update(dict(agent.resources))
+    return resources
+
+
 def _make_episode_recorder_client(
     node: Any,
     *,
@@ -465,12 +533,14 @@ def _make_episode_recorder_client(
             for key, value in profile_values.items()
             if key != "self" and key in valid_keys
         }
-        if values.get("profile") and not (
-            values.get("profile_dir") or values.get("contract_path")
-        ):
-            values["contract_path"] = str(
-                _resolve_recording_profile(str(values["profile"]))
-            )
+        # ``profile`` is not a RecorderConfig field (launch uses it); resolve
+        # before filtering so older profiles without ``config`` still work.
+        if not (values.get("profile_dir") or values.get("contract_path")):
+            legacy_profile = profile_values.get("profile")
+            if legacy_profile:
+                values["contract_path"] = str(
+                    _resolve_recording_profile(str(legacy_profile))
+                )
         recorder_config = RecorderConfig(**values)
     return EpisodeRecorderClient(
         recorder_config,

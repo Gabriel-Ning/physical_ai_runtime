@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from execution_manager_interfaces.msg import AuthorityEvent, ResourceAuthority
 import pytest
 from rmi import Action, Agent, Robot
-from rmi.selection import EndpointBinding, LeaseGrant
+from rmi.selection import AuthoritySnapshot, EndpointBinding, LeaseGrant
 from sensor_msgs.msg import JointState
 
 
@@ -29,15 +29,28 @@ class FakeAuthority:
         self.counter = 0
         self.releases = []
         self.events = []
+        self.clear_fault_calls = []
 
     def claim(self, role, instance, resources, *, preempt=False, metadata=None):
         del metadata
-        if not preempt and any(part in self.allocations for part in resources):
+        if not preempt and any(
+            part in self.allocations
+            and self.allocations[part].get("authority_state")
+            != ResourceAuthority.FAULT
+            for part in resources
+        ):
             raise RuntimeError("resources_busy_preempt_required")
+        if not preempt and any(
+            part in self.allocations
+            and self.allocations[part].get("authority_state")
+            == ResourceAuthority.FAULT
+            for part in resources
+        ):
+            raise RuntimeError("resource_fault_requires_explicit_preempt")
         displaced = {
             value["lease_id"]
             for part, value in self.allocations.items()
-            if part in resources
+            if part in resources and value.get("lease_id")
         }
         self.events.extend(
             SimpleNamespace(type=AuthorityEvent.PREEMPTED, lease_id=lease_id)
@@ -46,7 +59,7 @@ class FakeAuthority:
         self.allocations = {
             part: value
             for part, value in self.allocations.items()
-            if value["lease_id"] not in displaced
+            if value.get("lease_id") not in displaced
         }
         self.counter += 1
         lease_id = f"lease-{self.counter}"
@@ -74,16 +87,52 @@ class FakeAuthority:
         self.allocations = {
             part: value
             for part, value in self.allocations.items()
-            if value["lease_id"] != lease_id
+            if value.get("lease_id") != lease_id
         }
 
     def get_allocations(self):
         return {part: dict(value) for part, value in self.allocations.items()}
 
+    def describe_authority(self):
+        return AuthoritySnapshot(self.get_allocations())
+
+    def clear_fault(
+        self,
+        resources,
+        *,
+        source_role="POLICY",
+        source_instance="rmi_clear_fault",
+        force=False,
+    ):
+        self.clear_fault_calls.append(
+            {
+                "resources": dict(resources),
+                "force": force,
+                "source_instance": source_instance,
+            }
+        )
+        targets = dict(resources) if force else {
+            name: contract
+            for name, contract in resources.items()
+            if self.allocations.get(name, {}).get("authority_state")
+            == ResourceAuthority.FAULT
+        }
+        if not targets:
+            return self.describe_authority()
+        grant = self.claim(
+            source_role, source_instance, targets, preempt=True
+        )
+        self.release(grant.lease_id)
+        return self.describe_authority()
+
     def get_events(self, *, lease_id=None):
         if lease_id is None:
             return list(self.events)
         return [event for event in self.events if event.lease_id == lease_id]
+
+    def require_execution_manager(self, *, timeout_sec=None):
+        del timeout_sec
+        return None
 
 
 def _fixture():
@@ -235,3 +284,66 @@ def test_explicit_hardware_check_fails_when_authority_has_no_diagnostics():
 
     with pytest.raises(RuntimeError, match="hardware diagnostics are not supported"):
         robot.wait_until_ready(check_hardware=True)
+
+
+def test_prepare_execution_clears_fault_once_at_app_start():
+    from rmi.context import Context
+
+    robot, authority, _, _, _, _ = _fixture()
+    authority.allocations["arm"] = {
+        "authority_state": ResourceAuthority.FAULT,
+        "lease_id": "",
+        "source_instance": "",
+        "source_role": 0,
+        "command_contract": "",
+    }
+    profile = SimpleNamespace(
+        name="test",
+        agents={
+            "Policy": SimpleNamespace(
+                resources={"arm": "joint_reference"},
+            )
+        },
+        cameras={},
+    )
+    node = SimpleNamespace(
+        create_subscription=lambda *args, **kwargs: object(),
+        destroy_subscription=lambda *args, **kwargs: None,
+    )
+    ctx = Context(
+        profile,
+        node,
+        provider_selector=authority,
+        spin_node=False,
+    )
+    ctx.robot = robot
+
+    snapshot = ctx.prepare_execution(timeout_sec=0.1)
+    assert authority.clear_fault_calls == [
+        {
+            "resources": {"arm": "joint_reference"},
+            "force": False,
+            "source_instance": "rmi_clear_fault",
+        }
+    ]
+    assert "arm" not in snapshot.faults
+
+    # Second call is a no-op (startup once).
+    ctx.prepare_execution(timeout_sec=0.1)
+    assert len(authority.clear_fault_calls) == 1
+
+
+def test_session_does_not_auto_clear_fault_during_claim():
+    robot, authority, policy, _, _, _ = _fixture()
+    authority.allocations["arm"] = {
+        "authority_state": ResourceAuthority.FAULT,
+        "lease_id": "",
+        "source_instance": "",
+        "source_role": 0,
+        "command_contract": "",
+    }
+
+    with pytest.raises(RuntimeError, match="resource_fault_requires_explicit_preempt"):
+        with policy.run(robot, acquire_timeout=0.05):
+            pass
+    assert authority.clear_fault_calls == []

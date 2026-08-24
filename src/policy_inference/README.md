@@ -3,6 +3,10 @@
 These are ordinary Python scripts, not ROS packages. Source the workspace and
 run them directly; no additional `colcon build` is needed.
 
+Production LeRobot inference is developed separately under
+[`lerobot/`](lerobot/README.md); the files below remain framework-neutral
+examples.
+
 ## 1. VLA / ACT / diffusion / flow-matching example
 
 [`examples/vla_policy_example.py`](examples/vla_policy_example.py) keeps the

@@ -14,6 +14,7 @@ from rmi.selection import (
     AUTHORITY_STATUS_TOPIC,
     CLAIM_SERVICE,
     RELEASE_SERVICE,
+    AuthoritySnapshot,
     ExecutionManagerUnavailableError,
     ExecutionManagerClient,
     SourceRole,
@@ -153,3 +154,80 @@ def test_missing_execution_manager_is_explicit():
     client = ExecutionManagerClient(None, FakeNode(available=False), timeout_sec=0.01)
     with pytest.raises(ExecutionManagerUnavailableError):
         client.require_execution_manager()
+
+
+def test_describe_authority_reports_faults():
+    node = FakeNode()
+    client = ExecutionManagerClient(None, node, timeout_sec=0.1)
+    status_sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
+    authority = ResourceAuthority()
+    authority.resource = "arm"
+    authority.authority_state = ResourceAuthority.FAULT
+    status = AuthorityStatus()
+    status.resources = [authority]
+    status_sub.callback(status)
+
+    snapshot = client.describe_authority()
+    assert isinstance(snapshot, AuthoritySnapshot)
+    assert snapshot.faults == ("arm",)
+    assert snapshot.state_name("arm") == "FAULT"
+    assert snapshot.state_name("missing") == "UNKNOWN"
+
+
+def test_clear_fault_preempt_claims_then_releases():
+    node = FakeNode()
+    endpoint = CommandEndpoint()
+    endpoint.resource = "arm"
+    endpoint.command_contract = "joint_reference"
+    endpoint.endpoint = "/action_sources/policy/arm/joint_reference"
+    clear = ClaimControl.Response()
+    clear.success = True
+    clear.lease_id = "lease-clear"
+    clear.endpoints = [endpoint]
+    node.clients[CLAIM_SERVICE].response = clear
+
+    client = ExecutionManagerClient(None, node, timeout_sec=0.1)
+    status_sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
+
+    def _publish(state: int, *, lease_id: str = "", instance: str = "") -> None:
+        authority = ResourceAuthority()
+        authority.resource = "arm"
+        authority.authority_state = state
+        authority.lease_id = lease_id
+        authority.source_instance = instance
+        status = AuthorityStatus()
+        status.resources = [authority]
+        status_sub.callback(status)
+
+    _publish(ResourceAuthority.FAULT)
+
+    release_client = node.clients[RELEASE_SERVICE]
+    original_release = release_client.call_async
+
+    def release_then_unowned(request):
+        future = original_release(request)
+        _publish(ResourceAuthority.UNOWNED)
+        return future
+
+    release_client.call_async = release_then_unowned  # type: ignore[method-assign]
+
+    snapshot = client.clear_fault({"arm": "joint_reference"})
+    assert node.clients[CLAIM_SERVICE].requests[-1].preempt is True
+    assert release_client.requests[-1].lease_id == "lease-clear"
+    assert snapshot.faults == ()
+    assert snapshot.unowned == ("arm",)
+
+def test_clear_fault_noops_when_not_faulted():
+    node = FakeNode()
+    client = ExecutionManagerClient(None, node, timeout_sec=0.1)
+    status_sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
+    authority = ResourceAuthority()
+    authority.resource = "arm"
+    authority.authority_state = ResourceAuthority.UNOWNED
+    status = AuthorityStatus()
+    status.resources = [authority]
+    status_sub.callback(status)
+
+    client.clear_fault({"arm": "joint_reference"})
+    assert node.clients[CLAIM_SERVICE].requests == []
+    assert node.clients[RELEASE_SERVICE].requests == []

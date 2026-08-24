@@ -212,9 +212,39 @@ def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
 
     cameras = _load_config("camera", "pika_cameras.yaml")
     fisheye = cameras["pika_fisheye"]["camera"]["ros__parameters"]
+    assert fisheye["video_device"] == "/dev/pika_left_fisheye"
     assert fisheye["image_width"] == 1280
     assert fisheye["image_height"] == 720
     assert fisheye["framerate"] == 30.0
     assert fisheye["compressed_topic"] == "image/compressed"
     assert fisheye["format"] == "jpeg"
     assert "pixel_format" not in fisheye
+
+    d405 = cameras["pika_d405"]["camera"]["ros__parameters"]
+    assert d405["serial_no"] == "_323622270897"
+    assert d405["enable_sync"] is True
+    assert d405["align_depth"]["enable"] is True
+    assert d405["rgb_camera"]["color_profile"] == "848x480x30"
+    assert "color_profile" not in d405["depth_module"]
+
+
+def test_readme_matches_launch_files_and_udev_names() -> None:
+    readme = (PACKAGE_ROOT / "README.md").read_text(encoding="utf-8")
+    bringup = (PACKAGE_ROOT / "docs" / "BRINGUP.md").read_text(encoding="utf-8")
+    stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(
+        encoding="utf-8"
+    )
+    launch_names = {path.name for path in (PACKAGE_ROOT / "launch").glob("*.py")}
+    for text in (readme, bringup):
+        assert "/dev/pika_left_gripper" in text
+        assert "/dev/pika_left_fisheye" in text
+        assert ":=/dev/ttyUSB" not in text
+        assert "pixi run" not in text.lower()
+    assert "rt_stack.launch.py" in readme
+    assert "controller_bringup.launch.py" in readme
+    assert "camera_bringup.launch.py" in readme
+    assert "controller_bringup.launch.py" in launch_names
+    assert "camera_bringup.launch.py" in launch_names
+    assert "use_fake_hardware:=false" in readme
+    assert '"use_fake_hardware"' in stack
+    assert 'DeclareLaunchArgument("use_fake_hardware"' in stack

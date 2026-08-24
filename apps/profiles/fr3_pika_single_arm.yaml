@@ -10,9 +10,10 @@ host_roles:
       package: "franka_manipulation_rt_launch"
       launch_file: "rt_stack.launch.py"
       arguments:
-        use_fake_hardware: true
+        use_fake_hardware: false
         use_rviz: false
-    owns: ["ros2_control", "local_safety"]
+        with_cameras: true
+    owns: ["ros2_control", "local_safety", "wrist_cameras"]
   workstation_host:
     bringup:
       package: "franka_manipulation_workstation_launch"
@@ -21,6 +22,7 @@ host_roles:
         with_execution_manager: true
         with_recorder: true
         max_command_age_s: 0.25
+    # Hikvision (7 cams) connect to workstation — bringup deferred.
     owns: ["rmi", "execution_manager", "action_provider_nodes", "application_nodes", "episode_recorder_client"]
 
 groups:
@@ -98,6 +100,10 @@ agents:
     frequency: 30.0
 
 sensors:
+  # Wrist stream size/rate live in
+  # src/bringup/franka_manipulation/rt_launch/config/camera/pika_cameras.yaml
+  # (RT host: one FR3 + one Pika cable — gripper, fisheye, D405).
+  # Hikvision (7 cams on workstation): deferred.
   cameras:
     wrist_d405:
       ros_topic: "/pika_d405/camera/color/image_raw"
@@ -106,7 +112,7 @@ sensors:
       resolution: [480, 848]
       qos_profile: "sensor_data"
     wrist_d405_depth:
-      ros_topic: "/pika_d405/camera/depth/image_rect_raw"
+      ros_topic: "/pika_d405/camera/aligned_depth_to_color/image_raw"
       encoding: "16UC1"
       fps: 30
       resolution: [480, 848]
@@ -118,8 +124,14 @@ sensors:
       resolution: [720, 1280]
       qos_profile: "sensor_data"
 
+# Stream contract lives in the workstation recording yaml. This block is the
+# RMI recorder client API only. ``profile`` remains for workstation launch
+# defaults that resolve share/.../config/recording/<profile>.yaml.
 recorder:
-  profile: "rmi_fr3_policy"
+  profile: "franka_manipulation"
+  config:
+    package: "franka_manipulation_workstation_launch"
+    file: "config/recording/franka_manipulation.yaml"
   root_dir: "data/episodes"
   experiment_name: "fr3_pika_policy"
   task: "pika_manipulation_demo"

@@ -1,72 +1,69 @@
-# franka_manipulation_rt_launch
+# Franka RT Host
 
-RT Host bringup for **Franka FR3 + Pika Gripper**.
+Franka FR3 + 一只 Pika：`ros2_control`、腕部 D405 / 鱼眼。在 **beta**（`192.168.1.100`）上跑。
 
-Package path: `src/bringup/franka_manipulation/rt_launch`  
-ROS package name: `franka_manipulation_rt_launch`
+命令权威在 workstation 的 Execution Manager。本包只起 RT 闭环和腕部感知，不启 EM、不启 RMI 应用、不启规划器。
 
-Workstation assets (Execution Manager / recorder) live in sibling package
-`franka_manipulation_workstation_launch`.
+## 配置
 
-## Configuration Layout
+- `config/controller/controllers.yaml` — 1000 Hz JSIC / TSJIC / JTC + Pika forward
+- `config/controller/controllers_fake.yaml` — fake hardware 位置控制器
+- `config/camera/pika_cameras.yaml` — 腕部 D405（序列号 `_323622270897`）+ 鱼眼
+- `config/model/gripper_tcp.yaml`、`config/model/joint_limits.yaml`
 
-- `config/controller/controllers.yaml`: real FR3 effort controllers + Pika forward controller
-- `config/controller/controllers_fake.yaml`: fake hardware position controllers
-- `config/camera/pika_cameras.yaml`: wrist RealSense D405 + Sunplus fisheye
-- `config/model/gripper_tcp.yaml` & `config/model/joint_limits.yaml`: TCP and finger limits
-- `urdf/fr3_manipulation.urdf.xacro`: FR3 + Pika assembly entry
+夹爪 / 鱼眼默认走 udev 稳定名（`scripts/udev/rules.d/99-pika.rules`，beta `usb-0:6.*`）：
 
-## RT Host Stack
+`/dev/pika_left_gripper`、`/dev/pika_left_fisheye`
 
-### Aggregate: `rt_stack.launch.py`
+不要用 `/dev/ttyUSB*` / `/dev/video*`。D405 按 YAML 里的 `serial_no` 识别。
+
+## 启动
+
+RT 主机用 Pixi **`cpu`** 环境（`pixi install --locked -e cpu`）。
 
 ```bash
 ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
   use_fake_hardware:=false \
   robot_ip:=192.168.2.101 \
-  load_pika_hardware:=true \
-  gripper_serial_port:=/dev/ttyUSB0 \
   use_rviz:=false
 ```
 
-Fake / local (run on **workstation**, not RT host):
+默认 `with_cameras:=true`（腕部 D405 + 鱼眼）。路由控制器和 `pika_gripper_fwd` 都是 **inactive**，等 workstation EM claim 后再切。夹爪默认 `/dev/pika_left_gripper`，不要再传 `/dev/ttyUSB0`。
+
+Fake / 本机（在 **workstation** 上跑，不要开真相机）：
 
 ```bash
 ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
   use_fake_hardware:=true \
-  load_pika_hardware:=true \
   with_cameras:=false \
   use_rviz:=true \
   cpu_affinity:=none
 ```
 
-Start Execution Manager in a second terminal:
+只起控制器或只起相机：
 
 ```bash
-ros2 launch franka_manipulation_workstation_launch franka_workstation.launch.py
-# EM only:
-# ros2 launch franka_manipulation_workstation_launch franka_workstation.launch.py \
-#   with_recorder:=false
-```
-
-### Controllers only / cameras only
-
-```bash
-ros2 launch franka_manipulation_rt_launch controller_bringup.launch.py use_fake_hardware:=false
+ros2 launch franka_manipulation_rt_launch controller_bringup.launch.py \
+  use_fake_hardware:=false
 ros2 launch franka_manipulation_rt_launch camera_bringup.launch.py
 ```
 
-### Visualization
-
 ```bash
-ros2 launch franka_manipulation_rt_launch visualize_fr3_manipulation.launch.py \
-  use_joint_state_gui:=true use_rviz:=true
+ros2 control list_controllers
+ros2 topic hz /joint_states --window 20
 ```
 
-## Workstation (sibling package)
+细节：[docs/BRINGUP.md](docs/BRINGUP.md)。
+
+## Realtime / FCI 通信
+
+Franka FCI 对主机抖动很敏感，常见报错是 `communication_constraints_violation`。
+beta 上要把 **Franka 网卡（`192.168.2.x` / `enp2s0`）IRQ** 与 **`ros2_control`**
+和 DDS/相机负载拆开。完整说明与脚本：
+
+[`docs/FRANKA_RT_COMMUNICATION.md`](../../../../docs/FRANKA_RT_COMMUNICATION.md)
 
 ```bash
-ros2 launch franka_manipulation_workstation_launch franka_workstation.launch.py
+# 在 beta（Franka RT 主机）上一次性配置 + 重启
+sudo bash scripts/apply_franka_rt_host.sh && sudo reboot
 ```
-
-Details: [docs/BRINGUP.md](docs/BRINGUP.md).

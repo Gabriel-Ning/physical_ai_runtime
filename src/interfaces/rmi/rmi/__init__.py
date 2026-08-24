@@ -56,6 +56,7 @@ from .selection import (
     ExecutionManagerUnavailableError,
     LeaseGrant,
     AuthorityClient,
+    AuthoritySnapshot,
     ExecutionManagerClient,
     SourceRole,
 )
@@ -93,6 +94,7 @@ __all__ = [
     "PoseHorizonPoint",
     "PoseHorizonResult",
     "AuthorityClient",
+    "AuthoritySnapshot",
     "ExecutionManagerClient",
     "RecordedAction",
     "ReplayPlayer",

@@ -1,0 +1,14 @@
+[Unit]
+Description=Physical AI Runtime Franka FCI NIC IRQ / coalesce tuning
+After=network-online.target
+Wants=network-online.target
+DefaultDependencies=yes
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/pai-franka-rt-networking
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -41,7 +41,7 @@ not change yet, unplug/replug it or reboot.
 | `99-can-piper1.rules` | gs_usb serial → **`piper1`** (right Piper follower), 1 Mbps, `txqueuelen=1000` |
 | `99-obsensor-libusb.rules` | Orbbec (obsensor) USB permissions / vendor symlinks |
 | `99-realsense-libusb.rules` | Intel RealSense USB permissions |
-| `99-pika.rules` | Pika wrist cable on Marvin gamma. Left/right = `ID_PATH` **`usb-0:7.*` / `usb-0:9.*`**. Names: `/dev/pika_left_gripper`, `/dev/pika_right_gripper`, `/dev/pika_left_fisheye`, `/dev/pika_right_fisheye`. Never `/dev/ttyUSB*`. |
+| `99-pika.rules` | Pika wrist cable by host `ID_PATH`. **Marvin gamma**: left `usb-0:7.*` / right `usb-0:9.*` → `/dev/pika_{left,right}_{gripper,fisheye}`. **Franka beta**: `usb-0:6.*` → `/dev/pika_left_{gripper,fisheye}`. Never `/dev/ttyUSB*`. |
 
 Serials in the CAN rules are site-specific identities of the USB-CAN dongles
 used with this workspace. Applications select `piper0` / `piper1` by name; they
@@ -49,13 +49,14 @@ do not own the host mechanism that creates those names. Camera rules grant
 device access for the Pixi/prefix drivers; physical serials and namespaces stay
 in application config.
 
-`99-pika.rules` pins Marvin **gamma** by each Pika cable's host USB2 port in
-`ID_PATH` (left `usb-0:7.*`, right `usb-0:9.*`). Fisheye and gripper share that
-prefix. Do not match hub `KERNELS` together with chip `ATTRS` — udev requires
-those to be the same parent, so the symlink never appears. D405 on the same
-physical cable is USB3 and is identified by librealsense serial in
-`marvin_manipulation_rt_launch/config/camera/pika_d405.yaml`. After rewiring,
-update the `ID_PATH` globs **and** that YAML together.
+`99-pika.rules` appends per-host `ID_PATH` blocks (unused globs are harmless).
+Fisheye and gripper on one cable share the USB2 port prefix. Do not match hub
+`KERNELS` together with chip `ATTRS` — udev requires those to be the same
+parent, so the symlink never appears. D405 on the same physical cable is USB3
+and is identified by librealsense serial in the RT bringup camera YAML
+(`marvin_manipulation_rt_launch/.../pika_d405.yaml` or
+`franka_manipulation_rt_launch/.../pika_cameras.yaml`). After rewiring, update
+the `ID_PATH` globs **and** that YAML together.
 
 `MODE 0666` is required on an SSH RT host: default `dialout` 0660 fails until
 the user is in that group **and** has re-logged. After installing:

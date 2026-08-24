@@ -47,10 +47,15 @@ def main() -> None:
             samples += 1
             time.sleep(period)
 
-        diagnostics = context.provider_selector.get_hardware_diagnostics()
+        get_diagnostics = getattr(
+            context.provider_selector, "get_hardware_diagnostics", None
+        )
+        diagnostics = list(get_diagnostics()) if callable(get_diagnostics) else []
         result = {
             "profile": context.profile.name,
-            "passed": bool(samples) and max(ages, default=float("inf")) <= args.max_state_age and not diagnostics,
+            "passed": bool(samples)
+            and max(ages, default=float("inf")) <= args.max_state_age
+            and not diagnostics,
             "samples": samples,
             "mean_state_age_s": mean(ages) if ages else None,
             "max_state_age_s": max(ages) if ages else None,

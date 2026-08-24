@@ -180,6 +180,8 @@ the workstation, not on this host.
 ## Related
 
 - Profile defaults: [`scripts/rt_cpu_profile.env`](../scripts/rt_cpu_profile.env)
+- **Franka FCI / `communication_constraints_violation`:** [`FRANKA_RT_COMMUNICATION.md`](FRANKA_RT_COMMUNICATION.md)
+  (`scripts/rt_cpu_profile.franka_beta.env`, `apply_franka_rt_host.sh`)
 - Realtime PAM limits: [`scripts/ensure_realtime_limits.sh`](../scripts/ensure_realtime_limits.sh)
 - CPU RT host orchestrator: [`scripts/setup_cpu_rt_host.sh`](../scripts/setup_cpu_rt_host.sh)
 - Host udev / USB-CAN (hardware, not RT): [`UDEV_HOST_SETUP.md`](UDEV_HOST_SETUP.md)
