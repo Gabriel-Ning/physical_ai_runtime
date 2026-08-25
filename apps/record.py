@@ -35,19 +35,30 @@ import rmi
 
 def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active: bool) -> None:
     """Toggle hardware preemption (0-G Float vs Fallback mode) on teleoperation devices."""
+    if not teleoperators:
+        return
+    try:
+        context = getattr(node, "context", None)
+        if context is None or not context.ok():
+            return
+    except Exception:
+        return
     for name, cfg in teleoperators.items():
         srv_name = cfg.get("preempt_service")
         if not srv_name:
             continue
-        client = node.create_client(SetBool, srv_name)
-        if client.wait_for_service(timeout_sec=0.3):
-            future = client.call_async(SetBool.Request(data=preempt_active))
-            t_end = time.monotonic() + 0.5
-            while not future.done() and time.monotonic() < t_end:
-                time.sleep(0.01)
-            if future.done() and future.result().success:
-                mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
-                print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
+        try:
+            client = node.create_client(SetBool, srv_name)
+            if client.wait_for_service(timeout_sec=0.3):
+                future = client.call_async(SetBool.Request(data=preempt_active))
+                t_end = time.monotonic() + 0.5
+                while not future.done() and time.monotonic() < t_end:
+                    time.sleep(0.01)
+                if future.done() and future.result().success:
+                    mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+                    print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
+        except Exception as exc:
+            print(f"  [!] {name} preempt skipped ({exc.__class__.__name__})")
 
 
 def verify_cameras(node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 3.0) -> None:

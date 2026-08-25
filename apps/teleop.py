@@ -26,21 +26,38 @@ from trajectory_msgs.msg import JointTrajectory
 import rmi
 
 
+def _node_context_ok(node: Any) -> bool:
+    try:
+        context = getattr(node, "context", None)
+        return bool(context is not None and context.ok())
+    except Exception:
+        return False
+
+
 def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active: bool) -> None:
     """Toggle hardware preemption (0-G Float vs Fallback mode) on teleoperation devices."""
+    if not teleoperators or not _node_context_ok(node):
+        return
     for name, cfg in teleoperators.items():
         srv_name = cfg.get("preempt_service")
         if not srv_name:
             continue
-        client = node.create_client(SetBool, srv_name)
-        if client.wait_for_service(timeout_sec=0.3):
+        try:
+            client = node.create_client(SetBool, srv_name)
+            if not client.wait_for_service(timeout_sec=0.3):
+                continue
             future = client.call_async(SetBool.Request(data=preempt_active))
             t_end = time.monotonic() + 0.5
             while not future.done() and time.monotonic() < t_end:
                 time.sleep(0.01)
             if future.done() and future.result().success:
-                mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+                mode_label = (
+                    "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+                )
                 print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
+        except Exception as exc:
+            # Best-effort during Ctrl+C / RCL teardown.
+            print(f"  [!] {name} preempt skipped ({exc.__class__.__name__})")
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,6 +86,7 @@ def main() -> None:
     teleoperators = ctx.profile.raw_data.get("teleoperators", {})
     if not teleoperators:
         print(f"[!] No teleoperators defined in {args.profile}")
+        ctx.close()
         return
 
     print("=" * 68)
@@ -89,6 +107,20 @@ def main() -> None:
     # 4. Interactive Teleoperation Session
     qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
     is_active = False
+    sessions: dict[str, rmi.Session] = {}
+    active_stack: ExitStack | None = None
+
+    def _release_teleop() -> None:
+        nonlocal is_active, active_stack
+        set_teleop_preempt(ctx.node, teleoperators, False)
+        sessions.clear()
+        if active_stack is not None:
+            try:
+                active_stack.close()
+            except Exception:
+                pass
+            active_stack = None
+        is_active = False
 
     try:
         print("\n[3/3] Teleoperation Control Standby.")
@@ -96,9 +128,6 @@ def main() -> None:
         print("  • Press [ENTER] to ENGAGE teleoperation (Preempt 0-G float on).")
         print("  • Press [ENTER] again to RELEASE teleoperation (Preempt off).")
         print("  • Press [Ctrl+C] to quit safely.\n")
-
-        sessions: dict[str, rmi.Session] = {}
-        active_stack: ExitStack | None = None
 
         def relay(name: str, part: str):
             def callback(msg: JointTrajectory) -> None:
@@ -119,56 +148,47 @@ def main() -> None:
                 qos,
             )
 
-        try:
-            while True:
-                prompt = (
-                    "  [STANDBY] Press [ENTER] to ENGAGE Teleop (0-G Preempt)... "
-                    if not is_active
-                    else "  🔴 [ACTIVE TELEOP] Press [ENTER] to RELEASE (Return to Standby)... "
-                )
+        while True:
+            prompt = (
+                "  [STANDBY] Press [ENTER] to ENGAGE Teleop (0-G Preempt)... "
+                if not is_active
+                else "  🔴 [ACTIVE TELEOP] Press [ENTER] to RELEASE (Return to Standby)... "
+            )
+            try:
                 input(prompt)
-                is_active = not is_active
+            except (KeyboardInterrupt, EOFError):
+                print("\n\n[!] Teleoperation stopped by operator.")
+                break
 
-                if is_active:
-                    candidate = ExitStack()
-                    try:
-                        for name, cfg in teleoperators.items():
-                            agent = ctx.make_agent(
-                                cfg["target_agent"],
-                                frequency=cfg.get("publish_rate_hz", 200.0),
+            is_active = not is_active
+            if is_active:
+                candidate = ExitStack()
+                try:
+                    for name, cfg in teleoperators.items():
+                        agent = ctx.make_agent(
+                            cfg["target_agent"],
+                            frequency=cfg.get("publish_rate_hz", 200.0),
+                        )
+                        sessions[name] = candidate.enter_context(
+                            agent.run(
+                                ctx.robot,
+                                parts=[cfg["arm_part"], cfg["gripper_part"]],
+                                preempt=True,
                             )
-                            sessions[name] = candidate.enter_context(
-                                agent.run(
-                                    ctx.robot,
-                                    parts=[cfg["arm_part"], cfg["gripper_part"]],
-                                    preempt=True,
-                                )
-                            )
-                    except Exception:
-                        sessions.clear()
-                        candidate.close()
-                        is_active = False
-                        raise
-                    active_stack = candidate
-                    set_teleop_preempt(ctx.node, teleoperators, True)
-                    print("  >> Master-Slave 1:1 servoing is ACTIVE! Move leader arms.")
-                else:
-                    set_teleop_preempt(ctx.node, teleoperators, False)
+                        )
+                except Exception:
                     sessions.clear()
-                    if active_stack is not None:
-                        active_stack.close()
-                        active_stack = None
-                    print("  >> Teleop released. Master arms returned to Shadow/Standby mode.")
-        finally:
-            set_teleop_preempt(ctx.node, teleoperators, False)
-            sessions.clear()
-            if active_stack is not None:
-                active_stack.close()
-
-    except (KeyboardInterrupt, EOFError):
-        print("\n\n[!] Teleoperation stopped by operator.")
+                    candidate.close()
+                    is_active = False
+                    raise
+                active_stack = candidate
+                set_teleop_preempt(ctx.node, teleoperators, True)
+                print("  >> Master-Slave 1:1 servoing is ACTIVE! Move leader arms.")
+            else:
+                _release_teleop()
+                print("  >> Teleop released. Master arms returned to Shadow/Standby mode.")
     finally:
-        set_teleop_preempt(ctx.node, teleoperators, False)
+        _release_teleop()
         ctx.close()
         print("[✓] Teleoperation session closed safely.")
 
