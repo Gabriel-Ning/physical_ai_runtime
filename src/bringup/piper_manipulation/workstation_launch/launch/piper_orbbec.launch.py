@@ -29,7 +29,11 @@ def generate_launch_description() -> LaunchDescription:
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     PathJoinSubstitution(
-                        [FindPackageShare("orbbec_camera"), "launch", "femto_bolt.launch.py"]
+                        [
+                            FindPackageShare("orbbec_camera"),
+                            "launch",
+                            "femto_bolt.launch.py",
+                        ]
                     )
                 ),
                 launch_arguments={

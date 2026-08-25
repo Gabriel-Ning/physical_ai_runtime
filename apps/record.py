@@ -8,10 +8,11 @@ Robot Middleware Interface (RMI) SDK and distributed C++ Episode Recorder.
 
 Usage:
   # Record dataset using profile defaults:
-  pixi run record --profile piper_bimanual.yaml
+  pixi run -e runtime python apps/record.py --profile piper_bimanual.yaml
 
   # Record specific task with custom episode count:
-  pixi run record --profile piper_bimanual.yaml --task "cup_sorting" --episodes 15
+  pixi run -e runtime python apps/record.py --profile piper_bimanual.yaml \
+    --task "cup_sorting" --episodes 15
 """
 
 from __future__ import annotations
@@ -22,18 +23,20 @@ import shutil
 import threading
 import time
 from contextlib import ExitStack
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
+import rmi
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectory
 
-import rmi
 
-
-def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active: bool) -> None:
+def set_teleop_preempt(
+    node: Any, teleoperators: dict[str, Any], preempt_active: bool
+) -> None:
     """Toggle hardware preemption (0-G Float vs Fallback mode) on teleoperation devices."""
     for name, cfg in teleoperators.items():
         srv_name = cfg.get("preempt_service")
@@ -46,11 +49,17 @@ def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active:
             while not future.done() and time.monotonic() < t_end:
                 time.sleep(0.01)
             if future.done() and future.result().success:
-                mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+                mode_label = (
+                    "ACTIVE (0-G Float)"
+                    if preempt_active
+                    else "RELEASED (Shadow/Passive)"
+                )
                 print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
 
 
-def verify_cameras(node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 3.0) -> None:
+def verify_cameras(
+    node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 3.0
+) -> None:
     """Verify all camera streams defined in Profile are actively publishing frames."""
     if not cameras_cfg:
         return
@@ -70,6 +79,7 @@ def verify_cameras(node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 
                 frames_info[c_id] = (
                     f"{w}x{h}, {enc}" if w and h else f"{enc}, {nbytes} B"
                 )
+
         return _cb
 
     for cam_id, cfg in cameras_cfg.items():
@@ -93,7 +103,11 @@ def verify_cameras(node: Any, cameras_cfg: dict[str, Any], timeout_sec: float = 
     print("\n  📸 Perception Camera Stream Verification:")
     for cam_id, cfg in cameras_cfg.items():
         topic = cfg.get("ros_topic", "")
-        status = "STREAMING (Ready)" if results.get(cam_id) else "NO FRAMES (Check workstation_stack)"
+        status = (
+            "STREAMING (Ready)"
+            if results.get(cam_id)
+            else "NO FRAMES (Check workstation_stack)"
+        )
         icon = "[✓]" if results.get(cam_id) else "[!]"
         detail = frames_info.get(cam_id, "live stream")
         print(f"    {icon} {cam_id:<16}: {topic} ({detail}) -> {status}")
@@ -113,14 +127,23 @@ def smooth_homing(
 
     # Collect arm and gripper start configurations
     parts_to_home = {}
-    for name, cfg in teleoperators.items():
+    for cfg in teleoperators.values():
         arm_p, grip_p = cfg["arm_part"], cfg["gripper_part"]
-        arm_spec, grip_spec = ctx.profile.parts.get(arm_p), ctx.profile.parts.get(grip_p)
+        arm_spec, grip_spec = (
+            ctx.profile.parts.get(arm_p),
+            ctx.profile.parts.get(grip_p),
+        )
 
         if arm_spec and all(j in name_to_pos for j in arm_spec.joint_names):
-            parts_to_home[arm_p] = ([name_to_pos[j] for j in arm_spec.joint_names], list(home_pose))
+            parts_to_home[arm_p] = (
+                [name_to_pos[j] for j in arm_spec.joint_names],
+                list(home_pose),
+            )
         if grip_spec and all(j in name_to_pos for j in grip_spec.joint_names):
-            parts_to_home[grip_p] = ([name_to_pos[j] for j in grip_spec.joint_names], [0.020])
+            parts_to_home[grip_p] = (
+                [name_to_pos[j] for j in grip_spec.joint_names],
+                [0.020],
+            )
 
     steps = int(max(duration_s * rate_hz, 10))
     dt = duration_s / steps
@@ -133,8 +156,13 @@ def smooth_homing(
             h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
 
             for part_name, (q_start, q_goal) in parts_to_home.items():
-                interp = [q_start[j] + h * (q_goal[j] - q_start[j]) for j in range(len(q_goal))]
-                session.act(rmi.Action(part=part_name, command="joint_reference", value=interp))
+                interp = [
+                    q_start[j] + h * (q_goal[j] - q_start[j])
+                    for j in range(len(q_goal))
+                ]
+                session.act(
+                    rmi.Action(part=part_name, command="joint_reference", value=interp)
+                )
 
             elapsed = time.monotonic() - t_start
             target_t = (i + 1) * dt
@@ -179,6 +207,48 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _normalize_task_name(value: str) -> str:
+    """Return one task label that is also safe as a dataset directory name."""
+    task = value.strip()
+    if not task:
+        raise ValueError("task name must not be empty")
+    if task in {".", ".."} or "/" in task or "\\" in task or "\0" in task:
+        raise ValueError(
+            "task name must be one directory component (no '/', '\\', '.' or '..')"
+        )
+    return task
+
+
+def _task_recorder_config(
+    recorder_values: dict[str, Any], task: str, operator: str
+) -> Any:
+    """Build a recorder config whose directory and episode task stay aligned."""
+    from episode_recorder import RecorderConfig
+
+    valid_names = {item.name for item in fields(RecorderConfig)}
+    values = {
+        key: value for key, value in recorder_values.items() if key in valid_names
+    }
+    values.update(
+        {
+            "experiment_name": task,
+            "task": task,
+            "operator_name": operator,
+            "max_episode_duration": float(recorder_values.get("max_duration_s", 0.0)),
+        }
+    )
+    return RecorderConfig(**values)
+
+
+def _finalized_episode_directory(scope: Any) -> Path:
+    status = getattr(scope, "final_status", None)
+    episode_path = getattr(status, "episode_path", "") if status is not None else ""
+    if not episode_path:
+        raise RuntimeError("recorder finalized episode without an episode_path")
+    path = Path(episode_path)
+    return path if path.is_dir() else path.parent
+
+
 def _relay(session: rmi.Session, part: str):
     def _callback(msg: JointTrajectory) -> None:
         if session.active_for(part):
@@ -197,8 +267,12 @@ def main() -> None:
 
     # 2. Extract Profile Parameters
     rec_cfg = ctx.profile.raw_data.get("recorder", {})
-    task_name = args.task or rec_cfg.get("task", "bimanual_manipulation")
-    target_episodes = args.episodes if args.episodes is not None else rec_cfg.get("episodes", 10)
+    task_name = _normalize_task_name(
+        args.task or rec_cfg.get("task", "bimanual_manipulation")
+    )
+    target_episodes = (
+        args.episodes if args.episodes is not None else rec_cfg.get("episodes", 10)
+    )
     rate_hz = float(rec_cfg.get("rate_hz", 50.0))
     max_duration_s = float(rec_cfg.get("max_duration_s", 60.0))
     homing_duration_s = float(rec_cfg.get("homing_duration_s", 2.5))
@@ -213,6 +287,9 @@ def main() -> None:
     print(f"  Task Description   : '{task_name}'")
     print(f"  Target Episodes    : {target_episodes}")
     print(f"  Recording Rate     : {rate_hz:.1f} Hz")
+    print(
+        f"  Dataset Directory  : {Path(rec_cfg.get('root_dir', 'data/episodes')) / task_name}"
+    )
     print("=" * 72)
 
     # 3. Perception Warmup
@@ -220,7 +297,10 @@ def main() -> None:
         verify_cameras(ctx.node, cameras_cfg, timeout_sec=3.0)
 
     # 4. Activate MCAP Recorder Backend
-    recorder = ctx.make_recorder(autostart=True)
+    recorder = ctx.make_recorder(
+        config=_task_recorder_config(rec_cfg, task_name, args.operator),
+        autostart=True,
+    )
     recorder.activate()
 
     robot = ctx.robot
@@ -236,12 +316,21 @@ def main() -> None:
 
             # STEP 1: Staging Reset (Leader mirrors Follower in Shadow mode)
             print("  >> Moving robot arm(s) smoothly to Staging Home Pose...")
-            smooth_homing(ctx, robot, home_pose, teleoperators, duration_s=homing_duration_s, rate_hz=rate_hz)
+            smooth_homing(
+                ctx,
+                robot,
+                home_pose,
+                teleoperators,
+                duration_s=homing_duration_s,
+                rate_hz=rate_hz,
+            )
             print("  [✓] Staging Home Pose reached. Master & Slave aligned.")
 
             # STEP 2: Ready Gate (Simulating Preempt Engagement via Keyboard Enter)
             print("\n" + "-" * 72)
-            input(f"  >> [READY] Press [ENTER] to ENGAGE Preempt & START recording Episode {current_ep_idx}... ")
+            input(
+                f"  >> [READY] Press [ENTER] to ENGAGE Preempt & START recording Episode {current_ep_idx}... "
+            )
             print("-" * 72)
 
             metadata = {
@@ -253,70 +342,82 @@ def main() -> None:
             }
 
             stop_event = threading.Event()
-            stop_thread = threading.Thread(target=lambda: (input(), stop_event.set()), daemon=True)
+            stop_thread = threading.Thread(
+                target=lambda event=stop_event: (input(), event.set()), daemon=True
+            )
 
             last_recorded_path = ""
             start_time = time.monotonic()
             dt = 1.0 / rate_hz
 
             # STEP 3: Lockstep Recording & Active Teleop Streaming
-            with recorder.episode(task=task_name, metadata=metadata) as ep:
-                with ExitStack() as stack:
-                    for name, cfg in teleoperators.items():
-                        agent = ctx.make_agent(cfg["target_agent"], frequency=rate_hz)
-                        session = stack.enter_context(
-                            agent.run(
-                                robot,
-                                parts=[cfg["arm_part"], cfg["gripper_part"]],
-                                preempt=True,
-                            )
+            with (
+                recorder.episode(task=task_name, metadata=metadata) as ep,
+                ExitStack() as stack,
+            ):
+                for cfg in teleoperators.values():
+                    agent = ctx.make_agent(cfg["target_agent"], frequency=rate_hz)
+                    session = stack.enter_context(
+                        agent.run(
+                            robot,
+                            parts=[cfg["arm_part"], cfg["gripper_part"]],
+                            preempt=True,
                         )
-                        arm_sub = ctx.node.create_subscription(
-                            JointTrajectory,
-                            cfg["arm_source"],
-                            _relay(session, cfg["arm_part"]),
-                            qos,
+                    )
+                    arm_sub = ctx.node.create_subscription(
+                        JointTrajectory,
+                        cfg["arm_source"],
+                        _relay(session, cfg["arm_part"]),
+                        qos,
+                    )
+                    gripper_sub = ctx.node.create_subscription(
+                        JointTrajectory,
+                        cfg["gripper_source"],
+                        _relay(session, cfg["gripper_part"]),
+                        qos,
+                    )
+                    stack.callback(ctx.node.destroy_subscription, gripper_sub)
+                    stack.callback(ctx.node.destroy_subscription, arm_sub)
+
+                # Engage 0-G float on physical teleop devices
+                set_teleop_preempt(ctx.node, teleoperators, True)
+
+                print(
+                    "\n  🔴 RECORDING ACTIVE! Manipulate master arms to demonstrate task."
+                )
+                print("  >> Press [ENTER] in console when episode is COMPLETE.\n")
+                stop_thread.start()
+
+                step_count = 0
+                while not stop_event.is_set():
+                    t_loop = time.monotonic()
+                    step_count += 1
+                    elapsed = time.monotonic() - start_time
+
+                    if elapsed >= max_duration_s:
+                        print(f"\n  [!] Max duration {max_duration_s}s reached.")
+                        break
+
+                    if step_count % int(max(1, rate_hz / 5)) == 0:
+                        print(
+                            f"    Recording: {elapsed:5.1f}s | {step_count:5d} frames captured  (Press [ENTER] to Finish)",
+                            end="\r",
+                            flush=True,
                         )
-                        gripper_sub = ctx.node.create_subscription(
-                            JointTrajectory,
-                            cfg["gripper_source"],
-                            _relay(session, cfg["gripper_part"]),
-                            qos,
-                        )
-                        stack.callback(ctx.node.destroy_subscription, gripper_sub)
-                        stack.callback(ctx.node.destroy_subscription, arm_sub)
 
-                    # Engage 0-G float on physical teleop devices
-                    set_teleop_preempt(ctx.node, teleoperators, True)
+                    t_spent = time.monotonic() - t_loop
+                    if t_spent < dt:
+                        time.sleep(dt - t_spent)
 
-                    print("\n  🔴 RECORDING ACTIVE! Manipulate master arms to demonstrate task.")
-                    print("  >> Press [ENTER] in console when episode is COMPLETE.\n")
-                    stop_thread.start()
+                # STEP 4: Release Preempt back to Shadow fallback mode
+                set_teleop_preempt(ctx.node, teleoperators, False)
 
-                    step_count = 0
-                    while not stop_event.is_set():
-                        t_loop = time.monotonic()
-                        step_count += 1
-                        elapsed = time.monotonic() - start_time
+            episode_dir = _finalized_episode_directory(ep)
+            last_recorded_path = str(episode_dir)
 
-                        if elapsed >= max_duration_s:
-                            print(f"\n  [!] Max duration {max_duration_s}s reached.")
-                            break
-
-                        if step_count % int(max(1, rate_hz / 5)) == 0:
-                            print(f"    Recording: {elapsed:5.1f}s | {step_count:5d} frames captured  (Press [ENTER] to Finish)", end="\r", flush=True)
-
-                        t_spent = time.monotonic() - t_loop
-                        if t_spent < dt:
-                            time.sleep(dt - t_spent)
-
-                    # STEP 4: Release Preempt back to Shadow fallback mode
-                    set_teleop_preempt(ctx.node, teleoperators, False)
-
-                if hasattr(ep, "path") and ep.path:
-                    last_recorded_path = str(ep.path)
-
-            print(f"\n  [✓] Demonstration concluded ({elapsed:.1f}s, {step_count} frames).")
+            print(
+                f"\n  [✓] Demonstration concluded ({elapsed:.1f}s, {step_count} frames)."
+            )
 
             # STEP 5: Parallel Homing Reset & Quality Gate
             homing_thread = threading.Thread(
@@ -327,28 +428,40 @@ def main() -> None:
             homing_thread.start()
 
             while True:
-                choice = input(
-                    "\n  >> Episode Action: [S]ave (Default / Enter) | [D]iscard & Retry | [R]eplay | [Q]uit : "
-                ).strip().lower()
+                choice = (
+                    input(
+                        "\n  >> Episode Action: [S]ave (Default / Enter) | [D]iscard & Retry | [R]eplay | [Q]uit : "
+                    )
+                    .strip()
+                    .lower()
+                )
 
                 if choice in {"", "s", "save"}:
                     saved_episodes.append(last_recorded_path)
-                    print(f"  [✓] Episode {current_ep_idx} COMMITTED & SAVED to: {last_recorded_path}")
+                    print(
+                        f"  [✓] Episode {current_ep_idx} COMMITTED & SAVED to: {last_recorded_path}"
+                    )
                     current_ep_idx += 1
                     homing_thread.join()
                     break
                 elif choice in {"d", "discard"}:
-                    print(f"  [!] Episode {current_ep_idx} DISCARDED. Cleaning temporary files...")
+                    print(
+                        f"  [!] Episode {current_ep_idx} DISCARDED. Cleaning temporary files..."
+                    )
                     if last_recorded_path:
-                        ep_dir = Path(last_recorded_path).parent
+                        ep_dir = Path(last_recorded_path)
                         if ep_dir.is_dir() and "episode_" in ep_dir.name:
                             shutil.rmtree(ep_dir, ignore_errors=True)
                     homing_thread.join()
                     break
                 elif choice in {"r", "replay"}:
                     homing_thread.join()
-                    print("\n  >> Replaying demonstration on robot (Leader mirrors in Shadow mode)...")
-                    os.system(f"python apps/replay.py --profile '{args.profile}' --mcap-file '{last_recorded_path}'")
+                    print(
+                        "\n  >> Replaying demonstration on robot (Leader mirrors in Shadow mode)..."
+                    )
+                    os.system(
+                        f"python apps/replay.py --profile '{args.profile}' --mcap-file '{last_recorded_path}'"
+                    )
                     print("  [✓] Replay inspection finished.")
                 elif choice in {"q", "quit"}:
                     print("  [!] Stopping recording session.")
@@ -362,7 +475,9 @@ def main() -> None:
         set_teleop_preempt(ctx.node, teleoperators, False)
         ctx.close()
         print("\n" + "=" * 72)
-        print(f"  RECORDING SESSION COMPLETE. Total Saved Episodes: {len(saved_episodes)}")
+        print(
+            f"  RECORDING SESSION COMPLETE. Total Saved Episodes: {len(saved_episodes)}"
+        )
         print("=" * 72)
 
 

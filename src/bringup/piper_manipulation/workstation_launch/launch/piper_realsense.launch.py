@@ -11,6 +11,7 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
+    OpaqueFunction,
     SetEnvironmentVariable,
     TimerAction,
 )
@@ -19,7 +20,9 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
-def _camera_include(camera_name_arg: str, serial_no_arg: str) -> IncludeLaunchDescription:
+def _camera_include(
+    camera_name_arg: str, serial_no_arg: str, config_file=None, resolved=False
+) -> IncludeLaunchDescription:
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -27,12 +30,33 @@ def _camera_include(camera_name_arg: str, serial_no_arg: str) -> IncludeLaunchDe
             )
         ),
         launch_arguments={
-            "config_file": LaunchConfiguration("realsense_config_file"),
-            "camera_name": LaunchConfiguration(camera_name_arg),
+            "config_file": config_file or LaunchConfiguration("realsense_config_file"),
+            "camera_name": (
+                camera_name_arg
+                if resolved
+                else LaunchConfiguration(camera_name_arg)
+            ),
             "camera_namespace": "observation",
-            "serial_no": LaunchConfiguration(serial_no_arg),
+            "serial_no": serial_no_arg if resolved else LaunchConfiguration(serial_no_arg),
         }.items(),
     )
+
+
+def _delayed_right_camera(context, *args, **kwargs):
+    del args, kwargs
+    return [
+        TimerAction(
+            period=float(LaunchConfiguration("right_camera_delay").perform(context)),
+            actions=[
+                _camera_include(
+                    LaunchConfiguration("right_camera_name").perform(context),
+                    LaunchConfiguration("right_serial_no").perform(context),
+                    LaunchConfiguration("realsense_config_file").perform(context),
+                    resolved=True,
+                )
+            ],
+        )
+    ]
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -54,17 +78,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "right_camera_name", default_value="right_hand_realsense"
             ),
-            DeclareLaunchArgument(
-                "left_serial_no", default_value="_332522075913"
-            ),
-            DeclareLaunchArgument(
-                "right_serial_no", default_value="_332322073584"
-            ),
+            DeclareLaunchArgument("left_serial_no", default_value="_332522075913"),
+            DeclareLaunchArgument("right_serial_no", default_value="_332322073584"),
             DeclareLaunchArgument("right_camera_delay", default_value="10.0"),
             _camera_include("left_camera_name", "left_serial_no"),
-            TimerAction(
-                period=LaunchConfiguration("right_camera_delay"),
-                actions=[_camera_include("right_camera_name", "right_serial_no")],
-            ),
+            OpaqueFunction(function=_delayed_right_camera),
         ]
     )

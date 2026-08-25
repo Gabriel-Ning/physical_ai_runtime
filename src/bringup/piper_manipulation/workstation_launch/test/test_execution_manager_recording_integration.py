@@ -8,8 +8,8 @@ import threading
 import time
 from pathlib import Path
 
-import rclpy
 import pytest
+import rclpy
 from ament_index_python.packages import get_package_prefix
 from controller_manager_msgs.msg import ControllerState
 from controller_manager_msgs.srv import ListControllers, SwitchController
@@ -81,7 +81,11 @@ def _leased(node, lease_id, marker, joint_name):
 @pytest.mark.parametrize(
     ("profile_name", "joint_name", "em_profile"),
     [
-        ("piper_bimanual.yaml", "left_joint1", None),
+        (
+            "piper_bimanual.yaml",
+            "left_joint1",
+            "src/bringup/piper_manipulation/workstation_launch/config/execution_manager.yaml",
+        ),
         (
             "marvin_bimanual.yaml",
             "Joint1_L",
@@ -149,9 +153,7 @@ def test_explicit_takeover_fences_old_lease_without_motion(
             trace.append,
             10,
         )
-        policy = selection.claim(
-            "POLICY", "policy-v2", {"left_arm": "joint_reference"}
-        )
+        policy = selection.claim("POLICY", "policy-v2", {"left_arm": "joint_reference"})
         policy_pub = helper.create_publisher(
             LeasedJointReference,
             policy.endpoints[("left_arm", "joint_reference")].endpoint,
