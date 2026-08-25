@@ -62,7 +62,7 @@ ros2 topic hz /joint_states --window 20
 ## Workstation（RT 起来之后）
 
 ```bash
-ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py
+ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py
 ```
 
 Profile：`apps/profiles/piper_bimanual.yaml`。

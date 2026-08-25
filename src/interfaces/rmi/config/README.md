@@ -3,9 +3,9 @@
 RMI application profiles live in `apps/profiles/`. They are the app API
 (sensors, agents, recorder, features), not the Execution Manager routing table.
 
-Marvin points at the workstation EM capability config via
-`execution_manager_config`; Piper and Franka currently embed the same
-`groups` projection. No application profile declares provider routing.
+Marvin and Piper point at their workstation EM capability configs via
+`execution_manager_config`; Franka currently embeds the same `groups`
+projection. No application profile declares provider routing.
 
 ## Layout
 
@@ -30,5 +30,5 @@ EM execution-capability template:
 
    ```bash
    pixi run teleop --profile <my_robot>.yaml
-   ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py
+   ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py
    ```

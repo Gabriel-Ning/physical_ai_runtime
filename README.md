@@ -97,6 +97,22 @@ After this, entering the repository directory activates the locked Pixi
 environment and sources `install/setup.bash` when it exists. Leaving the
 directory deactivates it.
 
+日常 bringup 使用 `default`/`runtime`，提示符通常显示
+`(physical-ai-runtime)`。`pixi shell -e lerobot` 会在当前 shell 上再叠加一个
+LeRobot shell，因此提示符可能显示 `(physical-ai-runtime:lerobot)`；此时不要再
+运行不带 `-e` 的 `pixi shell` 来“切回”。输入一次 `exit` 即可退出内层并回到
+原来的 runtime shell。也可以完全避免嵌套，直接使用：
+
+```bash
+pixi run -e lerobot lerobot-versions
+pixi run -e lerobot lerobot-convert -- --help
+```
+
+`direnv allow` 本身不会固定选择 LeRobot。它按 `.envrc` 的规则依次读取
+`PIXI_ENV`、`.pixi/environment`，否则回退到 `default`。因此常规进入项目会是
+`physical-ai-runtime`；只有显式设置 `PIXI_ENV=lerobot`（不建议作为日常默认）
+或把环境选择文件写成 `lerobot` 时，才会自动进入 LeRobot。
+
 `.envrc` follows the env you used for setup: `pixi run setup` writes
 `.pixi/environment` (`default`, `runtime`, or `cpu`), and Direnv activates
 that same env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=curobo` if needed.
@@ -211,8 +227,8 @@ owns those ABIs.
 
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
-- Default ROS distro is **Jazzy**. Default Pixi env is **GPU**; use
-  `pixi install -e cpu` for the conda-only RT control host (see
+- Default ROS distro is **Jazzy**. Default Pixi env is the **runtime CPU robot
+  stack**; use `pixi install -e cpu` for the RT-host profile (see
   [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
   `test` / `clean` / `stop`).

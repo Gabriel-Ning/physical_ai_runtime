@@ -26,21 +26,48 @@ from trajectory_msgs.msg import JointTrajectory
 import rmi
 
 
-def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active: bool) -> None:
-    """Toggle hardware preemption (0-G Float vs Fallback mode) on teleoperation devices."""
+def set_teleop_preempt(
+    node: Any, teleoperators: dict[str, Any], preempt_active: bool
+) -> bool:
+    """Set every leader mode and report failure instead of silently continuing."""
+    pending: list[tuple[str, str, Any, Any]] = []
+    failures: list[str] = []
     for name, cfg in teleoperators.items():
         srv_name = cfg.get("preempt_service")
         if not srv_name:
+            failures.append(f"{name}: missing preempt_service")
             continue
         client = node.create_client(SetBool, srv_name)
-        if client.wait_for_service(timeout_sec=0.3):
-            future = client.call_async(SetBool.Request(data=preempt_active))
-            t_end = time.monotonic() + 0.5
-            while not future.done() and time.monotonic() < t_end:
-                time.sleep(0.01)
-            if future.done() and future.result().success:
-                mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
-                print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
+        if not client.wait_for_service(timeout_sec=3.0):
+            failures.append(f"{name}: {srv_name} unavailable")
+            node.destroy_client(client)
+            continue
+        pending.append(
+            (name, srv_name, client, client.call_async(SetBool.Request(data=preempt_active)))
+        )
+
+    deadline = time.monotonic() + 5.0
+    for name, srv_name, client, future in pending:
+        while not future.done() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if not future.done():
+            failures.append(f"{name}: {srv_name} timed out")
+            node.destroy_client(client)
+            continue
+        response = future.result()
+        node.destroy_client(client)
+        if response is None or not response.success:
+            failures.append(
+                f"{name}: {getattr(response, 'message', 'service returned no response')}"
+            )
+            continue
+        mode_label = "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+        print(f"  [✓] {name} Preempt {mode_label}: {response.message}")
+
+    if failures:
+        print("  [!] Leader mode transition failed: " + "; ".join(failures))
+        return False
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -150,7 +177,14 @@ def main() -> None:
                         is_active = False
                         raise
                     active_stack = candidate
-                    set_teleop_preempt(ctx.node, teleoperators, True)
+                    if not set_teleop_preempt(ctx.node, teleoperators, True):
+                        sessions.clear()
+                        active_stack.close()
+                        active_stack = None
+                        is_active = False
+                        set_teleop_preempt(ctx.node, teleoperators, False)
+                        print("  >> Teleop was not engaged; both leaders must confirm 0-G mode.")
+                        continue
                     print("  >> Master-Slave 1:1 servoing is ACTIVE! Move leader arms.")
                 else:
                     set_teleop_preempt(ctx.node, teleoperators, False)

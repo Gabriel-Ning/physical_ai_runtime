@@ -2,20 +2,33 @@
 
 Production-ready, profile-driven CLI applications built on top of the **RMI Python SDK**.
 
-All applications can be invoked directly with `pixi run <app>` or `python apps/<app>.py`.
+当前 runtime 应用任务仍处于逐项验收阶段，不在 `pixi.toml` 中开放 `teleop`、
+`record`、`replay`、`eval` 快捷任务。请在 runtime 环境中显式运行对应脚本。
+
+## 环境怎么选
+
+- `default` / `runtime`：ROS 2 bringup、Execution Manager、相机、录制、回放和
+  日常调试。进入项目后由 direnv 自动激活的通常就是这个环境。
+- `lerobot`：只在转换 LeRobot 数据集、加载 ACT/SmolVLA checkpoint、GPU
+  推理或训练时使用。它不是机械臂和相机 bringup 环境。
+- 推荐用 `pixi run -e lerobot <task>` 执行单条命令；如果使用
+  `pixi shell -e lerobot`，完成后输入 `exit` 回到外层 runtime shell。
+
+当前机器尚未通过机器人网连接 NUC 时，只运行 `--help`、转换器或有 checkpoint
+的 `--dry-run`。不要启动真实推理、人工接管、录制动作或 RT 机械臂测试。
 
 ---
 
-## 1. `pixi run teleop` — Interactive Robot Teleoperation
+## 1. `apps/teleop.py` — Interactive Robot Teleoperation
 
 One-command startup for real-time Master-Slave teleoperation (Piper Leader Dual-Arm, Keyboard, SpaceMouse):
 
 ```bash
 # Piper Bimanual Master-Slave Teleoperation (200 Hz default):
-pixi run teleop
+pixi run -e runtime python apps/teleop.py
 
 # Teleoperate single arm via keyboard or custom side:
-pixi run teleop --side left --left-can can0
+pixi run -e runtime python apps/teleop.py --side left --left-can can0
 ```
 
 ### Teleoperation Mode Flow
@@ -35,17 +48,31 @@ pixi run teleop --side left --left-can can0
 
 ---
 
-## 2. `pixi run record` — Multi-Modal Episode Dataset Recorder
+## 2. `apps/record.py` — Multi-Modal Episode Dataset Recorder
 
 Interactive demonstration data collection workflow with **Quintic Spline Staging**, **Zero-Drop Preemption**, and **Parallel MCAP Sealing**:
 
 ```bash
 # Record 10 bimanual demonstrations (default 50 Hz):
-pixi run record --profile piper_bimanual.yaml --task bimanual_pickup --episodes 10
+pixi run -e runtime python apps/record.py \
+  --profile piper_bimanual.yaml --task bimanual_pickup --episodes 10
 
-# Custom staging duration and task:
-pixi run record --task cup_stacking --homing-duration 2.5 --rate-hz 50.0
+# Another task (rate/homing defaults come from the profile):
+pixi run -e runtime python apps/record.py \
+  --task cup_stacking --episodes 10
 ```
+
+`--task` 同时决定 recorder 的任务标签和数据集子目录。例如：
+
+```bash
+pixi run -e runtime python apps/record.py \
+  --profile piper_bimanual.yaml --task pick_bread --episodes 20
+```
+
+该命令写入 `data/episodes/pick_bread/episode_*`，每条 episode manifest 中的
+task 也为 `pick_bread`。采集另一个任务时换一个 `--task`，例如
+`place_bread`，两类数据不会混到同一目录。任务名允许中文和空格，但不能包含
+`/`、`\\`，也不能是 `.` 或 `..`。
 
 ### Episode Lifecycle & Teleoperation Recording Flow
 
@@ -90,35 +117,75 @@ pixi run record --task cup_stacking --homing-duration 2.5 --rate-hz 50.0
 
 ---
 
-## 3. `pixi run replay` — 1:1 Native Trajectory Replayer
+## 3. `apps/replay.py` — 1:1 Native Trajectory Replayer
 
 Performs strict 1:1 native timestamp-paced trajectory replay directly from recorded MCAP datasets on real or simulated robot embodiments:
 
 ```bash
 # Replay latest recorded episode at 1:1 native rate:
-pixi run replay --profile piper_bimanual.yaml
+pixi run -e runtime python apps/replay.py --profile piper_bimanual.yaml
 
 # Replay specific MCAP episode:
-pixi run replay --profile piper_bimanual.yaml \
+pixi run -e runtime python apps/replay.py --profile piper_bimanual.yaml \
     --mcap-file data/episodes/piper_bimanual_teleop/episode_000001.mcap
 ```
 
 ---
 
-## 4. `pixi run eval` — Read-only Deployment Evaluation
+## 4. `apps/eval.py` — Read-only Deployment Evaluation
 
 Checks joint-state availability and age, hardware diagnostics, camera readiness,
 and the current provider allocation map without acquiring control or publishing a
 command:
 
 ```bash
-pixi run eval --profile piper_bimanual.yaml --duration 10 --check-cameras
+pixi run -e runtime python apps/eval.py \
+  --profile piper_bimanual.yaml --duration 10 --check-cameras
 ```
 
 ## 5. Embodiment Profiles (`apps/profiles/`)
 
-All applications are fully decoupled and driven by YAML Embodiment Profiles stored in [apps/profiles/](file:///home/gn/Documents/Git_Space/physical_ai_runtime/apps/profiles/):
+All applications are fully decoupled and driven by YAML Embodiment Profiles stored in [`apps/profiles/`](profiles/):
 
 * `piper_bimanual.yaml` — Dual-arm Piper bimanual setup with master-slave leader teleoperation.
 * `fr3_pika_single_arm.yaml` — Single-arm Franka Research 3 with Pika Gripper.
 * `marvin_bimanual.yaml` — Marvin humanoid dual-arm bimanual setup.
+
+---
+
+## 6. MCAP 转 LeRobot v3
+
+`scripts/convert_episode_to_lerobot.py` 将 Piper recorder 生成的 episode MCAP
+同步为 30 Hz（可配置）的 LeRobot v3 数据集。转换要求三路 RGB 图像、
+`/joint_states` 和四路 `/execution/.../joint_reference`；默认会拒绝有 recorder
+drop 或 writer error 的 episode，并用转换 manifest 防止重复导入。
+
+```bash
+# 单条 episode
+pixi run -e lerobot lerobot-convert -- \
+  --episode data/episodes/pick_bread/episode_000001 \
+  --task pick_bread
+
+# 批量转换
+pixi run -e lerobot lerobot-convert -- \
+  --all --task pick_bread
+```
+
+给出 `--task <task>` 时，默认从 `data/episodes/<task>` 读取，写到
+`~/lerobot_train/<task>`，并使用 `<task>` 作为 `repo_id`。任一默认值都可用同名
+参数显式覆盖；不要把不同 feature schema 或任务写进同一个输出目录。
+
+## 7. ACT / SmolVLA 部署入口
+
+### ACT 真实部署
+
+```bash
+pixi run -e lerobot act-piper -- \
+  --checkpoint /home/alpha/lerobot_train/outputs/piper_act2 \
+  --task pick_bread \
+  --real
+```
+
+默认以 30 Hz 持续推理，不录制 episode；`Ctrl-C` 会释放 Policy session。终端按
+`T` 可切换至 Leader teleop；不需要该功能时添加
+`--no-teleop-takeover --no-teleop-hotkey`。
