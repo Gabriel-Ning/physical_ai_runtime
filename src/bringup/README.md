@@ -26,16 +26,40 @@ Robots:
 | Franka | `franka_manipulation_rt_launch` | `franka_manipulation_workstation_launch` |
 | Piper | `piper_manipulation_rt_launch` | `piper_manipulation_workstation_launch` |
 
-## Piper quick start
+## Piper RT host
 
-RT Host:
+双臂 Piper + 两侧原生 gripper。RT **不含**腕部相机 / EM / leader。  
+细节：`piper_manipulation/rt_launch/README.md`。CAN 别名：[`docs/UDEV_HOST_SETUP.md`](../../docs/UDEV_HOST_SETUP.md)。
+
+真机前先确认 CAN：
+
+```bash
+ip link show piper0
+ip link show piper1
+# 若 DOWN：
+sudo bash scripts/reset_rt_piper_can.sh piper0 piper1
+```
+
+RT Host：
 
 ```bash
 ros2 launch piper_manipulation_rt_launch rt_stack.launch.py \
-  left_can_interface:=piper0 right_can_interface:=piper1 use_fake_hardware:=false
+  use_fake_hardware:=false \
+  left_can_interface:=piper0 \
+  right_can_interface:=piper1 \
+  use_rviz:=false
 ```
 
-Workstation:
+启动后检查：
+
+```bash
+ros2 control list_controllers
+ros2 topic hz /joint_states --window 20
+```
+
+期望：`joint_state_broadcaster` active；左右 `*_arm_{jspc,tskpc,jtc}` 与 `*_gripper_fwd` 均为 inactive。
+
+Workstation（RT 起来之后；profile `apps/profiles/piper_bimanual.yaml`）：
 
 ```bash
 ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py

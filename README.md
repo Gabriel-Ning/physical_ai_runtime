@@ -15,6 +15,7 @@ Host setup notes live under [`docs/`](docs/):
 - [Cross-host clock sync (workstation ↔ RT PC)](docs/CLOCK_SYNC.md)
 - [CPU / isolcpus / RT host setup](docs/CPU_HOST_SETUP.md)
 - [udev CAN aliases](docs/UDEV_HOST_SETUP.md)
+- [Embodiment bringup (Marvin / Franka / Piper)](src/bringup/README.md)
 
 ## Features
 

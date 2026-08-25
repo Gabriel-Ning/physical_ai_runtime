@@ -10,8 +10,10 @@ host_roles:
       package: "piper_manipulation_rt_launch"
       launch_file: "rt_stack.launch.py"
       arguments:
-        left_end_effector: "piper_gripper"
-        right_end_effector: "piper_gripper"
+        use_fake_hardware: false
+        use_rviz: false
+        left_can_interface: piper0
+        right_can_interface: piper1
     owns: ["ros2_control", "local_safety"]
   workstation_host:
     bringup:

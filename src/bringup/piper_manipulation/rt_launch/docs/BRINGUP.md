@@ -68,9 +68,6 @@ Endpoints (left shown; right mirrors with `right_arm` / `right_gripper`):
 - `/execution/left_arm/follow_joint_trajectory`
 - `/execution/left_gripper/joint_reference`
 
-The `piper_bimanual` RMI profile still lists the old controller-named command
-topics; update it after this RT topic lock.
-
 ## End-effector boundary
 
 An end effector is an independently selectable attachment on
@@ -106,9 +103,8 @@ externally before `use_fake_hardware:=false`.
 
 The RT stack does not launch the Execution Manager or planner. Workstation composition uses the
 `piper_bimanual` RMI profile
-(`apps/profiles/piper_bimanual.yaml`).
-That profile still lists the old controller-named command topics; update it
-after this RT topic lock. Keep `use_rviz:=false` on the RT host.
+(`apps/profiles/piper_bimanual.yaml`), whose command topics already use
+`/execution/<group>/...`. Keep `use_rviz:=false` on the RT host.
 
 ## CPU affinity
 
