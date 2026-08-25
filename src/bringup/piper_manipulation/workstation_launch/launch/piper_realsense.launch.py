@@ -11,6 +11,7 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
     IncludeLaunchDescription,
+    OpaqueFunction,
     SetEnvironmentVariable,
     TimerAction,
 )
@@ -19,7 +20,9 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 
-def _camera_include(camera_name_arg: str, serial_no_arg: str) -> IncludeLaunchDescription:
+def _camera_include(
+    camera_name_arg: str, serial_no_arg: str
+) -> IncludeLaunchDescription:
     return IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
@@ -33,6 +36,17 @@ def _camera_include(camera_name_arg: str, serial_no_arg: str) -> IncludeLaunchDe
             "serial_no": LaunchConfiguration(serial_no_arg),
         }.items(),
     )
+
+
+def _delayed_right_camera(context, *args, **kwargs):
+    del args, kwargs
+    delay = float(LaunchConfiguration("right_camera_delay").perform(context))
+    return [
+        TimerAction(
+            period=delay,
+            actions=[_camera_include("right_camera_name", "right_serial_no")],
+        )
+    ]
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -54,17 +68,10 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "right_camera_name", default_value="right_hand_realsense"
             ),
-            DeclareLaunchArgument(
-                "left_serial_no", default_value="_332522075913"
-            ),
-            DeclareLaunchArgument(
-                "right_serial_no", default_value="_332322073584"
-            ),
+            DeclareLaunchArgument("left_serial_no", default_value="_332522075913"),
+            DeclareLaunchArgument("right_serial_no", default_value="_332322073584"),
             DeclareLaunchArgument("right_camera_delay", default_value="10.0"),
             _camera_include("left_camera_name", "left_serial_no"),
-            TimerAction(
-                period=LaunchConfiguration("right_camera_delay"),
-                actions=[_camera_include("right_camera_name", "right_serial_no")],
-            ),
+            OpaqueFunction(function=_delayed_right_camera),
         ]
     )

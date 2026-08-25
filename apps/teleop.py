@@ -19,45 +19,67 @@ import time
 from contextlib import ExitStack
 from typing import Any
 
+import rmi
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectory
-
-import rmi
 
 
 def _node_context_ok(node: Any) -> bool:
     try:
         context = getattr(node, "context", None)
         return bool(context is not None and context.ok())
-    except Exception:
+    except Exception:  # noqa: BLE001 - RCL context may already be torn down.
         return False
 
 
-def set_teleop_preempt(node: Any, teleoperators: dict[str, Any], preempt_active: bool) -> None:
-    """Toggle hardware preemption (0-G Float vs Fallback mode) on teleoperation devices."""
+def set_teleop_preempt(
+    node: Any, teleoperators: dict[str, Any], preempt_active: bool
+) -> bool:
+    """Set every leader mode, requiring all transitions to succeed."""
     if not teleoperators or not _node_context_ok(node):
-        return
+        return not teleoperators
+    failures: list[str] = []
     for name, cfg in teleoperators.items():
         srv_name = cfg.get("preempt_service")
         if not srv_name:
+            failures.append(f"{name}: missing preempt_service")
             continue
+        client = None
         try:
             client = node.create_client(SetBool, srv_name)
-            if not client.wait_for_service(timeout_sec=0.3):
+            if not client.wait_for_service(timeout_sec=3.0):
+                failures.append(f"{name}: {srv_name} unavailable")
                 continue
             future = client.call_async(SetBool.Request(data=preempt_active))
-            t_end = time.monotonic() + 0.5
+            t_end = time.monotonic() + 5.0
             while not future.done() and time.monotonic() < t_end:
                 time.sleep(0.01)
-            if future.done() and future.result().success:
-                mode_label = (
-                    "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+            if not future.done():
+                failures.append(f"{name}: {srv_name} timed out")
+                continue
+            response = future.result()
+            if response is None or not response.success:
+                failures.append(
+                    f"{name}: {getattr(response, 'message', 'no response')}"
                 )
-                print(f"  [✓] {name} Preempt {mode_label}: {future.result().message}")
-        except Exception as exc:
-            # Best-effort during Ctrl+C / RCL teardown.
-            print(f"  [!] {name} preempt skipped ({exc.__class__.__name__})")
+                continue
+            mode_label = (
+                "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
+            )
+            print(f"  [✓] {name} Preempt {mode_label}: {response.message}")
+        except Exception as exc:  # noqa: BLE001 - service failures are aggregated.
+            failures.append(f"{name}: {exc.__class__.__name__}")
+        finally:
+            if client is not None:
+                try:
+                    node.destroy_client(client)
+                except Exception:  # noqa: BLE001, S110 - best-effort during shutdown.
+                    pass
+    if failures:
+        print("  [!] Leader mode transition failed: " + "; ".join(failures))
+        return False
+    return True
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,7 +122,11 @@ def main() -> None:
     for name, cfg in teleoperators.items():
         topic = cfg.get("arm_source", "")
         pubs = ctx.node.get_publishers_info_by_topic(topic) if topic else []
-        status = "DETECTED (Streaming)" if pubs else "NO PUBLISHER (Start the workstation bringup)"
+        status = (
+            "DETECTED (Streaming)"
+            if pubs
+            else "NO PUBLISHER (Start the workstation bringup)"
+        )
         icon = "[✓]" if pubs else "[!]"
         print(f"  {icon} {name:<14}: {topic} -> {status}")
 
@@ -133,7 +159,9 @@ def main() -> None:
             def callback(msg: JointTrajectory) -> None:
                 session = sessions.get(name)
                 if session is not None and session.active_for(part):
-                    session.act(rmi.Action(part=part, command="joint_reference", value=msg))
+                    session.act(
+                        rmi.Action(part=part, command="joint_reference", value=msg)
+                    )
 
             return callback
 
@@ -182,11 +210,18 @@ def main() -> None:
                     is_active = False
                     raise
                 active_stack = candidate
-                set_teleop_preempt(ctx.node, teleoperators, True)
+                if not set_teleop_preempt(ctx.node, teleoperators, True):
+                    _release_teleop()
+                    print(
+                        "  >> Teleop was not engaged; every leader must confirm 0-G mode."
+                    )
+                    continue
                 print("  >> Master-Slave 1:1 servoing is ACTIVE! Move leader arms.")
             else:
                 _release_teleop()
-                print("  >> Teleop released. Master arms returned to Shadow/Standby mode.")
+                print(
+                    "  >> Teleop released. Master arms returned to Shadow/Standby mode."
+                )
     finally:
         _release_teleop()
         ctx.close()

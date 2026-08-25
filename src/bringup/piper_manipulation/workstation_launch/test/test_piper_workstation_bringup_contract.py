@@ -21,9 +21,15 @@ def test_orbbec_launch_uses_workstation_camera_config():
 
 def test_realsense_launch_uses_workstation_camera_config():
     launch = (LAUNCH_DIR / "piper_realsense.launch.py").read_text(encoding="utf-8")
+    config = yaml.safe_load(
+        (ROOT / "config" / "camera" / "d435i_dual.yaml").read_text(encoding="utf-8")
+    )
     assert "piper_manipulation_workstation_launch" in launch
     assert "d435i_dual.yaml" in launch
     assert "_332522075913" in launch
+    assert "OpaqueFunction(function=_delayed_right_camera)" in launch
+    assert config["wait_for_device_timeout"] == 30.0
+    assert config["reconnect_timeout"] == 2.0
 
 
 def test_recording_gripper_streams_use_float64_multiarray():

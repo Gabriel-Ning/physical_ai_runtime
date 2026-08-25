@@ -6,6 +6,11 @@
 enable_color: true
 rgb_camera.color_profile: 640x480x30
 
+# Allow time for USB enumeration and recover from short disconnects without
+# requiring the workstation launch to be restarted.
+wait_for_device_timeout: 30.0
+reconnect_timeout: 2.0
+
 # The recording contract and RViz validation consume color only. Disabling
 # depth keeps both wrist cameras within the available USB streaming budget.
 enable_depth: false
