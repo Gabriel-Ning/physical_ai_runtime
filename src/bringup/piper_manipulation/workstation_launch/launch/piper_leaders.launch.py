@@ -32,6 +32,7 @@ def generate_launch_description() -> LaunchDescription:
                 "publish_rate_hz": LaunchConfiguration("publish_rate_hz"),
                 "default_mode": LaunchConfiguration("default_mode"),
                 "fallback_mode": LaunchConfiguration("fallback_mode"),
+                "autostart": LaunchConfiguration("autostart"),
             }.items(),
             condition=IfCondition(LaunchConfiguration(f"enable_{side}")),
         )
@@ -46,6 +47,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("publish_rate_hz", default_value=""),
             DeclareLaunchArgument("default_mode", default_value=""),
             DeclareLaunchArgument("fallback_mode", default_value=""),
+            DeclareLaunchArgument("autostart", default_value=""),
             include("left"),
             include("right"),
         ]

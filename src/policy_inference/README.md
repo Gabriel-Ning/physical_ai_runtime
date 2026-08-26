@@ -3,9 +3,10 @@
 These are ordinary Python scripts, not ROS packages. Source the workspace and
 run them directly; no additional `colcon build` is needed.
 
-Production LeRobot inference is developed separately under
-[`lerobot/`](lerobot/README.md); the files below remain framework-neutral
-examples.
+Production inference is split into the backend-neutral Profile contract under
+[`common/`](common/README.md) and explicit RMI/LeRobot bridges plus the native
+policy runtime under [`lerobot/`](lerobot/README.md). The files below remain
+framework-neutral examples.
 
 ## 1. VLA / ACT / diffusion / flow-matching example
 

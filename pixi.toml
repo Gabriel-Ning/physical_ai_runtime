@@ -149,13 +149,12 @@ ros-jazzy-launch-pytest = "*"
 # franka_gripper (and similar) find_package this under BUILD_TESTING=ON.
 ros-jazzy-ament-cmake-clang-format = "*"
 ros-jazzy-kinematics-interface-kdl = "*"
-ros-jazzy-ffmpeg-image-transport = "*"
 
 # Workspace-owned runtime paths. Pixi defines PIXI_PROJECT_ROOT during
 # `pixi run`, `pixi shell`, and `pixi shell-hook` activation.
 [activation.env]
 WORKSPACE_ROOT = "$PIXI_PROJECT_ROOT"
-PYTHONPATH = "$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTHONPATH"
+PYTHONPATH = "$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTHONPATH"
 
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
@@ -268,6 +267,8 @@ setuptools = ">=71,<82"
 protobuf = ">=6.31.1,<=6.32.0"
 cmake = ">=3.29,<4"
 ninja = "*"
+ros-jazzy-rosbag2-py = "*"
+ros-jazzy-rosbag2-storage-mcap = "*"
 # hf-egl-probe (pulled by the `all` extra) hard-codes `make -j` in setup.py.
 make = "*"
 cuda-toolkit = "12.8.*"

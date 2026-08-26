@@ -83,6 +83,8 @@ examples/
 
 /src/toolbox/**
 !/src/toolbox/.gitkeep
+!/src/toolbox/dataset_tools/
+!/src/toolbox/dataset_tools/**
 !/src/toolbox/mjpeg_cam/
 !/src/toolbox/mjpeg_cam/**
 

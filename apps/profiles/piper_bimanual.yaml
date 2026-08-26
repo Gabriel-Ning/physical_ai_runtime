@@ -201,15 +201,15 @@ teleoperators:
 
 features:
   observation:
-    "observation.images.static_orbbec":
+    "observation.images.top":
       type: "image"
-      shape: [3, 480, 640]
+      shape: [3, 720, 1280]
       source: "sensors.cameras.static_orbbec"
-    "observation.images.left_wrist_cam":
+    "observation.images.left_wrist":
       type: "image"
       shape: [3, 480, 640]
       source: "sensors.cameras.left_wrist_cam"
-    "observation.images.right_wrist_cam":
+    "observation.images.right_wrist":
       type: "image"
       shape: [3, 480, 640]
       source: "sensors.cameras.right_wrist_cam"

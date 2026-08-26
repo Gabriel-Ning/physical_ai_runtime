@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from types import MappingProxyType, TracebackType
+from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
 from execution_manager_interfaces.msg import AuthorityEvent, ResourceAuthority
@@ -55,15 +55,7 @@ class Session:
         return self.source
 
     def observe(self) -> Observation:
-        observation = self._robot.get_observation()
-        samples = {sensor.name: sensor.latest for sensor in self.source.sensors}
-        return Observation(
-            data=observation.data,
-            source_time_s=observation.source_time_s,
-            receive_time_s=observation.receive_time_s,
-            allocations=observation.allocations,
-            sensors=MappingProxyType(samples),
-        )
+        return self.source.observe(self._robot)
 
     def wait(self) -> None:
         if self.period is None:

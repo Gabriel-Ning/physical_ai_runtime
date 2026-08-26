@@ -61,6 +61,12 @@ def test_leader_defaults_live_in_teleop_config_not_launch():
     assert "/action_sources/piper_leader_left/arm/joint_reference" not in bringup
 
 
+def test_leader_autostart_override_is_forwarded_to_both_includes():
+    bringup = (LAUNCH_DIR / "piper_leaders.launch.py").read_text(encoding="utf-8")
+    assert 'DeclareLaunchArgument("autostart", default_value="")' in bringup
+    assert '"autostart": LaunchConfiguration("autostart")' in bringup
+
+
 def test_workstation_stack_launches_em_recorder_and_optional_peripherals():
     launch = (LAUNCH_DIR / "piper_workstation.launch.py").read_text(encoding="utf-8")
     assert "piper_manipulation_workstation_launch" in launch

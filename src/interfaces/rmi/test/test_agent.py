@@ -1,8 +1,8 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
-from execution_manager_interfaces.msg import AuthorityEvent, ResourceAuthority
 import pytest
+from execution_manager_interfaces.msg import AuthorityEvent, ResourceAuthority
 from rmi import Action, Agent, Robot
 from rmi.selection import AuthoritySnapshot, EndpointBinding, LeaseGrant
 from sensor_msgs.msg import JointState
@@ -243,6 +243,26 @@ def test_observation_lease_matches_custom_source_instance():
         assert client.sent == [("lease-1", "arm", "joint_reference", [0.5])]
         assert session.diagnostics.stale_observation_drops == 0
         assert session.diagnostics.sent == 1
+
+
+def test_agent_observe_combines_robot_state_and_fixed_sensors_without_claim():
+    robot, authority, _, _, _, _ = _fixture()
+    sample = object()
+    sensor = SimpleNamespace(name="wrist", latest=sample)
+    agent = Agent(
+        "Policy",
+        FakeCommandClient(),
+        source_role="POLICY",
+        resources={"arm": "joint_reference"},
+        robot=robot,
+        sensors=(sensor,),
+    )
+
+    observation = agent.observe()
+
+    assert observation.joint_positions == [0.0]
+    assert observation.sensors == {"wrist": sample}
+    assert authority.counter == 0
 
 
 def test_confirmation_timeout_releases_claim_even_without_status():

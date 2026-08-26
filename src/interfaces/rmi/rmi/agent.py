@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import threading
 from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 from .config import EmbodimentConfig
-from .contracts import Action, PoseHorizonResult, ResolveResult
+from .contracts import Action, Observation, PoseHorizonResult, ResolveResult
 from .errors import TrajectoryCanceledError
 from .provider import ActionProviderClient
 from .robot import Robot
@@ -112,6 +113,21 @@ class Agent:
             preempt=preempt,
             acquire_timeout=acquire_timeout,
             frequency=self.frequency if frequency is None else frequency,
+        )
+
+    def observe(self, robot: Robot | None = None) -> Observation:
+        """Read Robot state and fixed sensors without claiming control."""
+        target = robot if robot is not None else self._robot
+        if target is None:
+            raise ValueError("agent.observe() requires a robot")
+        observation = target.get_observation()
+        samples = {sensor.name: sensor.latest for sensor in self.sensors}
+        return Observation(
+            data=observation.data,
+            source_time_s=observation.source_time_s,
+            receive_time_s=observation.receive_time_s,
+            allocations=observation.allocations,
+            sensors=MappingProxyType(samples),
         )
 
     def send(
