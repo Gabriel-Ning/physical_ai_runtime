@@ -35,10 +35,17 @@ Fake / 本机（在 **workstation** 上跑，不要开真相机）：
 ```bash
 ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
   use_fake_hardware:=true \
+  load_pika_hardware:=true \
   with_cameras:=false \
   use_rviz:=true \
   cpu_affinity:=none
 ```
+
+该组合加载 fake FR3 arm 和 fake Pika gripper，并关闭相机。
+
+当前验证 Gate 是 gamepad teleop + EM 抢占 + 无相机录制。RT 启动后继续按
+[`examples/README.md`](../../../../examples/README.md#franka-fake-hardware-gamepad-setup)
+启动 workstation stack 和 Example 16。
 
 只起控制器或只起相机：
 

@@ -4,7 +4,8 @@
 
 Aggregates RT Host bringup:
   1. Sub-launch 1: controller_bringup.launch.py (ros2_control, Marvin M6 controller, Pika grippers, safety guards)
-  2. Sub-launch 2: pika_camera_bringup.launch.py (Dual Pika wrist RealSense D405 + Sunplus fisheye cameras)
+  2. On real hardware: prime_arm_position.launch.py (activate left/right_arm_jtc once)
+  3. Sub-launch 2: pika_camera_bringup.launch.py (Dual Pika wrist RealSense D405 + Sunplus fisheye cameras)
 
 On the physical Marvin RT Host, both Pika grippers and wrist perception cameras default to enabled.
 """
@@ -14,20 +15,42 @@ from __future__ import annotations
 import os
 
 from ament_index_python.packages import get_package_share_directory
-from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch import LaunchContext, LaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
 
+def _prime_actions(context: LaunchContext):
+    """Real hardware only: after controller_bringup, activate JTCs once."""
+
+    def _as_bool(name: str) -> bool:
+        return LaunchConfiguration(name).perform(context).strip().lower() in (
+            "true",
+            "1",
+        )
+
+    if _as_bool("use_fake_hardware") or not _as_bool("prime_arm_position"):
+        return []
+
+    bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
+    return [
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                os.path.join(bringup_share, "launch", "prime_arm_position.launch.py")
+            )
+        )
+    ]
+
+
 def generate_launch_description() -> LaunchDescription:
-    bringup_share = get_package_share_directory(
-        "marvin_manipulation_rt_launch"
-    )
-    default_d405_cfg = os.path.join(
-        bringup_share, "config", "camera", "pika_d405.yaml"
-    )
+    bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
+    default_d405_cfg = os.path.join(bringup_share, "config", "camera", "pika_d405.yaml")
     default_fisheye_cfg = os.path.join(
         bringup_share, "config", "camera", "pika_fisheye.yaml"
     )
@@ -42,11 +65,7 @@ def generate_launch_description() -> LaunchDescription:
             "use_rviz": LaunchConfiguration("use_rviz"),
             "cpu_affinity": LaunchConfiguration("cpu_affinity"),
             "robot_ip": LaunchConfiguration("robot_ip"),
-            "with_gripper": LaunchConfiguration("with_gripper"),
-            "with_left_gripper": LaunchConfiguration("with_left_gripper"),
-            "with_right_gripper": LaunchConfiguration(
-                "with_right_gripper"
-            ),
+            "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
             "left_gripper_serial_port": LaunchConfiguration("left_gripper_serial_port"),
             "right_gripper_serial_port": LaunchConfiguration(
                 "right_gripper_serial_port"
@@ -66,10 +85,6 @@ def generate_launch_description() -> LaunchDescription:
         launch_arguments={
             "d405_config": LaunchConfiguration("d405_config"),
             "fisheye_config": LaunchConfiguration("fisheye_config"),
-            "with_left": LaunchConfiguration("with_left"),
-            "with_right": LaunchConfiguration("with_right"),
-            "with_d405": LaunchConfiguration("with_d405"),
-            "with_fisheye": LaunchConfiguration("with_fisheye"),
             "right_d405_delay": LaunchConfiguration("right_d405_delay"),
         }.items(),
     )
@@ -93,23 +108,12 @@ def generate_launch_description() -> LaunchDescription:
                 description="Marvin CCS controller IP.",
             ),
             DeclareLaunchArgument(
-                "with_gripper",
+                "load_pika_hardware",
                 default_value="true",
                 description=(
-                    "Whether Pika grippers are installed. When true, gripper "
-                    "ros2_control follows use_fake_hardware (fake or real). "
-                    "Set false for arm-only stacks."
+                    "Load both Pika grippers (fake or real follows "
+                    "use_fake_hardware). Set false to omit both sides."
                 ),
-            ),
-            DeclareLaunchArgument(
-                "with_left_gripper",
-                default_value="true",
-                description="Enable left Pika gripper (requires with_gripper:=true).",
-            ),
-            DeclareLaunchArgument(
-                "with_right_gripper",
-                default_value="true",
-                description="Enable right Pika gripper (requires with_gripper:=true).",
             ),
             DeclareLaunchArgument(
                 "left_gripper_serial_port",
@@ -122,7 +126,15 @@ def generate_launch_description() -> LaunchDescription:
                 description="Right Pika gripper serial (udev /dev/pika_right_gripper).",
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
-
+            DeclareLaunchArgument(
+                "prime_arm_position",
+                default_value="true",
+                description=(
+                    "Real hardware only (ignored when use_fake_hardware:=true): "
+                    "after controller_bringup, activate left/right_arm_jtc once "
+                    "so CCS position mode is entered before the first EM claim."
+                ),
+            ),
             # Pika Wrist Perception Cameras parameters
             DeclareLaunchArgument(
                 "with_cameras",
@@ -140,34 +152,14 @@ def generate_launch_description() -> LaunchDescription:
                 description="Pika wrist fisheye (mjpeg_cam) ROS params YAML.",
             ),
             DeclareLaunchArgument(
-                "with_left",
-                default_value="true",
-                description="Start left Pika D405 + fisheye.",
-            ),
-            DeclareLaunchArgument(
-                "with_right",
-                default_value="true",
-                description="Start right Pika D405 + fisheye.",
-            ),
-            DeclareLaunchArgument(
-                "with_d405",
-                default_value="true",
-                description="Start RealSense D405 nodes when an arm is enabled.",
-            ),
-            DeclareLaunchArgument(
-                "with_fisheye",
-                default_value="true",
-                description="Start Sunplus fisheye nodes when an arm is enabled.",
-            ),
-            DeclareLaunchArgument(
                 "right_d405_delay",
                 default_value="2.0",
                 description=(
                     "Seconds to wait after left D405 before starting right D405."
                 ),
             ),
-
             controller,
+            OpaqueFunction(function=_prime_actions),
             cameras,
         ]
     )

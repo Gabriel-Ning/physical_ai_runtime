@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 
 from action_msgs.msg import GoalStatus
@@ -14,7 +16,11 @@ from execution_manager_interfaces.msg import (
     LeasedTwistReference,
 )
 from geometry_msgs.msg import TwistStamped
-from moveit_msgs.msg import CartesianPoint, CartesianTrajectory, CartesianTrajectoryPoint
+from moveit_msgs.msg import (
+    CartesianPoint,
+    CartesianTrajectory,
+    CartesianTrajectoryPoint,
+)
 from rclpy.action import ActionClient
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -294,6 +300,13 @@ def _reject_invalid_result(value: Any) -> None:
         raise ValueError(f"cannot send invalid planning result: {getattr(value, 'reason', '')}")
 
 
+def _validate_finite(value: float, name: str = "value") -> float:
+    v = float(value)
+    if math.isnan(v) or math.isinf(v):
+        raise ValueError(f"{name} contains NaN or infinity: {value}")
+    return v
+
+
 def _set_duration(duration: Any, seconds: float) -> None:
     nanoseconds = round(float(seconds) * 1e9)
     duration.sec = nanoseconds // 1_000_000_000
@@ -311,18 +324,18 @@ def _joint_trajectory_from_spec(
         message = JointTrajectory()
         message.joint_names = list(default_joint_names)
         point = JointTrajectoryPoint()
-        point.positions = [float(value) for value in trajectory]
+        point.positions = [_validate_finite(value, "joint position") for value in trajectory]
         message.points.append(point)
     else:
         message = JointTrajectory()
         message.joint_names = list(getattr(trajectory, "joint_names", None) or default_joint_names)
         for value in getattr(trajectory, "points", []):
             point = JointTrajectoryPoint()
-            point.positions = [float(x) for x in value.positions]
+            point.positions = [_validate_finite(x, "joint position") for x in value.positions]
             if getattr(value, "velocities", None) is not None:
-                point.velocities = [float(x) for x in value.velocities]
+                point.velocities = [_validate_finite(x, "joint velocity") for x in value.velocities]
             if getattr(value, "accelerations", None) is not None:
-                point.accelerations = [float(x) for x in value.accelerations]
+                point.accelerations = [_validate_finite(x, "joint acceleration") for x in value.accelerations]
             _set_duration(point.time_from_start, getattr(value, "time_from_start_s", 0.0))
             message.points.append(point)
     if not message.joint_names or not message.points:
@@ -341,6 +354,13 @@ def _joint_trajectory_from_spec(
 def _cartesian_trajectory_from_spec(
     value: Any, base_frame: str, tcp_frame: str
 ) -> CartesianTrajectory:
+    if isinstance(value, CartesianTrajectory):
+        message = value
+        if not message.header.frame_id:
+            message.header.frame_id = base_frame
+        if not message.tracked_frame:
+            message.tracked_frame = tcp_frame
+        return message
     message = CartesianTrajectory()
     message.header.frame_id = base_frame
     message.tracked_frame = tcp_frame
@@ -349,10 +369,14 @@ def _cartesian_trajectory_from_spec(
         value, "orientation_wxyz"
     ):
         items = [value]
+    elif items is None and isinstance(value, Mapping) and "position" in value and "orientation" in value:
+        items = [SimpleNamespace(position_xyz=value["position"], orientation_wxyz=value["orientation"])]
     for item in items or []:
         point = CartesianTrajectoryPoint()
-        point.point.pose.position.x, point.point.pose.position.y, point.point.pose.position.z = item.position_xyz
-        w, x, y, z = item.orientation_wxyz
+        pos = [_validate_finite(p, "cartesian position") for p in item.position_xyz]
+        point.point.pose.position.x, point.point.pose.position.y, point.point.pose.position.z = pos
+        ori = [_validate_finite(q, "cartesian orientation") for q in item.orientation_wxyz]
+        w, x, y, z = ori
         point.point.pose.orientation.w = w
         point.point.pose.orientation.x = x
         point.point.pose.orientation.y = y
@@ -365,10 +389,23 @@ def _cartesian_trajectory_from_spec(
 
 
 def _twist_stamped_from_spec(value: Any, base_frame: str) -> TwistStamped:
+    if isinstance(value, TwistStamped):
+        message = value
+        if not message.header.frame_id:
+            message.header.frame_id = base_frame
+        return message
     message = TwistStamped()
     message.header.frame_id = base_frame
-    linear = getattr(value, "linear", (0.0, 0.0, 0.0))
-    angular = getattr(value, "angular", (0.0, 0.0, 0.0))
-    message.twist.linear.x, message.twist.linear.y, message.twist.linear.z = linear
-    message.twist.angular.x, message.twist.angular.y, message.twist.angular.z = angular
+    if isinstance(value, (list, tuple)) and len(value) == 6:
+        linear = value[:3]
+        angular = value[3:]
+    else:
+        linear = getattr(value, "linear", (0.0, 0.0, 0.0))
+        angular = getattr(value, "angular", (0.0, 0.0, 0.0))
+    message.twist.linear.x, message.twist.linear.y, message.twist.linear.z = [
+        _validate_finite(x, "twist linear") for x in linear
+    ]
+    message.twist.angular.x, message.twist.angular.y, message.twist.angular.z = [
+        _validate_finite(x, "twist angular") for x in angular
+    ]
     return message

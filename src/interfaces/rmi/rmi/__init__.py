@@ -5,8 +5,7 @@ Layout::
     contracts.py         Action / Observation / planner DTOs
     config.py            Embodiment profile loader
     context.py           Context factories for one application process
-    agent.py             Agent and PlanExecution handle
-    session.py           Ownership scope (observe / act / execute)
+    node.py              Action producer binding and authority status
     robot.py             Joint-state facade
     provider.py          Command client for /action_sources
     selection.py         authority protocol and Execution Manager client
@@ -16,16 +15,12 @@ Layout::
     replay.py            MCAP action replay pacing
 """
 
-from .agent import (
-    Agent,
-    PlanExecution,
-    PlanExecutionState,
-)
 from .config import (
-    AgentConfig,
     CameraSensorConfig,
     ControllerConfig,
     EmbodimentConfig,
+    NodeConfig,
+    NodeInputConfig,
     PartConfig,
 )
 from .context import Context
@@ -42,33 +37,39 @@ from .contracts import (
     ResolveResult,
 )
 from .errors import ControllerClientError, TrajectoryCanceledError
-from .provider import ActionProviderClient
+from .node import (
+    Execution,
+    ExecutionState,
+    Node,
+    NodeActivation,
+    NodeResource,
+    NodeStatus,
+)
 from .recording import EpisodeRecorder, EpisodeScope, MemoryReplayBuffer
 from .replay import (
     ActionTimestampRebaser,
+    EpisodeReplayInfo,
+    EpisodeReplayPolicy,
     McapActionSource,
     RecordedAction,
+    ReplayClockJumpError,
+    ReplayPacer,
     ReplayPlayer,
 )
-from .robot import Robot
+from .robot import Robot, RobotResource
 from .selection import (
-    EndpointBinding,
-    ExecutionManagerUnavailableError,
-    LeaseGrant,
     AuthorityClient,
     AuthoritySnapshot,
     ExecutionManagerClient,
-    SourceRole,
+    ExecutionManagerUnavailableError,
 )
 from .sensing import Camera, SampleBuffer, Sensor, TimestampedSample
-from .session import Session
 
 __all__ = [
     "Action",
-    "ActionProviderClient",
     "ActionTimestampRebaser",
-    "Agent",
-    "AgentConfig",
+    "AuthorityClient",
+    "AuthoritySnapshot",
     "Camera",
     "CameraSensorConfig",
     "Context",
@@ -76,34 +77,39 @@ __all__ = [
     "ControllerClientError",
     "ControllerConfig",
     "EmbodimentConfig",
-    "EndpointBinding",
     "EpisodeRecorder",
+    "EpisodeReplayInfo",
+    "EpisodeReplayPolicy",
     "EpisodeScope",
+    "Execution",
+    "ExecutionManagerClient",
     "ExecutionManagerUnavailableError",
+    "ExecutionState",
     "JointHorizonPoint",
     "JointHorizonResult",
-    "LeaseGrant",
     "McapActionSource",
     "MemoryReplayBuffer",
+    "Node",
+    "NodeActivation",
+    "NodeConfig",
+    "NodeInputConfig",
+    "NodeResource",
+    "NodeStatus",
     "Observation",
     "PartConfig",
-    "PlanExecution",
-    "PlanExecutionState",
     "PlanPoint",
     "PlanResult",
     "PoseHorizonPoint",
     "PoseHorizonResult",
-    "AuthorityClient",
-    "AuthoritySnapshot",
-    "ExecutionManagerClient",
     "RecordedAction",
+    "ReplayClockJumpError",
+    "ReplayPacer",
     "ReplayPlayer",
     "ResolveResult",
     "Robot",
+    "RobotResource",
     "SampleBuffer",
     "Sensor",
-    "Session",
-    "SourceRole",
     "TimestampedSample",
     "TrajectoryCanceledError",
 ]

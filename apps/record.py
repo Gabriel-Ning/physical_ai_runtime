@@ -147,7 +147,7 @@ def verify_cameras(
 def smooth_homing(
     ctx: rmi.Context,
     robot: rmi.Robot,
-    home_pose: list[float],
+    home_pose: list[float] | dict[str, list[float]],
     teleoperators: dict[str, Any],
     duration_s: float = 2.5,
     rate_hz: float = 50.0,
@@ -158,14 +158,27 @@ def smooth_homing(
 
     # Collect arm and gripper start configurations
     parts_to_home = {}
-    for name, cfg in teleoperators.items():
+    if isinstance(home_pose, dict):
+        for part_name, target in home_pose.items():
+            part_spec = ctx.profile.parts.get(part_name)
+            if part_spec and all(j in name_to_pos for j in part_spec.joint_names):
+                parts_to_home[part_name] = (
+                    [name_to_pos[j] for j in part_spec.joint_names],
+                    list(target),
+                )
+
+    for cfg in teleoperators.values():
         arm_p, grip_p = cfg["arm_part"], cfg["gripper_part"]
         arm_spec, grip_spec = (
             ctx.profile.parts.get(arm_p),
             ctx.profile.parts.get(grip_p),
         )
 
-        if arm_spec and all(j in name_to_pos for j in arm_spec.joint_names):
+        if (
+            not isinstance(home_pose, dict)
+            and arm_spec
+            and all(j in name_to_pos for j in arm_spec.joint_names)
+        ):
             parts_to_home[arm_p] = (
                 [name_to_pos[j] for j in arm_spec.joint_names],
                 list(home_pose),
@@ -179,26 +192,29 @@ def smooth_homing(
     steps = int(max(duration_s * rate_hz, 10))
     dt = duration_s / steps
 
-    agent = ctx.make_agent("Policy", frequency=rate_hz)
-    with agent.run(robot) as session:
-        t_start = time.monotonic()
-        for i in range(steps + 1):
-            s = i / steps
-            h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
+    policy_node = ctx.make_node("Policy")
+    t_start = time.monotonic()
+    for i in range(steps + 1):
+        s = i / steps
+        h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
 
-            for part_name, (q_start, q_goal) in parts_to_home.items():
-                interp = [
+        actions = [
+            rmi.Action(
+                part=part_name,
+                command="joint_reference",
+                value=[
                     q_start[j] + h * (q_goal[j] - q_start[j])
                     for j in range(len(q_goal))
-                ]
-                session.act(
-                    rmi.Action(part=part_name, command="joint_reference", value=interp)
-                )
+                ],
+            )
+            for part_name, (q_start, q_goal) in parts_to_home.items()
+        ]
+        policy_node.submit(actions)
 
-            elapsed = time.monotonic() - t_start
-            target_t = (i + 1) * dt
-            if target_t > elapsed:
-                time.sleep(target_t - elapsed)
+        elapsed = time.monotonic() - t_start
+        target_t = (i + 1) * dt
+        if target_t > elapsed:
+            time.sleep(target_t - elapsed)
 
 
 def parse_args() -> argparse.Namespace:
@@ -280,10 +296,9 @@ def _finalized_episode_directory(scope: Any) -> Path:
     return path if path.is_dir() else path.parent
 
 
-def _relay(session: rmi.Session, part: str):
+def _relay(node: rmi.Node, part: str):
     def _callback(msg: JointTrajectory) -> None:
-        if session.active_for(part):
-            session.act(rmi.Action(part=part, command="joint_reference", value=msg))
+        node.submit(rmi.Action(part=part, command="joint_reference", value=msg))
 
     return _callback
 
@@ -306,8 +321,12 @@ def main() -> None:
     )
     rate_hz = float(rec_cfg.get("rate_hz", 50.0))
     max_duration_s = float(rec_cfg.get("max_duration_s", 60.0))
-    homing_duration_s = float(rec_cfg.get("homing_duration_s", 2.5))
-    home_pose = list(rec_cfg.get("home_pose", [0.0, 0.5, -0.5, 0.0, 0.0, 0.0]))
+    homing_cfg = ctx.profile.raw_data.get("homing", {})
+    homing_duration_s = float(homing_cfg.get("duration_s", 2.5))
+    home_pose = homing_cfg.get(
+        "joint_positions",
+        homing_cfg.get("home_pose", [0.0, 0.5, -0.5, 0.0, 0.0, 0.0]),
+    )
 
     teleoperators = ctx.profile.raw_data.get("teleoperators", {})
     cameras_cfg = ctx.profile.raw_data.get("sensors", {}).get("cameras", {})
@@ -374,7 +393,7 @@ def main() -> None:
 
             stop_event = threading.Event()
             stop_thread = threading.Thread(
-                target=lambda: (input(), stop_event.set()), daemon=True
+                target=lambda ev=stop_event: (input(), ev.set()), daemon=True
             )
 
             last_recorded_path = ""
@@ -382,27 +401,25 @@ def main() -> None:
             dt = 1.0 / rate_hz
 
             # STEP 3: Lockstep Recording & Active Teleop Streaming
-            with recorder.episode(task=task_name, metadata=metadata) as ep:
-                with ExitStack() as stack:
+            with (
+                recorder.episode(task=task_name, metadata=metadata) as ep,
+                ExitStack() as stack,
+            ):
                     for name, cfg in teleoperators.items():
-                        agent = ctx.make_agent(cfg["target_agent"], frequency=rate_hz)
-                        session = stack.enter_context(
-                            agent.run(
-                                robot,
-                                parts=[cfg["arm_part"], cfg["gripper_part"]],
-                                preempt=True,
-                            )
+                        node_name = cfg.get("target_node") or cfg.get(
+                            "target_agent", name
                         )
+                        teleop_node = ctx.make_node(node_name)
                         arm_sub = ctx.node.create_subscription(
                             JointTrajectory,
                             cfg["arm_source"],
-                            _relay(session, cfg["arm_part"]),
+                            _relay(teleop_node, cfg["arm_part"]),
                             qos,
                         )
                         gripper_sub = ctx.node.create_subscription(
                             JointTrajectory,
                             cfg["gripper_source"],
-                            _relay(session, cfg["gripper_part"]),
+                            _relay(teleop_node, cfg["gripper_part"]),
                             qos,
                         )
                         stack.callback(ctx.node.destroy_subscription, gripper_sub)

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Protocol
 
+from diagnostic_msgs.msg import KeyValue
 from execution_manager_interfaces.msg import (
     AuthorityEvent,
     AuthorityStatus,
@@ -15,7 +16,6 @@ from execution_manager_interfaces.msg import (
     ResourceClaim,
 )
 from execution_manager_interfaces.srv import ClaimControl, ReleaseControl
-from diagnostic_msgs.msg import KeyValue
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 CLAIM_SERVICE = "/execution_manager/claim"
@@ -35,6 +35,7 @@ class SourceRole(IntEnum):
     POLICY = ClaimControl.Request.POLICY
     TELEOP = ClaimControl.Request.TELEOP
     PLANNER = ClaimControl.Request.PLANNER
+    MEMORY = ClaimControl.Request.MEMORY
 
     @classmethod
     def parse(cls, value: SourceRole | str | int) -> SourceRole:
@@ -377,11 +378,11 @@ __all__ = [
     "AUTHORITY_STATUS_TOPIC",
     "CLAIM_SERVICE",
     "RELEASE_SERVICE",
+    "AuthorityClient",
     "AuthoritySnapshot",
     "EndpointBinding",
+    "ExecutionManagerClient",
     "ExecutionManagerUnavailableError",
     "LeaseGrant",
-    "AuthorityClient",
-    "ExecutionManagerClient",
     "SourceRole",
 ]

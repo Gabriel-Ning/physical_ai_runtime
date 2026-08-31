@@ -60,6 +60,10 @@ Thumbs.db
 ref/
 repos/
 examples/
+!/examples/
+/examples/*
+!/examples/README.md
+!/examples/16_franka_gamepad_teleop.py
 
 # ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
 # Keep structural placeholders so the workspace tree is present in git.
@@ -99,6 +103,8 @@ examples/
 !/src/policy_inference/**
 !/src/rt_launch/
 !/src/rt_launch/**
+!/src/teleop/gamepad_teleop/
+!/src/teleop/gamepad_teleop/**
 
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/

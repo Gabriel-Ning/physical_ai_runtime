@@ -1,0 +1,8 @@
+gamepad_teleop:
+  ros__parameters:
+    frame_id: fr3_link0
+    gripper_open_button: 1
+    gripper_close_button: 3
+    gripper_close_axis: -1
+    gripper_joint_name: gripper_left_joint
+    require_clutch_for_gripper: true

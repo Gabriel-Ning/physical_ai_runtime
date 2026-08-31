@@ -1,6 +1,6 @@
 """Internal/test-only ros2_control diagnostics.
 
-Production applications must command through Agent/Session and the Execution
+Production applications must command through Node and the Execution
 Manager lease path. This module is intentionally not exported by ``rmi``.
 """
 
@@ -385,11 +385,6 @@ def make_controller_client_factory(
             # Provider routes always publish JointTrajectory on action_sources.
             # Execution Manager adapts to ForwardCommandController inputs downstream.
             return JointSpaceReferenceControllerClient(node, config)
-        if (
-            config.implementation
-            == "forward_command_controller/ForwardCommandController"
-        ):
-            return ForwardCommandControllerClient(node, config)
         if contract == "task_space_reference":
             return TaskSpaceReferenceControllerClient(node, config)
         raise ValueError(

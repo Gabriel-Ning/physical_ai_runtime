@@ -44,6 +44,9 @@ launch_patterns=(
   "piper_leader_node"
   "piper_leader"
   "piper_leader_teleop"
+  "gamepad_teleop.launch.py"
+  "gamepad_teleop_node"
+  "gamepad_teleop"
   "franka_manipulation_rt_launch"
   "franka_manipulation_workstation_launch"
   "franka_manipulation_controller_bringup"
@@ -74,6 +77,10 @@ node_patterns=(
   "episode_recorder"
   "target_marker"
   "pyroki_global_setpoint_planner"
+  "gamepad_teleop_node"
+  "game_controller_node"
+  "joy_linux_node"
+  "joy_node"
 )
 
 # killall matches /proc/pid/comm (Linux truncates to 15 chars).
@@ -89,6 +96,10 @@ binaries=(
   rviz2
   plotjuggler
   episode_recorder
+  gamepad_teleop_
+  game_controller
+  joy_linux_node
+  joy_node
 )
 
 _is_protected() {

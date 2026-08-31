@@ -33,10 +33,9 @@ def test_realsense_launch_uses_workstation_camera_config():
 
 
 def test_recording_gripper_streams_use_float64_multiarray():
+    contract = ROOT.parents[3] / "apps" / "recording" / "piper_bimanual.yaml"
     recording = yaml.safe_load(
-        (ROOT / "config" / "recording" / "rmi_piper_bimanual.yaml").read_text(
-            encoding="utf-8"
-        )
+        contract.read_text(encoding="utf-8")
     )
     by_id = {stream["id"]: stream for stream in recording["streams"]}
     assert (

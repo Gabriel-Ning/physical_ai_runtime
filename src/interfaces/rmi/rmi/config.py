@@ -16,8 +16,6 @@ class ControllerConfig:
     """One ros2_control controller, keyed externally by its input contract."""
 
     name: str
-    implementation: str
-    command_interface: str
     ros_actions: dict[str, str] = field(default_factory=dict)
     ros_topics: dict[str, str] = field(default_factory=dict)
 
@@ -51,13 +49,23 @@ class CameraSensorConfig:
 
 
 @dataclass(frozen=True)
-class AgentConfig:
-    """Application defaults for one dynamically claimed action source."""
+class NodeInputConfig:
+    """One typed Execution Manager ingress bound to an action node."""
+
+    endpoint: str
+    command_contract: str
+    is_action: bool = False
+
+
+@dataclass(frozen=True)
+class NodeConfig:
+    """Application defaults for one profile-declared action node."""
 
     name: str
     source_role: str
     resources: dict[str, str]
     frequency: float | None = None
+    inputs: dict[str, NodeInputConfig] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -70,7 +78,7 @@ class EmbodimentConfig:
     metadata: dict[str, Any] = field(default_factory=dict)
     host_roles: dict[str, dict[str, Any]] = field(default_factory=dict)
     cameras: dict[str, CameraSensorConfig] = field(default_factory=dict)
-    agents: dict[str, AgentConfig] = field(default_factory=dict)
+    nodes: dict[str, NodeConfig] = field(default_factory=dict)
     recording: dict[str, Any] = field(default_factory=dict)
     features: dict[str, Any] = field(default_factory=dict)
     calibration: dict[str, Any] = field(default_factory=dict)
@@ -115,6 +123,17 @@ class EmbodimentConfig:
             for member in self.groups[name]:
                 joints.extend(self.get_part_joints(member))
             return joints
+        return []
+
+    def get_part_names(self, name: str) -> list[str]:
+        """Expand one physical part or compound group in declaration order."""
+        if name in self.parts:
+            return [name]
+        if name in self.groups:
+            parts: list[str] = []
+            for member in self.groups[name]:
+                parts.extend(self.get_part_names(member))
+            return parts
         return []
 
     @classmethod
@@ -168,14 +187,6 @@ class EmbodimentConfig:
                     )
                 controllers[contract] = ControllerConfig(
                     name=_string(controller.get("name"), f"{controller_path}.name"),
-                    implementation=_string(
-                        controller.get("implementation"),
-                        f"{controller_path}.implementation",
-                    ),
-                    command_interface=_string(
-                        controller.get("command_interface"),
-                        f"{controller_path}.command_interface",
-                    ),
                     ros_actions=actions,
                     ros_topics=topics,
                 )
@@ -242,7 +253,9 @@ class EmbodimentConfig:
             groups[group_name] = tuple(members)
 
         host_roles = _mapping(root.get("host_roles", {}), "host_roles")
-        agents = _agents(root.get("agents", {}), parts)
+        if "agents" in root:
+            raise ValueError("agents is removed; declare action producers under nodes")
+        nodes = _nodes(root.get("nodes", {}), parts, root.get("sources", {}))
         recording = _mapping(root.get("recorder", {}), "recorder")
         features = _mapping(root.get("features", {}), "features")
         calibration = _mapping(root.get("calibration", {}), "calibration")
@@ -281,7 +294,7 @@ class EmbodimentConfig:
             metadata=dict(metadata),
             host_roles=dict(host_roles),
             cameras=cameras,
-            agents=agents,
+            nodes=nodes,
             recording=dict(recording),
             features=dict(features),
             calibration=dict(calibration),
@@ -309,6 +322,7 @@ def _bind_execution_manager_routing(
         em = _mapping(yaml.safe_load(handle), str(em_path))
     bound = dict(root)
     bound["groups"] = em["groups"]
+    bound["sources"] = em.get("sources", {})
     return bound
 
 
@@ -397,16 +411,21 @@ def _endpoints(value: Any, path: str) -> dict[str, str]:
     return dict(endpoints)
 
 
-def _agents(value: Any, parts: dict[str, PartConfig]) -> dict[str, AgentConfig]:
-    raw_agents = _mapping(value, "agents")
-    agents: dict[str, AgentConfig] = {}
-    for name, raw_value in raw_agents.items():
-        path = f"agents.{name}"
-        raw_agent = _mapping(raw_value, path)
-        role = _string(raw_agent.get("source_role"), f"{path}.source_role").upper()
-        if role not in {"POLICY", "TELEOP", "PLANNER"}:
-            raise ValueError(f"{path}.source_role must be POLICY, TELEOP, or PLANNER")
-        resources = _mapping(raw_agent.get("resources"), f"{path}.resources")
+def _nodes(
+    value: Any, parts: dict[str, PartConfig], source_value: Any
+) -> dict[str, NodeConfig]:
+    raw_nodes = _mapping(value, "nodes")
+    sources = _mapping(source_value, "sources")
+    nodes: dict[str, NodeConfig] = {}
+    for name, raw_value in raw_nodes.items():
+        path = f"nodes.{name}"
+        raw_node = _mapping(raw_value, path)
+        role = _string(raw_node.get("source_role"), f"{path}.source_role").upper()
+        if role not in {"POLICY", "TELEOP", "PLANNER", "MEMORY"}:
+            raise ValueError(
+                f"{path}.source_role must be POLICY, TELEOP, PLANNER, or MEMORY"
+            )
+        resources = _mapping(raw_node.get("resources"), f"{path}.resources")
         if not resources:
             raise ValueError(f"{path}.resources must not be empty")
         validated_resources: dict[str, str] = {}
@@ -424,23 +443,70 @@ def _agents(value: Any, parts: dict[str, PartConfig]) -> dict[str, AgentConfig]:
                 for controller in parts[resource].controllers.values()
             ):
                 available.add("joint_trajectory")
+            if any(
+                "gripper_command" in controller.ros_actions
+                for controller in parts[resource].controllers.values()
+            ):
+                available.add("gripper_command")
             if command not in available:
                 raise ValueError(
                     f"{path}.resources.{resource} references unsupported command "
                     f"{command!r}"
                 )
             validated_resources[resource] = command
-        frequency = raw_agent.get("frequency")
+        frequency = raw_node.get("frequency")
         if frequency is not None and (
             not isinstance(frequency, (int, float))
             or isinstance(frequency, bool)
             or frequency <= 0.0
         ):
             raise ValueError(f"{path}.frequency must be positive")
-        agents[name] = AgentConfig(
+        inputs: dict[str, NodeInputConfig] = {}
+        raw_source = sources.get(name)
+        if raw_source is not None:
+            source = _mapping(raw_source, f"sources.{name}")
+            source_role = _string(
+                source.get("source_role"), f"sources.{name}.source_role"
+            ).upper()
+            if source_role != role:
+                raise ValueError(
+                    f"{path}.source_role {role!r} does not match "
+                    f"sources.{name}.source_role {source_role!r}"
+                )
+            raw_inputs = _mapping(source.get("inputs", {}), f"sources.{name}.inputs")
+            for resource, raw_input in raw_inputs.items():
+                input_path = f"sources.{name}.inputs.{resource}"
+                input_config = _mapping(raw_input, input_path)
+                if resource not in validated_resources:
+                    continue
+                contract = _string(
+                    input_config.get("command_contract"),
+                    f"{input_path}.command_contract",
+                )
+                if contract != validated_resources[resource]:
+                    raise ValueError(
+                        f"{input_path}.command_contract {contract!r} does not match "
+                        f"{path}.resources.{resource}"
+                    )
+                topic = input_config.get("topic")
+                action = input_config.get("action")
+                if (topic is None) == (action is None):
+                    raise ValueError(
+                        f"{input_path} must declare exactly one of topic or action"
+                    )
+                inputs[resource] = NodeInputConfig(
+                    endpoint=_string(
+                        action if action is not None else topic,
+                        f"{input_path}.{'action' if action is not None else 'topic'}",
+                    ),
+                    command_contract=contract,
+                    is_action=action is not None,
+                )
+        nodes[name] = NodeConfig(
             name=name,
             source_role=role,
             resources=validated_resources,
             frequency=float(frequency) if frequency is not None else None,
+            inputs=inputs,
         )
-    return agents
+    return nodes

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from action_msgs.msg import GoalStatus
 from moveit_msgs.msg import CartesianTrajectory
+from rmi.config import ControllerConfig
 from rmi.controllers import (
     ControllerClientError,
     ForwardCommandControllerClient,
@@ -12,7 +13,6 @@ from rmi.controllers import (
     JointTrajectoryControllerClient,
     TaskSpaceReferenceControllerClient,
 )
-from rmi.config import ControllerConfig
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
@@ -86,11 +86,9 @@ class FakeActionClient:
         return future
 
 
-def _config(*, actions=None, topics=None, implementation="example/Controller"):
+def _config(*, actions=None, topics=None):
     return ControllerConfig(
         name="arm_controller",
-        implementation=implementation,
-        command_interface="position",
         ros_actions=actions or {},
         ros_topics=topics or {},
     )
@@ -372,7 +370,6 @@ def test_forward_controller_adapts_latest_joint_trajectory_point():
     client = ForwardCommandControllerClient(
         node,
         _config(
-            implementation="forward_command_controller/ForwardCommandController",
             topics={"joint_reference": "/gripper/commands"},
         ),
     )

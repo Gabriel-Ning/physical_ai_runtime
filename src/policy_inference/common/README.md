@@ -1,12 +1,15 @@
-# Common policy runtime
+# Policy inference contract
 
-Backend-neutral hot-path components shared by LeRobot and future GR00T/OpenPI
-integrations:
+Policy inference is a pure producer in the Action Node Framework:
 
-- `PolicyIOContract` resolves action order and camera features once from the RMI
-  embodiment profile.
-- RMI `Robot`, `Agent`, and `Session` remain the only runtime observation and
-  action abstractions. Backend packages bridge their native feature format to
-  these objects without introducing another Robot or environment.
+```text
+Robot.get_observation()
+  -> policy.select_action(observation)
+  -> Node.submit(action | actions | None)
+  -> Execution Manager arbitration
+```
 
-This package must not import Torch, LeRobot, or a model-specific SDK.
+`PolicyIOContract.from_profile(..., node_name="Policy")` fixes joint ordering,
+camera features and action slices before model loading. Context-created cameras
+are included in Robot observations. Policies do not know ROS topics, leases,
+controllers, preemption or recorder internals.

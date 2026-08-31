@@ -16,25 +16,19 @@ groups:
     controllers:
       joint_trajectory:
         name: "arm_jtc"
-        implementation: "joint_trajectory_controller/JointTrajectoryController"
-        command_interface: "position"
         ros_actions:
           follow_joint_trajectory: "/execution/arm/follow_joint_trajectory"
       joint_space_reference:
         name: "arm_jspc"
-        implementation: "example_controllers/JointReferenceController"
-        command_interface: "position"
         ros_topics:
           joint_reference: "/execution/arm/joint_reference"
       task_space_reference:
         name: "arm_tskpc"
-        implementation: "example_controllers/TaskReferenceController"
-        command_interface: "position"
         ros_topics:
           pose_reference: "/execution/arm/pose_reference"
           twist_reference: "/execution/arm/twist_reference"
 
-agents:
+nodes:
   Policy:
     source_role: POLICY
     resources: {arm: joint_reference}

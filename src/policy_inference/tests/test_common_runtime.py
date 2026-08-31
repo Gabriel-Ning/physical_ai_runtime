@@ -23,7 +23,7 @@ class _Part:
 
 
 @dataclass
-class _Agent:
+class _Node:
     resources: dict[str, str]
     frequency: float = 30.0
 
@@ -40,8 +40,8 @@ class _Profile:
         "left_gripper": _Part(("left_gripper",)),
         "right_arm": _Part(("right_1", "right_2")),
     }
-    agents: ClassVar[dict[str, _Agent]] = {
-        "Policy": _Agent(
+    nodes: ClassVar[dict[str, _Node]] = {
+        "Policy": _Node(
             {
                 "left_arm": "joint_reference",
                 "left_gripper": "joint_reference",

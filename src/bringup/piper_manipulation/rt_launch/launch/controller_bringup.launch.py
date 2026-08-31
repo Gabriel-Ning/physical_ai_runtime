@@ -77,6 +77,13 @@ def _nodes(context):
         side: LaunchConfiguration(f"{side}_end_effector").perform(context).lower()
         for side in active
     }
+    load_gripper_hardware = LaunchConfiguration("load_gripper_hardware").perform(
+        context
+    ).lower()
+    if load_gripper_hardware not in ("true", "false"):
+        raise RuntimeError("'load_gripper_hardware' must be true or false")
+    if load_gripper_hardware == "false":
+        end_effectors = {side: "none" for side in active}
     for side, end_effector in end_effectors.items():
         if end_effector not in VALID_END_EFFECTORS:
             raise RuntimeError(
@@ -177,17 +184,24 @@ def _nodes(context):
         output="screen",
     )
     gripper_controllers = [
-        f"{side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}"
+        controller
         for side in active
         if end_effectors[side] != "none"
+        for controller in (
+            f"{side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}",
+            f"{side}_gripper_action",
+        )
     ]
     gripper_remaps = " ".join(
-        (
-            f"--remap {side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}"
-            f"/commands:=/execution/{side}_gripper/joint_reference"
-        )
+        remap
         for side in active
         if end_effectors[side] != "none"
+        for remap in (
+            f"--remap {side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}"
+            f"/commands:=/execution/{side}_gripper/joint_reference",
+            f"--remap {side}_gripper_action/gripper_cmd:="
+            f"/execution/{side}_gripper/gripper_command",
+        )
     )
     jtc_remaps = " ".join(
         (
@@ -283,6 +297,14 @@ def generate_launch_description():
                 "arms", default_value="both", description="left, right, or both."
             ),
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
+            DeclareLaunchArgument(
+                "load_gripper_hardware",
+                default_value="true",
+                description=(
+                    "Load all selected native Piper grippers. Set false to "
+                    "omit gripper URDF, hardware, and controllers."
+                ),
+            ),
             DeclareLaunchArgument(
                 "connected_to",
                 default_value="world",

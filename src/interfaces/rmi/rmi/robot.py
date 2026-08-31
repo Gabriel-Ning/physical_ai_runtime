@@ -6,21 +6,61 @@ import threading
 import time
 from collections.abc import Callable, Mapping
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sensor_msgs.msg import JointState as RosJointState
 
 from .config import EmbodimentConfig
-from .contracts import Action, Observation
+from .contracts import Observation
 from .selection import AuthorityClient
-from .session import Session
 
-if TYPE_CHECKING:
-    from .agent import Agent, PlanExecution
+
+class RobotResource:
+    """Ordered observation view over one physical part or compound group."""
+
+    def __init__(self, robot: Robot, name: str) -> None:
+        self.robot = robot
+        self.name = name
+        self.parts = tuple(robot.config.get_part_names(name))
+        if not self.parts:
+            raise KeyError(f"unknown robot resource {name!r}")
+        self.joint_names = tuple(robot.config.get_part_joints(name))
+
+    def get_observation(self) -> Observation:
+        observation = self.robot.get_observation()
+        source_names = list(observation.joint_names)
+        index = {name: offset for offset, name in enumerate(source_names)}
+        missing = [name for name in self.joint_names if name not in index]
+        if missing:
+            raise RuntimeError(
+                f"joint state is missing {self.name!r} joints: {missing}"
+            )
+
+        data = dict(observation.data)
+        data["joint_names"] = self.joint_names
+        for field in ("joint_positions", "joint_velocities", "joint_efforts"):
+            values = list(observation.data.get(field) or [])
+            if len(values) == len(source_names):
+                data[field] = tuple(values[index[name]] for name in self.joint_names)
+            else:
+                data[field] = ()
+        return Observation(
+            data=MappingProxyType(data),
+            source_time_s=observation.source_time_s,
+            receive_time_s=observation.receive_time_s,
+            allocations=MappingProxyType(
+                {
+                    part: observation.allocations[part]
+                    for part in self.parts
+                    if part in observation.allocations
+                }
+            ),
+            sensors=observation.sensors,
+        )
 
 
 class Robot:
-    """Application-facing robot state and provider-routed command facade."""
+    """Application-facing robot observation facade."""
 
     def __init__(
         self,
@@ -37,7 +77,10 @@ class Robot:
         self._latest_state: dict[str, Any] | None = None
         self._source_time_s = 0.0
         self._receive_time_s = 0.0
-        self._control_stack: list[Session] = []
+        self._sensors: dict[str, Any] = {}
+
+    def __getitem__(self, name: str) -> RobotResource:
+        return RobotResource(self, name)
 
     @property
     def state(self) -> Observation:
@@ -61,10 +104,16 @@ class Robot:
             source_time_s=source_time_s,
             receive_time_s=receive_time_s,
             allocations=MappingProxyType(allocations),
+            sensors=MappingProxyType(
+                {name: sensor.latest for name, sensor in self._sensors.items()}
+            ),
         )
 
     def get_observation(self) -> Observation:
         return self.state
+
+    def _attach_sensor(self, sensor: Any) -> None:
+        self._sensors[sensor.name] = sensor
 
     def is_ready(self) -> bool:
         with self._state_lock:
@@ -97,50 +146,6 @@ class Robot:
                 details = "; ".join(diagnostics)
                 raise RuntimeError(f"robot hardware is not ready: {details}")
 
-    def control(
-        self,
-        source: Agent,
-        *,
-        parts: list[str] | tuple[str, ...] | None = None,
-        preempt: bool = False,
-        acquire_timeout: float = 5.0,
-        frequency: float | None = None,
-    ) -> Session:
-        requested_parts = tuple(parts) if parts is not None else source.parts
-        if not requested_parts:
-            raise ValueError(f"source {source.name!r} has no configured Parts")
-        unknown = set(requested_parts) - set(source.parts)
-        if unknown:
-            raise ValueError(
-                f"source {source.name!r} is not configured for Parts {sorted(unknown)!r}"
-            )
-        return Session(
-            self,
-            source,
-            parts=requested_parts,
-            preempt=preempt,
-            acquire_timeout=acquire_timeout,
-            frequency=frequency,
-        )
-
-    def send_action(
-        self, action: Action, *, observation: Observation | None = None
-    ) -> None:
-        self._control_for(action.part).act(action, observation=observation)
-
-    def execute(
-        self,
-        part: str,
-        plan: Any,
-        *,
-        observation: Observation | None = None,
-    ) -> PlanExecution:
-        return self._control_for(part).execute(
-            part,
-            plan,
-            observation=observation,
-        )
-
     def update_joint_state(
         self, message: RosJointState, *, receive_time_s: float | None = None
     ) -> None:
@@ -159,24 +164,3 @@ class Robot:
             self._latest_state = state
             self._source_time_s = source_time_s
             self._receive_time_s = received
-
-    def _control_for(self, part: str) -> Session:
-        if not self._control_stack:
-            raise RuntimeError(
-                "send_action/execute requires an active agent.run(robot) scope"
-            )
-        for session in reversed(self._control_stack):
-            if part in session.parts:
-                return session
-        raise RuntimeError(
-            f"no active control scope owns part {part!r}; "
-            "use an explicit Session when nested scopes do not cover it"
-        )
-
-    def _push_control(self, session: Session) -> None:
-        self._control_stack.append(session)
-
-    def _pop_control(self, session: Session) -> None:
-        if not self._control_stack or self._control_stack[-1] is not session:
-            raise RuntimeError("control sessions must exit in stack order")
-        self._control_stack.pop()

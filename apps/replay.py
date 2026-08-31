@@ -28,14 +28,14 @@ import sys
 import time
 from pathlib import Path
 
+import rmi
 from mcap.reader import make_reader
 from rclpy.serialization import deserialize_message
+from rclpy.utilities import remove_ros_args
+from rmi import PlanPoint, PlanResult
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory as RosJointTrajectory
-
-import rmi
-from rmi import PlanPoint, PlanResult
 
 
 class ProgressBar:
@@ -94,7 +94,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Duration in seconds for smooth JTC homing alignment to start pose (default: from profile)",
     )
-    return parser.parse_args()
+    return parser.parse_args(remove_ros_args()[1:])
 
 
 def find_latest_mcap(episodes_root: Path) -> Path | None:
@@ -117,10 +117,8 @@ def load_mcap_trajectory(
     """
     # Build topic-to-part mapping from profile
     part_to_action_topic: dict[str, str] = {}
-    for part_name, part_spec in profile.parts.items():
-        if "arm" in part_name:
-            part_to_action_topic[part_name] = f"/execution/{part_name}/joint_reference"
-        elif "gripper" in part_name:
+    for part_name in profile.parts:
+        if "arm" in part_name or "gripper" in part_name:
             part_to_action_topic[part_name] = f"/execution/{part_name}/joint_reference"
         elif part_name == "end_effector":
             part_to_action_topic[part_name] = "/execution/end_effector/joint_reference"
@@ -251,8 +249,11 @@ def main() -> None:
     # 1. Connect RMI Context & Topology
     ctx = rmi.Context.from_profile(args.profile)
     rec_cfg = ctx.profile.raw_data.get("recorder", {})
+    homing_cfg = ctx.profile.raw_data.get("homing", {})
     homing_duration_s = (
-        args.homing_duration if args.homing_duration is not None else rec_cfg.get("homing_duration_s", 3.0)
+        args.homing_duration
+        if args.homing_duration is not None
+        else homing_cfg.get("duration_s", 3.0)
     )
 
     # 2. Resolve episode path
@@ -277,7 +278,10 @@ def main() -> None:
     print(f"  Embodiment Profile : {args.profile}")
     print(f"  Target Episode     : {ep_path.name}")
     print(f"  Full Path          : {ep_path}")
-    print(f"  Homing Duration    : {homing_duration_s:.1f} s (profile: {rec_cfg.get('homing_duration_s', 'n/a')}s)")
+    print(
+        f"  Homing Duration    : {homing_duration_s:.1f} s "
+        f"(profile: {homing_cfg.get('duration_s', 'n/a')}s)"
+    )
     print("=" * 72)
 
     # 3. Wait for Hardware Readiness
@@ -299,70 +303,65 @@ def main() -> None:
     current_obs = robot.get_observation()
     name_to_pos = dict(zip(current_obs.joint_names, current_obs.joint_positions))
 
-    planner_agent = ctx.make_agent("Planner")
-    with planner_agent.run(robot) as planner_session:
-        for part_name, q_start in start_poses.items():
-            if part_name not in ctx.profile.parts:
-                continue
-            part_joints = list(ctx.profile.parts[part_name].joint_names)
-            if len(part_joints) < 2:
-                # Single-joint grippers handled in replay directly
-                continue
+    planner_node = ctx.make_node("Planner")
+    for part_name, q_start in start_poses.items():
+        if part_name not in ctx.profile.parts:
+            continue
+        part_joints = list(ctx.profile.parts[part_name].joint_names)
+        if len(part_joints) < 2:
+            # Single-joint grippers handled in replay directly
+            continue
 
-            if all(j in name_to_pos for j in part_joints):
-                q_curr = [name_to_pos[j] for j in part_joints]
-                max_delta = max(abs(c - s) for c, s in zip(q_curr, q_start[:len(part_joints)]))
+        if all(j in name_to_pos for j in part_joints):
+            q_curr = [name_to_pos[j] for j in part_joints]
+            max_delta = max(abs(c - s) for c, s in zip(q_curr, q_start[:len(part_joints)]))
 
-                if max_delta > 0.005:
-                    print(
-                        f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({homing_duration_s:.1f}s)..."
-                    )
-                    homing_plan = generate_quintic_transition(
-                        part_joints,
-                        q_curr,
-                        q_start[:len(part_joints)],
-                        duration_s=homing_duration_s,
-                    )
-                    execution = planner_session.execute(part_name, homing_plan)
-                    execution.wait(timeout=homing_duration_s + 5.0)
-                    if execution.done and not execution.canceled:
-                        print(f"  [✓] Part '{part_name}' settled smoothly at episode start pose.")
-                    else:
-                        print(f"  [!] Part '{part_name}' homing state: {execution.state.name}")
+            if max_delta > 0.005:
+                print(
+                    f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({homing_duration_s:.1f}s)..."
+                )
+                homing_plan = generate_quintic_transition(
+                    part_joints,
+                    q_curr,
+                    q_start[:len(part_joints)],
+                    duration_s=homing_duration_s,
+                )
+                execution = planner_node.execute(part_name, homing_plan)
+                execution.wait(timeout=homing_duration_s + 5.0)
+                if execution.done and not execution.canceled:
+                    print(f"  [✓] Part '{part_name}' settled smoothly at episode start pose.")
                 else:
-                    print(f"  [✓] Part '{part_name}' already aligned (delta = {max_delta:.4f} rad).")
+                    print(f"  [!] Part '{part_name}' homing state: {execution.state.name}")
+            else:
+                print(f"  [✓] Part '{part_name}' already aligned (delta = {max_delta:.4f} rad).")
 
     # 5. Phase 2: High-Rate 1:1 Policy Replay Loop
     print(f"\n[4/4] Phase 2: Activating JSIC Controller & Replaying Actions ({total_frames} frames @ {native_hz:.1f} Hz)...")
-    episode_id = ep_path.stem
-    policy_agent = ctx.make_agent(
-        "Policy",
-        frequency=native_hz,
-        source_instance=f"replay:{episode_id}",
-        metadata={"episode_id": episode_id, "mode": "replay"},
-    )
+    policy_node = ctx.make_node("Policy")
 
     try:
-        with policy_agent.run(robot) as session:
-            pbar = ProgressBar(total_frames, prefix="Replaying Action")
-            start_time = time.monotonic()
+        pbar = ProgressBar(total_frames, prefix="Replaying Action")
+        pacer = rmi.ReplayPacer.from_node(ctx.node)
+        pacer.start()
+        clock_name = (
+            "simulation /clock" if pacer.use_sim_time else "monotonic wall clock"
+        )
+        print(f"  Replay clock       : {clock_name}")
 
-            for idx, (rel_t, part_poses) in enumerate(timeline):
-                target_wall_time = start_time + rel_t
-                now = time.monotonic()
-                if target_wall_time > now:
-                    time.sleep(target_wall_time - now)
+        for idx, (rel_t, part_poses) in enumerate(timeline):
+            pacer.wait_until(rel_t)
 
-                # Dispatch joint positions for all parts in this frame
-                for part_name, pos in part_poses.items():
-                    session.act(
-                        rmi.Action(part=part_name, command="joint_reference", value=pos)
-                    )
+            # Dispatch joint positions for all parts in this frame atomically
+            actions = [
+                rmi.Action(part=part_name, command="joint_reference", value=pos)
+                for part_name, pos in part_poses.items()
+            ]
+            policy_node.submit(actions)
 
-                pbar.update(idx + 1)
+            pbar.update(idx + 1)
 
-            pbar.finish()
-            print("\n[✓] Episode Action trajectory replay completed successfully!")
+        pbar.finish()
+        print("\n[✓] Episode Action trajectory replay completed successfully!")
 
     except KeyboardInterrupt:
         print("\n\n[!] Replay interrupted by operator (Ctrl+C).")

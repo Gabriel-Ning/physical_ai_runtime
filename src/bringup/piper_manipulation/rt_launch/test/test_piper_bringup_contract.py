@@ -111,6 +111,7 @@ def test_deployment_choices_are_launch_arguments():
     for argument in (
         "arms",
         "use_fake_hardware",
+        "load_gripper_hardware",
         "connected_to",
         "enable_table",
         "table_xyz",
@@ -168,6 +169,8 @@ def test_route_spawner_keeps_arm_and_gripper_routes_inactive_at_bringup():
     assert 'for route in ("jspc", "tskpc", "jtc")' in launch
     assert "*gripper_controllers" in launch
     assert "/execution/{side}_gripper/joint_reference" in launch
+    assert "/execution/{side}_gripper/gripper_command" in launch
+    assert 'f"{side}_gripper_action"' in launch
     for argument in ("--inactive", "--controller-manager", "/controller_manager"):
         assert f'"{argument}"' in launch
 
@@ -198,6 +201,7 @@ def test_package_xml_declares_runtime_plugins():
         "piper_hardware_interface",
         "manipulation_position_controllers",
         "joint_trajectory_controller_guard",
+        "parallel_gripper_action_controller",
         "launch",
         "launch_ros",
     ):

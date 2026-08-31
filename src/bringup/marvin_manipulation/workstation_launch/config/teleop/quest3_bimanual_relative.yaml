@@ -1,0 +1,15 @@
+quest3_bimanual_target:
+  ros__parameters:
+    profile_name: marvin_quest3_bimanual_relative
+
+    left_output_topic: /action_sources/quest3/left_arm/pose_reference
+    right_output_topic: /action_sources/quest3/right_arm/pose_reference
+    left_gripper_output_topic: /action_sources/quest3/left_gripper/joint_reference
+    right_gripper_output_topic: /action_sources/quest3/right_gripper/joint_reference
+
+    left_gripper_joint_name: left_gripper_left_joint
+    right_gripper_joint_name: right_gripper_left_joint
+
+    output_frame: world
+    left_tcp_frame: left_pika_gripper_tcp
+    right_tcp_frame: right_pika_gripper_tcp

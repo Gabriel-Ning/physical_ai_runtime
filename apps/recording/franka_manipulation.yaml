@@ -1,0 +1,26 @@
+# Franka single-arm + Pika application recording contract.
+schema_version: 1
+streams:
+  # Application-selected authority and command facts.
+  - {id: authority_status, topic: /execution_manager/authority_status, expected_type: execution_manager_interfaces/msg/AuthorityStatus, required: true, start_gate: true, start_gate_max_age_s: 2.0, qos: {mode: explicit, reliability: reliable, durability: transient_local, depth: 1}}
+  - {id: authority_events, topic: /execution_manager/authority_events, expected_type: execution_manager_interfaces/msg/AuthorityEvent, required: true, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 100}}
+  - {id: gamepad_clutch, topic: /teleop/gamepad/clutch, expected_type: std_msgs/msg/Bool, required: true, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_dummy_policy_arm, topic: /action_sources/dummy_policy/arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_policy_arm, topic: /action_sources/policy/arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_policy_end_effector, topic: /action_sources/policy/end_effector/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_gamepad_arm, topic: /action_sources/gamepad/arm/twist, expected_type: geometry_msgs/msg/TwistStamped, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: source_gamepad_end_effector, topic: /action_sources/gamepad/end_effector/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_policy_arm, topic: /execution_trace/policy/arm/joint_reference, expected_type: execution_manager_interfaces/msg/LeasedJointReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_teleop_arm, topic: /execution_trace/teleop/arm/twist_reference, expected_type: execution_manager_interfaces/msg/LeasedTwistReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_teleop_end_effector, topic: /execution_trace/teleop/end_effector/joint_reference, expected_type: execution_manager_interfaces/msg/LeasedJointReference, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_planner_arm_events, topic: /execution_trace/planner/arm/joint_trajectory/events, expected_type: execution_manager_interfaces/msg/TrajectoryExecutionEvent, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: trace_planner_arm_feedback, topic: /execution_trace/planner/arm/joint_trajectory/feedback, expected_type: execution_manager_interfaces/msg/TrajectoryExecutionFeedback, required: false, start_gate: false, qos: {mode: explicit, reliability: best_effort, durability: volatile, depth: 10}}
+  - {id: execution_arm_joint_reference, topic: /execution/arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_arm_twist_reference, topic: /execution/arm/twist_reference, expected_type: geometry_msgs/msg/TwistStamped, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_end_effector_joint_reference, topic: /execution/end_effector/joint_reference, expected_type: std_msgs/msg/Float64MultiArray, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+
+  - {id: robot_joint_states, topic: /joint_states, expected_type: sensor_msgs/msg/JointState, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: pika_d405_color, topic: /pika_d405/camera/color/image_raw, expected_type: sensor_msgs/msg/Image, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: pika_d405_depth, topic: /pika_d405/camera/aligned_depth_to_color/image_raw, expected_type: sensor_msgs/msg/Image, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: pika_fisheye_color, topic: /pika_fisheye/image/compressed, expected_type: sensor_msgs/msg/CompressedImage, required: true, start_gate: true, qos: {mode: sensor_data}}
+  # Hikvision (7 cams on workstation): deferred — add streams when WS camera bringup lands.

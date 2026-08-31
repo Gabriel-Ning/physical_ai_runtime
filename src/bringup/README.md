@@ -13,7 +13,7 @@ src/bringup/<robot>_manipulation/
 │   ├── launch/rt_stack.launch.py
 │   └── package.xml
 └── workstation_launch/     # ROS pkg: <robot>_manipulation_workstation_launch
-    ├── config/recording|camera|teleop
+    ├── config/camera|teleop
     ├── launch/*_workstation.launch.py
     └── package.xml
 ```
@@ -99,10 +99,17 @@ ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
   use_rviz:=false
 ```
 
-Workstation（EM / recorder）：
+FakeHardware + gamepad + 无相机（当前验证 Gate）：
 
 ```bash
-ros2 launch franka_manipulation_workstation_launch franka_workstation.launch.py
+ros2 launch franka_manipulation_rt_launch rt_stack.launch.py \
+  use_fake_hardware:=true load_pika_hardware:=true \
+  with_cameras:=false use_rviz:=true cpu_affinity:=none
+
+ros2 launch franka_manipulation_workstation_launch workstation_stack.launch.py
+
+python examples/16_franka_gamepad_teleop.py \
+  --profile fr3_pika_single_arm.yaml
 ```
 
 细节：`franka_manipulation/rt_launch/README.md`。DDS 用本机 Cyclone 文件，不要直接用 Marvin 的 `cyclonedds_default.xml`。

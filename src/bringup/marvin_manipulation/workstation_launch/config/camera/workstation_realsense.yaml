@@ -41,32 +41,32 @@ head_d435:
         enable: false
       clip_distance: -1.0
 
-third_person_d435:
-  camera:
-    ros__parameters:
-      camera_name: "third_person_d435"
-      serial_no: "_405622076349"
-      base_frame_id: "third_person_d435_link"
-      enable_color: true
-      enable_depth: true
-      enable_infra: false
-      enable_infra1: false
-      enable_infra2: false
-      enable_gyro: false
-      enable_accel: false
-      enable_sync: true
-      rgb_camera:
-        color_profile: "1280x720x30"
-        color_format: "RGB8"
-        global_time_enabled: true
-      depth_module:
-        depth_profile: "1280x720x30"
-        depth_format: "Z16"
-        global_time_enabled: true
-        frames_queue_size: 8
-      align_depth:
-        enable: true
-        frames_queue_size: 8
-      pointcloud:
-        enable: false
-      clip_distance: -1.0
+# third_person_d435:
+#   camera:
+#     ros__parameters:
+#       camera_name: "third_person_d435"
+#       serial_no: "_405622076349"
+#       base_frame_id: "third_person_d435_link"
+#       enable_color: true
+#       enable_depth: true
+#       enable_infra: false
+#       enable_infra1: false
+#       enable_infra2: false
+#       enable_gyro: false
+#       enable_accel: false
+#       enable_sync: true
+#       rgb_camera:
+#         color_profile: "1280x720x30"
+#         color_format: "RGB8"
+#         global_time_enabled: true
+#       depth_module:
+#         depth_profile: "1280x720x30"
+#         depth_format: "Z16"
+#         global_time_enabled: true
+#         frames_queue_size: 8
+#       align_depth:
+#         enable: true
+#         frames_queue_size: 8
+#       pointcloud:
+#         enable: false
+#       clip_distance: -1.0

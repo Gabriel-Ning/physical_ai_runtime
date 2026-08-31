@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 from execution_manager_interfaces.action import LeasedFollowJointTrajectory
 from execution_manager_interfaces.msg import LeasedJointReference, LeasedPoseReference
-from rmi import ActionProviderClient, EmbodimentConfig
+from rmi import EmbodimentConfig
+from rmi.provider import ActionProviderClient
 from rmi.selection import EndpointBinding, LeaseGrant
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 

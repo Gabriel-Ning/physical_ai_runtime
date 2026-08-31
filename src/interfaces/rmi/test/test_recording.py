@@ -27,7 +27,11 @@ class FakeRecorder:
 
     async def stop_recording(self, *, timeout_s):
         self.calls.append(("stop", timeout_s))
-        return SimpleNamespace(state="idle", episode_path="/episodes/episode_1")
+        return SimpleNamespace(
+            state="ready",
+            finalizer_complete=True,
+            episode_path="/episodes/episode_1",
+        )
 
     async def get_status(self):
         self.calls.append(("status",))
@@ -50,6 +54,7 @@ def test_episode_scope_is_synchronous_and_forwards_per_episode_metadata():
         assert episode.started_status.state == "recording"
 
     assert episode.final_status.episode_path == "/episodes/episode_1"
+    assert episode.validated is True
     assert sdk.calls == [
         ("activate",),
         ("prepare",),
@@ -95,6 +100,7 @@ def test_episode_can_be_discarded_explicitly_without_finalizing():
         assert status.state == "idle"
 
     assert episode.discarded
+    assert episode.validated is False
     assert sdk.calls == [
         ("activate",),
         ("prepare",),
@@ -144,7 +150,6 @@ def test_memory_replay_buffer_step_and_sample():
     sample = buffer.sample(batch_size=4)
     assert len(sample) == 4
     assert all("observation" in item and "action" in item for item in sample)
-
 
 
 def test_episode_validates_task_and_timeout_before_starting():

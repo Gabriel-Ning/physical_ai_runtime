@@ -11,9 +11,8 @@ from typing import Any, Self
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState as RosJointState
 
-from .agent import Agent
 from .config import EmbodimentConfig
-from .provider import ActionProviderClient
+from .node import Node
 from .robot import Robot
 from .selection import AuthorityClient, ExecutionManagerClient
 from .sensing import Camera, Sensor, _node_now_s
@@ -29,7 +28,6 @@ class Context:
         *,
         spin_node: bool = False,
         timeout_sec: float = 5.0,
-        action_client_factory: Any | None = None,
         state_topic: str = "/joint_states",
         provider_selector: Any | None = None,
         recorder_client_factory: Any | None = None,
@@ -50,11 +48,10 @@ class Context:
             clock=lambda: _node_now_s(node),
         )
         self._timeout_sec = timeout_sec
-        self._action_client_factory = action_client_factory
         self._owns_node = owns_node
         self._closed = False
         self._execution_prepared = False
-        self._agents: dict[str, Agent] = {}
+        self._nodes: dict[str, Node] = {}
         self._cameras: dict[str, Camera[Any]] = {}
         self._camera_history_sizes: dict[str, int] = {}
         self._sensors: dict[str, Sensor[Any]] = {}
@@ -81,7 +78,6 @@ class Context:
         node: Any | None = None,
         spin_node: bool = True,
         timeout_sec: float = 5.0,
-        action_client_factory: Any | None = None,
         state_topic: str = "/joint_states",
         recorder_client_factory: Any | None = None,
     ) -> Context:
@@ -105,7 +101,6 @@ class Context:
             node,
             spin_node=spin_node,
             timeout_sec=timeout_sec,
-            action_client_factory=action_client_factory,
             state_topic=state_topic,
             provider_selector=ExecutionManagerClient(
                 config, node, timeout_sec=timeout_sec
@@ -138,7 +133,7 @@ class Context:
 
         When ``prepare_execution`` is true (default), also runs one-shot application
         startup authority recovery: clear leftover EM FAULT after RT faults/restarts.
-        Session claim during the run does not auto-recover.
+        Live transition failures are not auto-recovered during the run.
         """
         # 1. Wait for robot body and hardware readiness
         self.robot.wait_until_ready(
@@ -211,61 +206,27 @@ class Context:
         self._execution_prepared = True
         return snapshot
 
-    def make_agent(
+    def make_node(
         self,
         name: str,
-        *,
-        robot: Robot | None = None,
-        sensors: list[Sensor[Any]] | tuple[Sensor[Any], ...] = (),
-        frequency: float | None = None,
-        source_instance: str | None = None,
-        metadata: Mapping[str, str] | None = None,
-    ) -> Agent:
-        """Construct or reuse an Agent with fixed observation sources."""
-        target_robot = robot if robot is not None else self.robot
-        requested_sensors = tuple(sensors)
-        agent_config = self.profile.agents.get(name)
-        if agent_config is None:
-            raise KeyError(f"agent {name!r} is not declared in the application profile")
-        configured_frequency = (
-            agent_config.frequency if agent_config is not None else None
-        )
-        requested_frequency = configured_frequency if frequency is None else frequency
-        if name in self._agents:
-            agent = self._agents[name]
-            if (
-                agent._robot is not target_robot
-                or agent.sensors != requested_sensors
-                or agent.frequency != requested_frequency
-                or agent.source_instance != (source_instance or name)
-                or agent.metadata != dict(metadata or {})
-            ):
+        producer: Any = None,
+    ) -> Node:
+        """Create or retrieve one action source handle, optionally linked to its producer."""
+        if name in self._nodes:
+            if producer is not None and self._nodes[name].producer is not producer:
                 raise ValueError(
-                    f"agent {name!r} already exists with different robot, sensors, "
-                    "frequency, source_instance, or metadata"
+                    f"node {name!r} already exists with a different producer"
                 )
-            return agent
-        client = ActionProviderClient(
+            return self._nodes[name]
+        result = Node(
             name,
             self.node,
-            agent_config.resources,
-            profile=self.profile,
-            timeout_sec=self._timeout_sec,
-            action_client_factory=self._action_client_factory,
-        )
-        self._agents[name] = Agent(
-            name,
-            client,
             self.profile,
-            source_role=agent_config.source_role,
-            source_instance=source_instance,
-            metadata=dict(metadata or {}),
-            resources=agent_config.resources,
-            frequency=requested_frequency,
-            robot=target_robot,
-            sensors=requested_sensors,
+            self.provider_selector,
+            producer,
         )
-        return self._agents[name]
+        self._nodes[name] = result
+        return result
 
     def make_camera(
         self,
@@ -296,6 +257,7 @@ class Context:
             history_size=history_size,
         )
         self._cameras[name] = camera
+        self.robot._attach_sensor(camera)
         self._camera_history_sizes[name] = history_size
         return camera
 
@@ -333,6 +295,7 @@ class Context:
             history_size=history_size,
         )
         self._sensors[name] = sensor
+        self.robot._attach_sensor(sensor)
         self._sensor_specs[name] = (topic, message_type, history_size)
         return sensor
 
@@ -385,6 +348,9 @@ class Context:
             except Exception:
                 pass
             self._recorder = None
+        for action_node in self._nodes.values():
+            action_node.close()
+        self._nodes.clear()
         if self._executor is not None:
             try:
                 self._executor.shutdown(timeout_sec=0.5)
@@ -461,7 +427,7 @@ def _resolve_profile_path(profile_path: str | Path) -> Path:
     # 1. Search relative to repository workspace apps/profiles or apps/
     workspace_root = Path(__file__).resolve().parents[4]
     for apps_dir in ("apps/profiles", "apps/config", "apps"):
-        app_candidate = workspace_root / apps_dir / candidate.name
+        app_candidate = workspace_root / apps_dir / candidate
         if app_candidate.is_file():
             return app_candidate
 
@@ -500,10 +466,10 @@ def _load_profile(
 
 
 def _profile_command_contracts(profile: EmbodimentConfig) -> dict[str, str]:
-    """Union of Agent resource→contract maps declared in the application profile."""
+    """Union of Node resource→contract maps declared in the application profile."""
     resources: dict[str, str] = {}
-    for agent in profile.agents.values():
-        resources.update(dict(agent.resources))
+    for node in profile.nodes.values():
+        resources.update(dict(node.resources))
     return resources
 
 
@@ -558,7 +524,7 @@ def _resolve_recording_profile(profile: str) -> Path:
         from ament_index_python.packages import get_packages_with_prefixes
 
         for package, prefix in get_packages_with_prefixes().items():
-            candidate = Path(prefix) / "share" / package / "config" / "recording" / filename
+            candidate = Path(prefix) / "share" / package / "recording" / filename
             if candidate.is_file():
                 install_candidates.append(candidate.resolve())
     except (ImportError, OSError):
@@ -568,19 +534,20 @@ def _resolve_recording_profile(profile: str) -> Path:
         if len(install_candidates) > 1:
             rendered = ", ".join(str(path) for path in sorted(install_candidates))
             raise RuntimeError(
-                f"recorder profile {profile!r} is ambiguous across ROS packages: {rendered}"
+                f"recorder profile {profile!r} is ambiguous across ROS packages: "
+                f"{rendered}"
             )
         return install_candidates[0]
 
     workspace_root = Path(__file__).resolve().parents[4]
-    for candidate in workspace_root.glob(f"src/**/config/recording/{filename}"):
-        if candidate.is_file():
-            source_candidates.append(candidate.resolve())
+    candidate = workspace_root / "apps" / "recording" / filename
+    if candidate.is_file():
+        source_candidates.append(candidate.resolve())
 
     if not source_candidates:
         raise FileNotFoundError(
             f"recorder profile {profile!r} was not found under ROS package shares "
-            "or src/**/config/recording"
+            "or apps/recording"
         )
     if len(source_candidates) > 1:
         rendered = ", ".join(str(path) for path in sorted(source_candidates))

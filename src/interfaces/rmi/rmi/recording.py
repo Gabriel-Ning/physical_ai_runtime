@@ -26,6 +26,10 @@ def _run_sync(awaitable: Any, *, context: str = "synchronous RMI call") -> Any:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
+        has_running_loop = False
+    else:
+        has_running_loop = True
+    if not has_running_loop:
         return asyncio.run(awaitable)
     if hasattr(awaitable, "close"):
         awaitable.close()
@@ -35,6 +39,7 @@ def _run_sync(awaitable: Any, *, context: str = "synchronous RMI call") -> Any:
 # =============================================================================
 # Mode 1: MCAP Transactional Recorder (Managed ROS 2 C++ Node Backend)
 # =============================================================================
+
 
 class RecorderServiceClient(Protocol):
     """Service-client contract implemented by the episode_recorder SDK."""
@@ -118,9 +123,7 @@ class EpisodeRecorder:
     @property
     def status(self) -> Any:
         self.activate()
-        return _run_sync(
-            self._client.get_status(), context="synchronous RMI recording"
-        )
+        return _run_sync(self._client.get_status(), context="synchronous RMI recording")
 
     def discard(self) -> Any:
         self.activate()
@@ -203,6 +206,18 @@ class EpisodeScope:
         self._entered = False
         self.discarded = False
 
+    @property
+    def validated(self) -> bool:
+        """Whether recorder finalization and episode validation completed."""
+        status = self.final_status
+        return bool(
+            status is not None
+            and not self.discarded
+            and getattr(status, "state", None) == "ready"
+            and getattr(status, "finalizer_complete", False)
+            and getattr(status, "episode_path", "")
+        )
+
     def discard(self) -> Any:
         if not self._entered:
             raise RuntimeError("episode scope is not active")
@@ -240,7 +255,9 @@ class EpisodeScope:
             if exc_type is not None and not self.discarded:
                 is_interrupt = issubclass(exc_type, KeyboardInterrupt)
                 if is_interrupt:
-                    sys.stdout.write("\n\n[Interrupted] Ctrl+C received. Safely discarding active episode...")
+                    sys.stdout.write(
+                        "\n\n[Interrupted] Ctrl+C received. Safely discarding active episode..."
+                    )
                     sys.stdout.flush()
                 else:
                     _LOGGER.warning("Exception in recording scope: %s", exc)
@@ -256,7 +273,9 @@ class EpisodeScope:
                 except Exception:
                     _LOGGER.exception("failed to discard episode after error")
             elif exc_type is None and not self.discarded:
-                with _FinalizeSpinner("Writing MCAP index, SHA-256 checksums & finalizing episode..."):
+                with _FinalizeSpinner(
+                    "Writing MCAP index, SHA-256 checksums & finalizing episode..."
+                ):
                     self.final_status = _run_sync(
                         self._recorder._client.stop_recording(
                             timeout_s=self.stop_timeout
@@ -270,6 +289,7 @@ class EpisodeScope:
 # =============================================================================
 # Mode 2: In-Memory Replay Buffer (Online RL / crisp_gym)
 # =============================================================================
+
 
 class MemoryReplayBuffer:
     """In-memory paired (observation, action) buffer for gym env / RL training.
@@ -317,8 +337,11 @@ class MemoryReplayBuffer:
     def sample(self, batch_size: int) -> list[dict[str, Any]]:
         """Randomly sample a batch of transitions for policy updates."""
         import random
+
         if len(self.buffer) < batch_size:
-            raise ValueError(f"Not enough samples in buffer ({len(self.buffer)} < {batch_size})")
+            raise ValueError(
+                f"Not enough samples in buffer ({len(self.buffer)} < {batch_size})"
+            )
         return random.sample(list(self.buffer), batch_size)
 
     def __len__(self) -> int:
@@ -336,7 +359,9 @@ class MemoryReplayBuffer:
 class MemoryEpisodeScope:
     """Context scope for memory replay recording."""
 
-    def __init__(self, buffer: MemoryReplayBuffer, *, task: str, metadata: Mapping[str, Any]) -> None:
+    def __init__(
+        self, buffer: MemoryReplayBuffer, *, task: str, metadata: Mapping[str, Any]
+    ) -> None:
         self.buffer = buffer
         self.task = task
         self.metadata = dict(metadata)

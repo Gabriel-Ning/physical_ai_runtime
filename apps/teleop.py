@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import time
-from contextlib import ExitStack
 from typing import Any
 
 import rmi
@@ -133,19 +132,14 @@ def main() -> None:
     # 4. Interactive Teleoperation Session
     qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
     is_active = False
-    sessions: dict[str, rmi.Session] = {}
-    active_stack: ExitStack | None = None
+    teleop_nodes: dict[str, rmi.Node] = {}
+    for name, cfg in teleoperators.items():
+        node_name = cfg.get("target_node") or cfg.get("target_agent", name)
+        teleop_nodes[name] = ctx.make_node(node_name)
 
     def _release_teleop() -> None:
-        nonlocal is_active, active_stack
+        nonlocal is_active
         set_teleop_preempt(ctx.node, teleoperators, False)
-        sessions.clear()
-        if active_stack is not None:
-            try:
-                active_stack.close()
-            except Exception:
-                pass
-            active_stack = None
         is_active = False
 
     try:
@@ -157,9 +151,8 @@ def main() -> None:
 
         def relay(name: str, part: str):
             def callback(msg: JointTrajectory) -> None:
-                session = sessions.get(name)
-                if session is not None and session.active_for(part):
-                    session.act(
+                if is_active and name in teleop_nodes:
+                    teleop_nodes[name].submit(
                         rmi.Action(part=part, command="joint_reference", value=msg)
                     )
 
@@ -190,26 +183,6 @@ def main() -> None:
 
             is_active = not is_active
             if is_active:
-                candidate = ExitStack()
-                try:
-                    for name, cfg in teleoperators.items():
-                        agent = ctx.make_agent(
-                            cfg["target_agent"],
-                            frequency=cfg.get("publish_rate_hz", 200.0),
-                        )
-                        sessions[name] = candidate.enter_context(
-                            agent.run(
-                                ctx.robot,
-                                parts=[cfg["arm_part"], cfg["gripper_part"]],
-                                preempt=True,
-                            )
-                        )
-                except Exception:
-                    sessions.clear()
-                    candidate.close()
-                    is_active = False
-                    raise
-                active_stack = candidate
                 if not set_teleop_preempt(ctx.node, teleoperators, True):
                     _release_teleop()
                     print(

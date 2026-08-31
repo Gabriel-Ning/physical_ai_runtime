@@ -1,75 +1,49 @@
-# Site overlay for RT with_right_gripper:=false. Default profile stays
-# apps/profiles/marvin_bimanual.yaml.
 metadata:
   name: "marvin_bimanual"
   embodiment_type: "bimanual_humanoid"
   vendor: "marvin"
   version: "1.0"
 
-host_roles:
-  rt_host:
-    bringup:
-      package: "marvin_manipulation_rt_launch"
-      launch_file: "rt_stack.launch.py"
-      arguments:
-        use_fake_hardware: false
-        use_rviz: false
-    owns: ["ros2_control", "local_safety"]
-  workstation_host:
-    bringup:
-      package: "marvin_manipulation_workstation_launch"
-      launch_file: "workstation_stack.launch.py"
-    owns: ["rmi", "execution_manager", "action_provider_nodes", "application_nodes", "episode_recorder_client"]
-
 # Routing table lives in the workstation EM config. RMI only consumes it.
 execution_manager_config:
   package: "marvin_manipulation_workstation_launch"
-  file: "config/execution_manager_no_right_gripper.yaml"
+  file: "config/execution_manager.yaml"
 
 compound_groups:
   left_manipulator:
     included_groups: ["left_arm", "left_gripper"]
   right_manipulator:
-    included_groups: ["right_arm"]
+    included_groups: ["right_arm", "right_gripper"]
   dual_arm:
     included_groups: ["left_arm", "right_arm"]
   dual_manipulator:
-    included_groups: ["left_arm", "left_gripper", "right_arm"]
+    included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
 
-agents:
+nodes:
+  DummyPolicy:
+    source_role: POLICY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 30.0
   Policy:
     source_role: POLICY
-    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference}
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 30.0
+  Replay:
+    source_role: MEMORY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
   Planner:
     source_role: PLANNER
-    resources: {left_arm: joint_trajectory, right_arm: joint_trajectory}
+    resources: {left_arm: joint_trajectory, left_gripper: gripper_command, right_arm: joint_trajectory, right_gripper: gripper_command}
     frequency: 30.0
-  TeleopJoint_Left:
+  Quest3Teleop:
     source_role: TELEOP
-    resources: {left_arm: joint_reference, left_gripper: joint_reference}
+    resources: {left_arm: pose_reference, left_gripper: joint_reference, right_arm: pose_reference, right_gripper: joint_reference}
     frequency: 30.0
-  TeleopJoint_Right:
+  TeleopJoint:
     source_role: TELEOP
-    resources: {right_arm: joint_reference}
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
-  TeleopCartesian_Left:
-    source_role: TELEOP
-    resources: {left_arm: pose_reference}
-    frequency: 30.0
-  TeleopCartesian_Right:
-    source_role: TELEOP
-    resources: {right_arm: pose_reference}
-    frequency: 30.0
-  TeleopTwist_Left:
-    source_role: TELEOP
-    resources: {left_arm: twist_reference}
-    frequency: 30.0
-  TeleopTwist_Right:
-    source_role: TELEOP
-    resources: {right_arm: twist_reference}
-    frequency: 30.0
-
 sensors:
   # Wrist stream size/rate live in
   # src/bringup/marvin_manipulation/rt_launch/config/camera/pika_d405.yaml and
@@ -92,20 +66,32 @@ sensors:
     third_person_d435:
       ros_topic: "/third_person_d435/camera/color/image_raw"
 
+homing:
+  duration_s: 8.0
+  # Measured from /joint_states on the real Marvin. Values are keyed by part
+  # so they do not depend on JointState message order.
+  joint_positions:
+    left_arm:
+      [-1.0503277641628497, 1.2404911146950939, 1.566118084866009,
+       -2.086290437405812, 0.48874412219966884, 0.09129618319127784,
+       0.13037110635746443]
+    left_gripper: [0.045]
+    right_arm:
+      [-2.0890998060397363, -1.1433997182018572, 1.526900108337393,
+       -2.0866996321073024, -0.41910032916522466, 0.13079942588453322,
+       -0.21079963654229344]
+    right_gripper: [0.045]
+
 # Stream contract lives in the workstation recording yaml. This block is the
 # RMI recorder client API only.
 recorder:
-  config:
-    package: "marvin_manipulation_workstation_launch"
-    file: "config/recording/marvin_manipulation.yaml"
+  config: "../../recording/marvin_manipulation_no_cam.yaml"
   root_dir: "data/episodes"
   experiment_name: "marvin_bimanual"
   task: "bimanual_manipulation"
   episodes: 5
   rate_hz: 30.0
   max_duration_s: 60.0
-  homing_duration_s: 3.0
-  home_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 features:
   observation:
@@ -135,11 +121,10 @@ features:
       source: "sensors.cameras.third_person_d435"
     "observation.state":
       type: "vector"
-      # 7 left arm + 1 left gripper + 7 right arm (no right gripper).
-      shape: [15]
+      shape: [16]
       units: "rad"
   action:
     "action":
       type: "vector"
-      shape: [15]
+      shape: [16]
       command_contract: "joint_reference"

@@ -24,7 +24,7 @@ class ActionGroup:
 
 @dataclass(frozen=True)
 class PolicyIOContract:
-    """Backend-neutral feature names and action layout for one RMI agent."""
+    """Backend-neutral feature names and action layout for one RMI node."""
 
     profile_name: str
     profile_hash: str
@@ -50,18 +50,18 @@ class PolicyIOContract:
         cls,
         profile: Any,
         *,
-        agent_name: str = "Policy",
+        node_name: str = "Policy",
     ) -> PolicyIOContract:
         """Resolve names once; reject ambiguous contracts before model loading."""
         try:
-            agent = profile.agents[agent_name]
+            node = profile.nodes[node_name]
         except KeyError as exc:
-            raise KeyError(f"profile has no agent {agent_name!r}") from exc
+            raise KeyError(f"profile has no node {node_name!r}") from exc
 
         groups: list[ActionGroup] = []
         action_names: list[str] = []
         offset = 0
-        for part, command in agent.resources.items():
+        for part, command in node.resources.items():
             if command != "joint_reference":
                 raise ValueError(
                     f"LeRobot runtime requires joint_reference resources; "
@@ -71,7 +71,7 @@ class PolicyIOContract:
                 joint_names = tuple(profile.parts[part].joint_names)
             except KeyError as exc:
                 raise KeyError(
-                    f"agent resource references unknown part {part!r}"
+                    f"node resource references unknown part {part!r}"
                 ) from exc
             if not joint_names:
                 raise ValueError(f"part {part!r} has no joints")
@@ -114,9 +114,9 @@ class PolicyIOContract:
             camera_topics[feature_name] = camera.ros_topic
             camera_shapes[feature_name] = (height, width, channels)
         observation_names = tuple(action_names) + tuple(camera_topics)
-        frequency = agent.frequency
+        frequency = node.frequency
         if frequency is None or frequency <= 0.0:
-            raise ValueError(f"agent {agent_name!r} must declare a positive frequency")
+            raise ValueError(f"node {node_name!r} must declare a positive frequency")
 
         declared_action = profile.features.get("action", {}).get("action", {})
         shape = declared_action.get("shape")

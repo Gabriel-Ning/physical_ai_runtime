@@ -81,7 +81,11 @@ def _leased(node, lease_id, marker, joint_name):
 @pytest.mark.parametrize(
     ("profile_name", "joint_name", "em_profile"),
     [
-        ("piper_bimanual.yaml", "left_joint1", None),
+        (
+            "piper_bimanual.yaml",
+            "left_joint1",
+            "src/bringup/piper_manipulation/workstation_launch/config/execution_manager.yaml",
+        ),
         (
             "marvin_bimanual.yaml",
             "Joint1_L",

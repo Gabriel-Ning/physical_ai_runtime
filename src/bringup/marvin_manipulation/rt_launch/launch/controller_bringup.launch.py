@@ -12,6 +12,7 @@ Site defaults for robot_ip / gripper serials match the URDF xacro defaults
 import os
 import tempfile
 
+import xacro
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchContext, LaunchDescription
@@ -27,23 +28,13 @@ from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
-import xacro
 
 
-def _controller_override_yaml(
-    *,
-    with_left_gripper: bool,
-    with_right_gripper: bool,
-) -> str | None:
+def _controller_override_yaml(*, load_pika_hardware: bool) -> str | None:
     overrides: dict[str, dict[str, dict[str, str]]] = {}
-    if not with_left_gripper:
-        overrides["left_arm_tskpc"] = {
-            "ros__parameters": {"tip_frame": "flange_L"}
-        }
-    if not with_right_gripper:
-        overrides["right_arm_tskpc"] = {
-            "ros__parameters": {"tip_frame": "flange_R"}
-        }
+    if not load_pika_hardware:
+        overrides["left_arm_tskpc"] = {"ros__parameters": {"tip_frame": "flange_L"}}
+        overrides["right_arm_tskpc"] = {"ros__parameters": {"tip_frame": "flange_R"}}
     if not overrides:
         return None
     handle, path = tempfile.mkstemp(
@@ -73,9 +64,7 @@ def _resolve_cpu_affinity(context) -> str:
 
 
 def _controller_nodes(context: LaunchContext):
-    bringup_share = get_package_share_directory(
-        "marvin_manipulation_rt_launch"
-    )
+    bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
     marvin_share = get_package_share_directory("marvin_description")
     controllers_yaml = LaunchConfiguration("controllers_yaml")
     cpu_affinity = _resolve_cpu_affinity(context)
@@ -85,15 +74,14 @@ def _controller_nodes(context: LaunchContext):
     cancel_response_timeout_s = float(
         LaunchConfiguration("jtc_guard_cancel_response_timeout_s").perform(context)
     )
+
     def _as_bool(name: str) -> bool:
         return LaunchConfiguration(name).perform(context).strip().lower() in (
             "true",
             "1",
         )
 
-    with_gripper = _as_bool("with_gripper")
-    with_left_gripper = with_gripper and _as_bool("with_left_gripper")
-    with_right_gripper = with_gripper and _as_bool("with_right_gripper")
+    load_pika_hardware = _as_bool("load_pika_hardware")
     use_rviz = _as_bool("use_rviz")
     robot_ip = context.perform_substitution(LaunchConfiguration("robot_ip"))
     left_serial = context.perform_substitution(
@@ -136,15 +124,12 @@ def _controller_nodes(context: LaunchContext):
             ),
             "left_gripper_serial_port": left_serial,
             "right_gripper_serial_port": right_serial,
-            "with_gripper": "true" if with_gripper else "false",
-            "with_left_gripper": "true" if with_left_gripper else "false",
-            "with_right_gripper": "true" if with_right_gripper else "false",
+            "load_pika_hardware": "true" if load_pika_hardware else "false",
         },
     ).toprettyxml(indent="  ")
 
     controller_override_yaml = _controller_override_yaml(
-        with_left_gripper=with_left_gripper,
-        with_right_gripper=with_right_gripper,
+        load_pika_hardware=load_pika_hardware
     )
     controller_parameters: list = [
         {"robot_description": robot_description},
@@ -197,15 +182,22 @@ def _controller_nodes(context: LaunchContext):
         "--remap left_arm_jtc/follow_joint_trajectory:=/execution/left_arm/follow_joint_trajectory",
         "--remap right_arm_jtc/follow_joint_trajectory:=/execution/right_arm/follow_joint_trajectory",
     ]
-    if with_left_gripper:
-        route_controllers.append("left_pika_gripper_fwd")
-        route_remaps.append(
-            "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference"
+    if load_pika_hardware:
+        route_controllers.extend(
+            [
+                "left_pika_gripper_fwd",
+                "left_pika_gripper_action",
+                "right_pika_gripper_fwd",
+                "right_pika_gripper_action",
+            ]
         )
-    if with_right_gripper:
-        route_controllers.append("right_pika_gripper_fwd")
-        route_remaps.append(
-            "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference"
+        route_remaps.extend(
+            [
+                "--remap left_pika_gripper_fwd/commands:=/execution/left_gripper/joint_reference",
+                "--remap left_pika_gripper_action/gripper_cmd:=/execution/left_gripper/gripper_command",
+                "--remap right_pika_gripper_fwd/commands:=/execution/right_gripper/joint_reference",
+                "--remap right_pika_gripper_action/gripper_cmd:=/execution/right_gripper/gripper_command",
+            ]
         )
 
     route_controller_spawner = Node(
@@ -238,12 +230,30 @@ def _controller_nodes(context: LaunchContext):
             LogInfo(
                 msg=(
                     f"Marvin bringup: robot_ip={robot_ip}, "
-                    f"left_gripper={'on:' + left_serial if with_left_gripper else 'off'}, "
-                    f"right_gripper={'on:' + right_serial if with_right_gripper else 'off'}."
+                    f"left_gripper={'on:' + left_serial if load_pika_hardware else 'off'}, "
+                    f"right_gripper={'on:' + right_serial if load_pika_hardware else 'off'}."
                 )
             ),
             robot_state_publisher,
             controller_manager,
+            *(
+                [
+                    Node(
+                        package="rviz2",
+                        executable="rviz2",
+                        name="rviz2",
+                        arguments=[
+                            "--display-config",
+                            PathJoinSubstitution(
+                                [marvin_share, "rviz", "visualize_marvin.rviz"]
+                            ),
+                        ],
+                        output="screen",
+                    )
+                ]
+                if use_rviz
+                else []
+            ),
             *[
                 Node(
                     package="joint_trajectory_controller_guard",
@@ -289,25 +299,11 @@ def _controller_nodes(context: LaunchContext):
         ]
     )
 
-    if use_rviz:
-        rviz_config = os.path.join(marvin_share, "rviz", "visualize_marvin.rviz")
-        rviz_args = ["-d", rviz_config] if os.path.exists(rviz_config) else []
-        rviz_node = Node(
-            package="rviz2",
-            executable="rviz2",
-            name="rviz2",
-            arguments=rviz_args,
-            output="screen",
-        )
-        actions.append(rviz_node)
-
     return actions
 
 
 def generate_launch_description() -> LaunchDescription:
-    bringup_share = get_package_share_directory(
-        "marvin_manipulation_rt_launch"
-    )
+    bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
     marvin_share = get_package_share_directory("marvin_description")
 
     return LaunchDescription(
@@ -369,31 +365,17 @@ def generate_launch_description() -> LaunchDescription:
                 description="Right Pika gripper serial (udev /dev/pika_right_gripper).",
             ),
             DeclareLaunchArgument(
-                "with_gripper",
+                "load_pika_hardware",
                 default_value="true",
                 description=(
-                    "Whether Pika grippers are installed on the arms. "
-                    "When true, gripper ros2_control and forward controllers "
-                    "are loaded; fake vs real follows use_fake_hardware. "
-                    "When false, gripper URDF, ros2_control, and forward "
-                    "controllers are omitted."
+                    "Load both Pika grippers, their ros2_control hardware, and "
+                    "controllers. Set false to omit both sides."
                 ),
             ),
             DeclareLaunchArgument(
-                "with_left_gripper",
-                default_value="true",
-                description=(
-                    "Enable left Pika gripper ros2_control + "
-                    "left_pika_gripper_fwd (requires with_gripper:=true)."
-                ),
-            ),
-            DeclareLaunchArgument(
-                "with_right_gripper",
-                default_value="true",
-                description=(
-                    "Enable right Pika gripper ros2_control + "
-                    "right_pika_gripper_fwd (requires with_gripper:=true)."
-                ),
+                "use_rviz",
+                default_value="false",
+                description="Whether to launch RViz2 for visualization and debugging.",
             ),
             DeclareLaunchArgument(
                 "robot_ip",
@@ -437,11 +419,6 @@ def generate_launch_description() -> LaunchDescription:
                 "jtc_guard_cancel_response_timeout_s",
                 default_value="0.5",
                 description="Maximum wait for a local JTC cancel response.",
-            ),
-            DeclareLaunchArgument(
-                "use_rviz",
-                default_value="false",
-                description="Whether to launch RViz2 for visualization and debugging.",
             ),
             OpaqueFunction(function=_controller_nodes),
         ]

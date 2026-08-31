@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -31,9 +30,7 @@ class LeRobotPolicyNode:
         checkpoint: str,
         task: str,
         device: str = "cuda",
-        agent_name: str = "Policy",
-        publish_to_robot: bool = False,
-        preempt: bool = False,
+        node_name: str = "Policy",
         max_observation_age_s: float = 0.5,
         expected_policy_type: str | None = None,
     ) -> None:
@@ -48,7 +45,7 @@ class LeRobotPolicyNode:
         self.node = node
         self.context = rmi.Context.from_profile(profile, node=node, spin_node=False)
         self.contract = PolicyIOContract.from_profile(
-            self.context.profile, agent_name=agent_name
+            self.context.profile, node_name=node_name
         )
         self.bundle, self.compatibility = load_validated_policy_bundle(
             self.contract,
@@ -63,8 +60,6 @@ class LeRobotPolicyNode:
                 camera_name, converter=ros_image_to_numpy, history_size=1
             )
 
-        self._publish_to_robot = publish_to_robot
-        self._preempt = preempt
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._observation_bridge = RmiToLeRobotObservationBridge(
@@ -84,10 +79,7 @@ class LeRobotPolicyNode:
             robot_type="rmi",
         )
         self._dataset_features = dataset_features
-        self._agent = self.context.make_agent(
-            agent_name,
-            sensors=tuple(self._cameras.values()),
-        )
+        self._policy_node = self.context.make_node(node_name, self)
 
     def start(self) -> None:
         if self._thread is not None:
@@ -108,51 +100,33 @@ class LeRobotPolicyNode:
         self.context.close()
 
     def _run(self) -> None:
-        from lerobot.utils.constants import OBS_STR
-        from lerobot.utils.feature_utils import build_dataset_frame
-
-        control = (
-            self._agent.run(
-                self.context.robot,
-                preempt=self._preempt,
-                frequency=self.contract.frequency,
-            )
-            if self._publish_to_robot
-            else nullcontext(None)
-        )
         self._engine.start()
         try:
-            self.context.robot.wait_until_ready(timeout=30.0)
-            for camera in self._cameras.values():
-                camera.wait_until_ready(timeout=30.0)
-            with control as session:
-                while not self._stop.is_set():
-                    observation = (
-                        session.observe()
-                        if session is not None
-                        else self._agent.observe()
-                    )
-                    raw = self._observation_bridge.encode(observation)
-                    frame = build_dataset_frame(
-                        self._dataset_features, raw, prefix=OBS_STR
-                    )
-                    action = self._engine.get_action(frame)
-                    if action is not None:
-                        actions = self._action_bridge.decode(action)
-                        if session is not None:
-                            for rmi_action in actions:
-                                self.context.robot.send_action(
-                                    rmi_action,
-                                    observation=observation,
-                                )
-                    if session is not None:
-                        session.wait()
-                    else:
-                        self._stop.wait(1.0 / self.contract.frequency)
+            self.context.wait_until_ready(
+                timeout=30.0,
+                check_cameras=True,
+                require_execution_manager=True,
+            )
+            while not self._stop.is_set():
+                observation = self.context.robot.get_observation()
+                actions = self.select_action(observation)
+                if actions is not None:
+                    self._policy_node.submit(actions)
+                self._stop.wait(1.0 / self.contract.frequency)
         except BaseException:
             if not self._stop.is_set():
                 _LOGGER.exception("policy inference stopped")
                 self._stop.set()
+
+    def select_action(self, observation: Any) -> Any:
+        """Run one LeRobot inference and return native RMI actions."""
+        from lerobot.utils.constants import OBS_STR
+        from lerobot.utils.feature_utils import build_dataset_frame
+
+        raw = self._observation_bridge.encode(observation)
+        frame = build_dataset_frame(self._dataset_features, raw, prefix=OBS_STR)
+        action = self._engine.get_action(frame)
+        return None if action is None else self._action_bridge.decode(action)
 
 
 def main(args: list[str] | None = None) -> None:
@@ -169,8 +143,6 @@ def main(args: list[str] | None = None) -> None:
     parser.add_argument("--task", required=True)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--policy-type", default=None)
-    parser.add_argument("--publish-to-robot", action="store_true")
-    parser.add_argument("--preempt", action="store_true")
     parsed = parser.parse_args(args)
 
     rclpy.init()
@@ -181,8 +153,6 @@ def main(args: list[str] | None = None) -> None:
         checkpoint=parsed.checkpoint,
         task=parsed.task,
         device=parsed.device,
-        publish_to_robot=parsed.publish_to_robot,
-        preempt=parsed.preempt,
         expected_policy_type=parsed.policy_type,
     )
     executor = MultiThreadedExecutor(num_threads=4)

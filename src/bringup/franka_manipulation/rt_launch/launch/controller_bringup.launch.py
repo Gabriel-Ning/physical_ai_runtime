@@ -96,12 +96,12 @@ def _launch_setup(context, *args, **kwargs):
     ).toprettyxml(indent="  ")
 
     route_controllers = [
-        "franka_arm_tsjic",
-        "franka_arm_jsic",
+        "franka_arm_tskpc",
+        "franka_arm_jspc",
         "franka_arm_jtc",
     ]
     if load_pika:
-        route_controllers.append("pika_gripper_fwd")
+        route_controllers.extend(["pika_gripper_fwd", "pika_gripper_action"])
 
     actions = []
     if cpu_affinity:
@@ -196,8 +196,11 @@ def _launch_setup(context, *args, **kwargs):
         "--remap franka_arm_jtc/follow_joint_trajectory:=/execution/arm/follow_joint_trajectory",
     ]
     if load_pika:
-        route_remaps.append(
-            "--remap pika_gripper_fwd/commands:=/execution/end_effector/joint_reference"
+        route_remaps.extend(
+            [
+                "--remap pika_gripper_fwd/commands:=/execution/end_effector/joint_reference",
+                "--remap pika_gripper_action/gripper_cmd:=/execution/end_effector/gripper_command",
+            ]
         )
     route_controller_spawner = Node(
         package="controller_manager",

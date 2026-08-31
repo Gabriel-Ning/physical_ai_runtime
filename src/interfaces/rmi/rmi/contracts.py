@@ -28,7 +28,7 @@ class PlanPoint:
 
 @dataclass
 class PlanResult:
-    """Backend-neutral trajectory result consumed by an RMI Agent."""
+    """Backend-neutral trajectory result consumed by an RMI Node."""
 
     valid: bool = True
     reason: str = ""

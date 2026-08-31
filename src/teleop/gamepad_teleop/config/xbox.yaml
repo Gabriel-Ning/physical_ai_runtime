@@ -1,0 +1,56 @@
+gamepad_teleop:
+  ros__parameters:
+    # ── Clutch / Preemption ──────────────────────────────────────────────────
+    clutch_button: 9              # Xbox LB (SDL button 9 / joydev button 4 fallback)
+    clutch_axis: -1
+    require_clutch: true          # Arm twist commands only active when clutch is held
+    require_clutch_for_gripper: false  # Gripper can be operated freely
+
+    turbo_button: -1              # Optional turbo button
+    turbo_axis: 4                 # Xbox LT trigger (SDL axis 4 / joydev axis 2)
+    turbo_multiplier: 2.0
+    trigger_threshold: 0.2
+
+    # ── 6-DoF Cartesian Twist Mapping (TSKPC) ────────────────────────────────
+    axis_linear:
+      x: 1                        # Left stick Y: Forward / Backward (+forward)
+      y: 0                        # Left stick X: Left / Right (+left)
+      z: 3                        # Right stick Y: Up / Down (+up)
+
+    axis_angular:
+      yaw: 2                      # Right stick X: Yaw rotation (+CCW, -CW)
+      pitch: -1                   # -1 = use D-pad Up (+Pitch) / Down (-Pitch)
+      roll: -1                    # -1 = use D-pad Left (-Roll) / Right (+Roll)
+
+    axis_dpad_x: 6                # Linux joydev D-pad X axis fallback
+    axis_dpad_y: 7                # Linux joydev D-pad Y axis fallback
+
+    scale_linear:
+      x: 0.15                     # Linear X speed (m/s)
+      y: 0.15                     # Linear Y speed (m/s)
+      z: 0.10                     # Linear Z speed (m/s)
+    scale_angular:
+      yaw: 0.35                   # Angular Yaw speed (rad/s)
+      pitch: 0.35                 # Angular Pitch speed (rad/s)
+      roll: 0.35                  # Angular Roll speed (rad/s)
+
+    deadzone: 0.05                # Joystick deadzone threshold (0.0 to 1.0)
+    frame_id: "base_link"         # Target frame ID for TwistStamped
+
+    # ── Continuous Gripper Control ───────────────────────────────────────────
+    gripper_open_button: 1        # Xbox B button: Continuously Open
+    gripper_close_button: 3       # Xbox Y button: Continuously Close
+    gripper_close_axis: -1
+    gripper_joint_name: "gripper_joint1"
+    gripper_speed_m_per_s: 0.025  # Smooth continuous servo speed (25 mm/s)
+    gripper_min_width: 0.000      # Fully closed width (m)
+    gripper_max_width: 0.040      # Fully opened width (m)
+    gripper_initial_width: 0.000  # Initial width (0.0 m)
+
+    # ── Output Topics & Rate ─────────────────────────────────────────────────
+    publish_rate_hz: 100.0
+    autostart: true
+    twist_topic: "/action_sources/gamepad/arm/twist"
+    gripper_topic: "/action_sources/gamepad/end_effector/joint_reference"
+    clutch_topic: "/teleop/gamepad/clutch"
+    status_topic: "/teleop/gamepad/status"

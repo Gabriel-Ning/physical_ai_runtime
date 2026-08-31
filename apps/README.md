@@ -122,3 +122,7 @@ All applications are fully decoupled and driven by YAML Embodiment Profiles stor
 * `piper_bimanual.yaml` — Dual-arm Piper bimanual setup with master-slave leader teleoperation.
 * `fr3_pika_single_arm.yaml` — Single-arm Franka Research 3 with Pika Gripper.
 * `marvin_bimanual.yaml` — Marvin humanoid dual-arm bimanual setup.
+
+Recording stream contracts live in `apps/recording/`. Profiles select one of
+these contracts, which RMI injects dynamically when the recorder is prepared;
+workstation recorder launch files only start the generic daemon.

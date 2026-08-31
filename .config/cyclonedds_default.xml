@@ -10,16 +10,16 @@
             xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
   <Domain id="any">
     <General>
-      <Interfaces>
+      <!-- <Interfaces>
         <NetworkInterface address="192.168.1.13" />
-      </Interfaces>
+      </Interfaces> -->
       <AllowMulticast>true</AllowMulticast>
     </General>
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
-      <Peers>
+      <!-- <Peers>
         <Peer address="192.168.1.102" />
-      </Peers>
+      </Peers> -->
     </Discovery>
     <Internal>
       <SocketReceiveBufferSize min="10MiB" max="10MiB" />

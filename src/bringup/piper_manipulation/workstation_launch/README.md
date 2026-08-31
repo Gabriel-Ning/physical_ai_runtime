@@ -10,7 +10,8 @@ RT Host stack: sibling package `piper_manipulation_rt_launch`.
 
 ## Config
 
-- `config/recording/rmi_piper_bimanual.yaml` — MCAP stream contract
+- `apps/recording/piper_bimanual.yaml` — application-selected MCAP stream contract
+- `config/execution_manager.yaml` — controller routing and source admission
 - `config/camera/femto_bolt.yaml` — static Orbbec cell camera
 - `config/camera/d435i_dual.yaml` — left/right wrist RealSense streams
 - `config/teleop/piper_leaders.yaml` — leader CAN defaults
@@ -24,6 +25,37 @@ Full workstation stack:
 ```bash
 ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py
 ```
+
+Fake hardware、无相机验证（两个终端；默认加载双臂和双夹爪）：
+
+```bash
+# Terminal 1: RT host
+source install/setup.bash
+ros2 launch piper_manipulation_rt_launch rt_stack.launch.py \
+  use_fake_hardware:=true use_rviz:=true load_gripper_hardware:=true \
+  cpu_affinity:=none
+```
+
+```bash
+# Terminal 2: workstation（无 Orbbec、无 RealSense、无真实 leader）
+source install/setup.bash
+ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py \
+  with_orbbec:=false with_realsense:=false with_leaders:=false
+```
+
+随后运行 leader relay API 示例时，需要另外启动真实 leader；纯 fake hardware
+检查可先验证 homing profile、EM、recorder 和控制器：
+
+```bash
+ros2 control list_controllers
+ros2 action list | grep -E 'left_gripper|right_gripper'
+ros2 topic echo /joint_states --once
+```
+
+当前 fake hardware 启动姿态已经写入 `apps/profiles/piper_bimanual.yaml`
+的 `homing.joint_positions`：双臂 12 个关节和双夹爪均为 `0.0`。
+`recorder.rate_hz` 为 `50.0`，`max_duration_s` 为 `60.0`；相机流在录制
+contract 中为 optional，因此上述无相机启动不会阻塞录制 start gate。
 
 Peripheral entrypoints:
 

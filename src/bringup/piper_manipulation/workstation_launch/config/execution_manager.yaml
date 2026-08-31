@@ -1,0 +1,118 @@
+metadata: {name: piper_bimanual, version: "2.0"}
+max_command_age_s: 0.25
+
+sources:
+  Policy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      left_arm: {command_contract: joint_reference, topic: /action_sources/policy/left_arm/joint_reference}
+      left_gripper: {command_contract: joint_reference, topic: /action_sources/policy/left_gripper/joint_reference}
+      right_arm: {command_contract: joint_reference, topic: /action_sources/policy/right_arm/joint_reference}
+      right_gripper: {command_contract: joint_reference, topic: /action_sources/policy/right_gripper/joint_reference}
+  Planner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      left_arm: {command_contract: joint_trajectory, action: /action_sources/planner/left_arm/follow_joint_trajectory}
+      left_gripper: {command_contract: gripper_command, action: /action_sources/planner/left_gripper/gripper_command}
+      right_arm: {command_contract: joint_trajectory, action: /action_sources/planner/right_arm/follow_joint_trajectory}
+      right_gripper: {command_contract: gripper_command, action: /action_sources/planner/right_gripper/gripper_command}
+  TeleopJoint_Left:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      left_arm: {command_contract: joint_reference, topic: /action_sources/teleop_joint_left/left_arm/joint_reference}
+      left_gripper: {command_contract: joint_reference, topic: /action_sources/teleop_joint_left/left_gripper/joint_reference}
+  TeleopJoint_Right:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      right_arm: {command_contract: joint_reference, topic: /action_sources/teleop_joint_right/right_arm/joint_reference}
+      right_gripper: {command_contract: joint_reference, topic: /action_sources/teleop_joint_right/right_gripper/joint_reference}
+  TeleopCartesian_Left:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      left_arm: {command_contract: pose_reference, topic: /action_sources/teleop_cartesian_left/left_arm/pose_reference}
+  TeleopCartesian_Right:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      right_arm: {command_contract: pose_reference, topic: /action_sources/teleop_cartesian_right/right_arm/pose_reference}
+  TeleopTwist_Left:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      left_arm: {command_contract: twist_reference, topic: /action_sources/teleop_twist_left/left_arm/twist_reference}
+  TeleopTwist_Right:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      right_arm: {command_contract: twist_reference, topic: /action_sources/teleop_twist_right/right_arm/twist_reference}
+
+groups:
+  left_arm:
+    type: arm
+    joint_names: [left_joint1, left_joint2, left_joint3, left_joint4, left_joint5, left_joint6]
+    base_frame: left_base_link
+    flange_frame: left_flange_link
+    tcp_frame: left_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_trajectory
+    controllers:
+      joint_trajectory:
+        name: left_arm_jtc
+        ros_actions: {follow_joint_trajectory: /execution/left_arm/follow_joint_trajectory}
+        ros_topics: {trajectory_guard_heartbeat: /execution/left_arm/trajectory_guard_heartbeat}
+      joint_space_reference:
+        name: left_arm_jspc
+        ros_topics: {joint_reference: /execution/left_arm/joint_reference}
+      task_space_reference:
+        name: left_arm_tskpc
+        ros_topics: {pose_reference: /execution/left_arm/pose_reference, twist_reference: /execution/left_arm/twist_reference}
+  left_gripper:
+    type: parallel_gripper
+    joint_names: [left_gripper_joint1]
+    parent_group: left_arm
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: left_gripper_fwd
+        ros_topics: {joint_reference: /execution/left_gripper/joint_reference}
+      gripper_command:
+        name: left_gripper_action
+        ros_actions: {gripper_command: /execution/left_gripper/gripper_command}
+  right_arm:
+    type: arm
+    joint_names: [right_joint1, right_joint2, right_joint3, right_joint4, right_joint5, right_joint6]
+    base_frame: right_base_link
+    flange_frame: right_flange_link
+    tcp_frame: right_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_trajectory
+    controllers:
+      joint_trajectory:
+        name: right_arm_jtc
+        ros_actions: {follow_joint_trajectory: /execution/right_arm/follow_joint_trajectory}
+        ros_topics: {trajectory_guard_heartbeat: /execution/right_arm/trajectory_guard_heartbeat}
+      joint_space_reference:
+        name: right_arm_jspc
+        ros_topics: {joint_reference: /execution/right_arm/joint_reference}
+      task_space_reference:
+        name: right_arm_tskpc
+        ros_topics: {pose_reference: /execution/right_arm/pose_reference, twist_reference: /execution/right_arm/twist_reference}
+  right_gripper:
+    type: parallel_gripper
+    joint_names: [right_gripper_joint1]
+    parent_group: right_arm
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: right_gripper_fwd
+        ros_topics: {joint_reference: /execution/right_gripper/joint_reference}
+      gripper_command:
+        name: right_gripper_action
+        ros_actions: {gripper_command: /execution/right_gripper/gripper_command}

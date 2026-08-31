@@ -14,10 +14,10 @@ def test_server_configures_three_arm_routes_and_pika_gripper() -> None:
     config = _load_config("controller", "controllers.yaml")
     manager = config["controller_manager"]["ros__parameters"]
 
-    assert manager["franka_arm_jsic"]["type"] == (
+    assert manager["franka_arm_jspc"]["type"] == (
         "manipulation_position_controllers/JointSpaceImpedanceController"
     )
-    assert manager["franka_arm_tsjic"]["type"] == (
+    assert manager["franka_arm_tskpc"]["type"] == (
         "manipulation_position_controllers/TaskSpaceJointImpedanceController"
     )
     assert manager["franka_arm_jtc"]["type"] == (
@@ -29,6 +29,9 @@ def test_server_configures_three_arm_routes_and_pika_gripper() -> None:
     assert manager["pika_gripper_fwd"]["type"] == (
         "forward_command_controller/ForwardCommandController"
     )
+    assert manager["pika_gripper_action"]["type"] == (
+        "parallel_gripper_action_controller/GripperActionController"
+    )
     assert config["pika_gripper_fwd"]["ros__parameters"] == {
         "joints": ["gripper_left_joint"],
         "interface_name": "position",
@@ -39,10 +42,10 @@ def test_fake_hardware_uses_position_command_controllers() -> None:
     config = _load_config("controller", "controllers_fake.yaml")
     manager = config["controller_manager"]["ros__parameters"]
 
-    assert manager["franka_arm_jsic"]["type"] == (
+    assert manager["franka_arm_jspc"]["type"] == (
         "manipulation_position_controllers/JointSpacePositionController"
     )
-    assert manager["franka_arm_tsjic"]["type"] == (
+    assert manager["franka_arm_tskpc"]["type"] == (
         "manipulation_position_controllers/TaskSpaceKinematicPositionController"
     )
     assert manager["franka_arm_jtc"]["type"] == (
@@ -72,9 +75,15 @@ def _collect_topic_params(config: dict) -> dict[str, str]:
 
 def test_real_and_fake_share_controller_names() -> None:
     skip = {"update_rate", "thread_priority", "overruns"}
-    real = set(_load_config("controller", "controllers.yaml")["controller_manager"]["ros__parameters"])
+    real = set(
+        _load_config("controller", "controllers.yaml")["controller_manager"][
+            "ros__parameters"
+        ]
+    )
     fake = set(
-        _load_config("controller", "controllers_fake.yaml")["controller_manager"]["ros__parameters"]
+        _load_config("controller", "controllers_fake.yaml")["controller_manager"][
+            "ros__parameters"
+        ]
     )
     assert real - skip == fake - skip
 
@@ -85,25 +94,25 @@ def test_real_and_fake_share_execution_command_topics() -> None:
     assert _collect_topic_params(real) == _collect_topic_params(fake)
     topics = _collect_topic_params(real)
     assert topics == {
-        "franka_arm_jsic.ros__parameters.input_topic": "/execution/arm/joint_reference",
-        "franka_arm_tsjic.ros__parameters.input_topic": "/execution/arm/pose_reference",
-        "franka_arm_tsjic.ros__parameters.twist_topic": "/execution/arm/twist_reference",
+        "franka_arm_jspc.ros__parameters.input_topic": "/execution/arm/joint_reference",
+        "franka_arm_tskpc.ros__parameters.input_topic": "/execution/arm/pose_reference",
+        "franka_arm_tskpc.ros__parameters.twist_topic": "/execution/arm/twist_reference",
     }
     for topic in topics.values():
         assert topic.startswith("/execution/")
         assert not topic.startswith("/execution_manager/")
     for config in (real, fake):
-        jsic = config["franka_arm_jsic"]["ros__parameters"]
-        tsjic = config["franka_arm_tsjic"]["ros__parameters"]
-        assert "pose_topic" not in tsjic
-        assert "robot_time_interface" not in jsic
-        assert "robot_time_interface" not in tsjic
+        jspc = config["franka_arm_jspc"]["ros__parameters"]
+        tskpc = config["franka_arm_tskpc"]["ros__parameters"]
+        assert "pose_topic" not in tskpc
+        assert "robot_time_interface" not in jspc
+        assert "robot_time_interface" not in tskpc
 
 
 def test_all_reference_routes_reject_zero_stamps() -> None:
     for config_name in ("controllers.yaml", "controllers_fake.yaml"):
         config = _load_config("controller", config_name)
-        for controller in ("franka_arm_jsic", "franka_arm_tsjic"):
+        for controller in ("franka_arm_jspc", "franka_arm_tskpc"):
             assert (
                 config[controller]["ros__parameters"]["reject_zero_stamped_references"]
                 is True
@@ -112,15 +121,19 @@ def test_all_reference_routes_reject_zero_stamps() -> None:
 
 def test_manipulation_routes_do_not_switch_to_jtc_on_error() -> None:
     for config_name in ("controllers.yaml", "controllers_fake.yaml"):
-        manager = _load_config("controller", config_name)["controller_manager"]["ros__parameters"]
-        for controller in ("franka_arm_jsic", "franka_arm_tsjic"):
+        manager = _load_config("controller", config_name)["controller_manager"][
+            "ros__parameters"
+        ]
+        for controller in ("franka_arm_jspc", "franka_arm_tskpc"):
             assert "fallback_controllers" not in manager[controller]
 
 
 def test_jtc_cancel_uses_profile_specific_deceleration() -> None:
     expected = [3.75, 1.875, 2.5, 3.125, 3.75, 5.0, 5.0]
     for config_name in ("controllers.yaml", "controllers_fake.yaml"):
-        params = _load_config("controller", config_name)["franka_arm_jtc"]["ros__parameters"]
+        params = _load_config("controller", config_name)["franka_arm_jtc"][
+            "ros__parameters"
+        ]
         assert params["state_interfaces"] == ["position", "velocity"]
         constraints = params["constraints"]
         assert constraints["decelerate_on_cancel"] is True
@@ -142,10 +155,11 @@ def test_bringup_leaves_execution_to_rmi_deployment() -> None:
     assert 'LaunchConfiguration("controllers_yaml")' in source
     assert "controllers_fake.yaml" in source
     for controller in (
-        "franka_arm_tsjic",
-        "franka_arm_jsic",
+        "franka_arm_tskpc",
+        "franka_arm_jspc",
         "franka_arm_jtc",
         "pika_gripper_fwd",
+        "pika_gripper_action",
     ):
         assert f'"{controller}"' in source
     assert '"--inactive"' in source
@@ -160,6 +174,10 @@ def test_bringup_leaves_execution_to_rmi_deployment() -> None:
     )
     assert (
         "--remap pika_gripper_fwd/commands:=/execution/end_effector/joint_reference"
+        in source
+    )
+    assert (
+        "--remap pika_gripper_action/gripper_cmd:=/execution/end_effector/gripper_command"
         in source
     )
 
@@ -181,6 +199,7 @@ def test_package_xml_declares_runtime_plugins() -> None:
         "franka_hardware",
         "manipulation_position_controllers",
         "pika_gripper_hardware_interface",
+        "parallel_gripper_action_controller",
         "joint_trajectory_controller_guard",
     ):
         assert f"<exec_depend>{dep}</exec_depend>" in text
@@ -231,9 +250,7 @@ def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
 def test_readme_matches_launch_files_and_udev_names() -> None:
     readme = (PACKAGE_ROOT / "README.md").read_text(encoding="utf-8")
     bringup = (PACKAGE_ROOT / "docs" / "BRINGUP.md").read_text(encoding="utf-8")
-    stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(
-        encoding="utf-8"
-    )
+    stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
     launch_names = {path.name for path in (PACKAGE_ROOT / "launch").glob("*.py")}
     for text in (readme, bringup):
         assert "/dev/pika_left_gripper" in text

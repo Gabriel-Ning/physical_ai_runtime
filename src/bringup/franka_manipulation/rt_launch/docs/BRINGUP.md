@@ -19,8 +19,8 @@ Launch 命令见 [../README.md](../README.md)。RT 主机用 Pixi **`cpu`** 环�
 
 ## Controllers that are spawned
 
-Serialized: `joint_state_broadcaster` → inactive `franka_arm_tsjic` /
-`franka_arm_jsic` / `franka_arm_jtc`。`load_pika_hardware:=true` 时还有
+Serialized: `joint_state_broadcaster` → inactive `franka_arm_tskpc` /
+`franka_arm_jspc` / `franka_arm_jtc`。`load_pika_hardware:=true` 时还有
 `pika_gripper_fwd`（同样 inactive）。
 
 **Not spawned:** `franka_robot_state_broadcaster`。EM / RMI 只需要 `/joint_states`。
@@ -39,8 +39,8 @@ joint_state_publisher    source_list:
 
 | Role | Real HW | Fake HW |
 |---|---|---|
-| Policy | `franka_arm_jsic` effort | 同名，位置 |
-| Teleop | `franka_arm_tsjic` effort | 同名，位置 |
+| Policy | `franka_arm_jspc` effort | 同名，位置 |
+| Teleop | `franka_arm_tskpc` effort | 同名，位置 |
 | Planner | `franka_arm_jtc` effort | 同名，位置 |
 
 `use_fake_hardware:=true` 加载 `config/controller/controllers_fake.yaml`。名字和 `/execution/...` endpoint 不变。

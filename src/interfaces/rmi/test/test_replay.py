@@ -1,9 +1,12 @@
 from copy import deepcopy
 
+import pytest
 from rmi import (
     ActionTimestampRebaser,
     McapActionSource,
     RecordedAction,
+    ReplayClockJumpError,
+    ReplayPacer,
     ReplayPlayer,
 )
 from trajectory_msgs.msg import JointTrajectory
@@ -73,6 +76,57 @@ def test_player_replays_at_one_x():
     assert emitted[0].header.stamp.nanosec == 1_000
     assert emitted[1].header.stamp.nanosec == 1_100
     assert sleeps == [0.0000001]
+
+
+def test_sim_replay_waits_for_clock_start_and_pause_then_resumes():
+    clock_values = iter([0, 0, 1_000, 1_000, 1_000, 1_100])
+    sleeps = []
+    pacer = ReplayPacer(
+        ros_clock_ns=lambda: next(clock_values),
+        use_sim_time=True,
+        sleep=sleeps.append,
+        poll_interval_s=0.01,
+    )
+
+    assert pacer.start() == 1_000
+    pacer.wait_until(0.0000001)
+
+    assert sleeps == [0.01, 0.01, 0.01, 0.01]
+
+
+def test_sim_replay_rejects_backward_clock_jump():
+    clock_values = iter([1_000, 900])
+    pacer = ReplayPacer(
+        ros_clock_ns=lambda: next(clock_values),
+        use_sim_time=True,
+        sleep=lambda _: None,
+    )
+    pacer.start()
+
+    with pytest.raises(ReplayClockJumpError, match="moved backwards"):
+        pacer.wait_until(0.0000001)
+
+
+def test_player_follows_sim_clock_instead_of_steady_clock():
+    clock_values = iter([1_000, 1_000, 1_000, 1_100])
+    sleeps = []
+    source = FakeSource(
+        [RecordedAction(100, _trajectory()), RecordedAction(200, _trajectory())]
+    )
+    player = ReplayPlayer(
+        source,
+        ros_clock_ns=lambda: next(clock_values),
+        steady_clock_ns=lambda: 2_000,
+        sleep=sleeps.append,
+        use_sim_time=True,
+        poll_interval_s=0.02,
+    )
+    player.open()
+
+    emitted = list(player)
+
+    assert [message.header.stamp.nanosec for message in emitted] == [1_000, 1_100]
+    assert sleeps == [0.02]
 
 
 class FakeReader:

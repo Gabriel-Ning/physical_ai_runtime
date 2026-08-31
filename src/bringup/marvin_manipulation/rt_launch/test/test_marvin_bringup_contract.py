@@ -28,6 +28,9 @@ def test_three_position_routes_are_configured_per_arm() -> None:
         assert params[f"{side}_pika_gripper_fwd"]["type"] == (
             "forward_command_controller/ForwardCommandController"
         )
+        assert params[f"{side}_pika_gripper_action"]["type"] == (
+            "parallel_gripper_action_controller/GripperActionController"
+        )
 
 
 def test_execution_command_topics_use_group_namespace() -> None:
@@ -74,6 +77,16 @@ def test_pika_gripper_forward_controller_contract() -> None:
         params = controllers[f"{side}_pika_gripper_fwd"]["ros__parameters"]
         assert params["joints"] == [f"{side}_gripper_left_joint"]
         assert params["interface_name"] == "position"
+
+
+def test_pika_gripper_action_controller_contract() -> None:
+    controllers = _load_config("controller", "controllers.yaml")
+
+    for side in ("left", "right"):
+        params = controllers[f"{side}_pika_gripper_action"]["ros__parameters"]
+        assert params["joint"] == f"{side}_gripper_left_joint"
+        assert params["state_interfaces"] == ["position", "velocity"]
+        assert params["allow_stalling"] is True
 
 
 def test_pika_finger_travel_matches_vendor_default() -> None:
@@ -129,7 +142,9 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
     )
     assert "/execution/left_gripper/joint_reference" in launch_source
     assert "/execution/right_gripper/joint_reference" in launch_source
-    assert '"with_gripper"' in launch_source
+    assert "/execution/left_gripper/gripper_command" in launch_source
+    assert "/execution/right_gripper/gripper_command" in launch_source
+    assert '"load_pika_hardware"' in launch_source
     for argument in (
         "connected_to",
         "xyz",
@@ -139,9 +154,8 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
         "stale_warn_ms",
         "stale_error_ms",
         "max_joint_velocity",
-        "with_gripper",
-        "with_left_gripper",
-        "with_right_gripper",
+        "load_pika_hardware",
+        "use_rviz",
         "left_gripper_serial_port",
         "right_gripper_serial_port",
     ):
@@ -176,7 +190,11 @@ def _run_xacro(*args: str) -> str:
         ),
         PACKAGE_ROOT.parents[4] / "install",
     )
-    installed_prefixes = [str(p) for p in install_root.iterdir() if p.is_dir()] if install_root.is_dir() else []
+    installed_prefixes = (
+        [str(p) for p in install_root.iterdir() if p.is_dir()]
+        if install_root.is_dir()
+        else []
+    )
     existing_prefix = env.get("AMENT_PREFIX_PATH", "")
     prefix_list = [p for p in installed_prefixes if p not in existing_prefix]
     if existing_prefix:
@@ -226,13 +244,13 @@ def test_bimanual_manipulation_dual_pika_control_contract() -> None:
         assert float(limit.get("upper")) == 0.045
 
 
-def test_with_gripper_false_omits_gripper_kinematics_and_ros2_control() -> None:
+def test_load_pika_hardware_false_omits_both_grippers() -> None:
     import xml.etree.ElementTree as ET
 
     stdout = _run_xacro(
         "ros2_control:=true",
         "use_fake_hardware:=true",
-        "with_gripper:=false",
+        "load_pika_hardware:=false",
     )
     root = ET.fromstring(stdout)
     links = {link.get("name") for link in root.findall("link")}
@@ -249,25 +267,6 @@ def test_with_gripper_false_omits_gripper_kinematics_and_ros2_control() -> None:
     assert len(controls) == 1
     names = {control.get("name") for control in controls}
     assert "LeftPikaGripperHardware" not in names
-    assert "RightPikaGripperHardware" not in names
-
-
-def test_with_right_gripper_false_skips_only_right_gripper() -> None:
-    import xml.etree.ElementTree as ET
-
-    stdout = _run_xacro(
-        "ros2_control:=true",
-        "use_fake_hardware:=true",
-        "with_gripper:=true",
-        "with_left_gripper:=true",
-        "with_right_gripper:=false",
-    )
-    root = ET.fromstring(stdout)
-    links = {link.get("name") for link in root.findall("link")}
-    names = {control.get("name") for control in root.findall("ros2_control")}
-    assert "left_pika_gripper_tcp" in links
-    assert "right_pika_gripper_tcp" not in links
-    assert "LeftPikaGripperHardware" in names
     assert "RightPikaGripperHardware" not in names
 
 
@@ -363,7 +362,9 @@ def test_camera_yaml_is_unique_stream_source_for_app_profile() -> None:
             profile["sensors"]["cameras"][f"{side}_pika_fisheye"]["ros_topic"]
             == f"/{side}_pika_fisheye/image/compressed"
         )
-        assert profile["sensors"]["cameras"][f"{side}_pika_fisheye"]["encoding"] == "jpeg"
+        assert (
+            profile["sensors"]["cameras"][f"{side}_pika_fisheye"]["encoding"] == "jpeg"
+        )
         assert fisheye["video_device"] == f"/dev/pika_{side}_fisheye"
         assert fisheye["compressed_topic"] == "image/compressed"
         assert fisheye["format"] == "jpeg"
@@ -375,59 +376,28 @@ def test_rt_stack_contains_only_rt_runtime_components() -> None:
         encoding="utf-8"
     )
     assert "controller_bringup.launch.py" in source
+    assert "prime_arm_position.launch.py" in source
+    assert '"prime_arm_position"' in source
     assert "execution_manager.launch.py" not in source
     assert 'get_package_share_directory("rmi")' not in source
-    assert '"with_gripper"' in source
+    assert '"load_pika_hardware"' in source
 
 
-def test_pika_camera_rviz_subscribes_intended_streams() -> None:
-    config = yaml.safe_load(
-        (CONFIG_DIR / "rviz" / "pika_cameras.rviz").read_text(encoding="utf-8")
+def test_prime_arm_position_is_real_hardware_only() -> None:
+    prime = (PACKAGE_ROOT / "launch" / "prime_arm_position.launch.py").read_text(
+        encoding="utf-8"
     )
-    displays = {
-        item["Name"]: item
-        for item in config["Visualization Manager"]["Displays"]
-        if item["Class"] == "rviz_default_plugins/Image"
-    }
-    expected = {
-        "Left RGB": (
-            "/left_pika_d405/camera/color/image_raw",
-            "Reliable",
-        ),
-        "Left Depth": (
-            "/left_pika_d405/camera/depth/image_rect_raw",
-            "Reliable",
-        ),
-        "Left Aligned Depth": (
-            "/left_pika_d405/camera/aligned_depth_to_color/image_raw",
-            "Reliable",
-        ),
-        "Left Fisheye": (
-            "/left_pika_fisheye/image/compressed",
-            "Best Effort",
-        ),
-        "Right RGB": (
-            "/right_pika_d405/camera/color/image_raw",
-            "Reliable",
-        ),
-        "Right Depth": (
-            "/right_pika_d405/camera/depth/image_rect_raw",
-            "Reliable",
-        ),
-        "Right Aligned Depth": (
-            "/right_pika_d405/camera/aligned_depth_to_color/image_raw",
-            "Reliable",
-        ),
-        "Right Fisheye": (
-            "/right_pika_fisheye/image/compressed",
-            "Best Effort",
-        ),
-    }
-    assert set(displays) == set(expected)
-    for name, (topic, reliability) in expected.items():
-        qos = displays[name]["Topic"]
-        assert qos["Value"] == topic
-        assert qos["Reliability Policy"] == reliability
+    stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
+    controller = (PACKAGE_ROOT / "launch" / "controller_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "left_arm_jtc" in prime and "right_arm_jtc" in prime
+    assert "switch_controllers" in prime
+    assert "libmarvin" in prime or "CCS" in prime or "vendor" in prime
+    assert "use_fake_hardware" in stack
+    assert "_prime_actions" in stack
+    assert "prime_arm_position" not in controller
+    assert "switch_controllers" not in controller
 
 
 def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
@@ -437,8 +407,11 @@ def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
     stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
     assert 'package="mjpeg_cam"' in source
     assert 'executable="mjpeg_cam_node"' in source
-    assert 'video_device' in source
-    assert "/dev/pika_{side}_fisheye" in source
+    assert "yaml.safe_load" in source
+    assert "_configured_cameras" in source
+    assert "for namespace in _configured_cameras(fisheye_config)" in source
+    assert "enumerate(_configured_cameras(d405_config))" in source
+    assert "parameters=[fisheye_config]" in source
     assert "usb_cam" not in source
     assert "pika_d405.yaml" in source
     assert "pika_fisheye.yaml" in source
@@ -451,3 +424,20 @@ def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
     assert "TimerAction" in source
     assert '"right_d405_delay"' in source
     assert '"right_d405_delay"' in stack
+
+
+def test_rt_bringup_has_optional_rviz_surface() -> None:
+    controller = (PACKAGE_ROOT / "launch" / "controller_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
+    package_xml = (PACKAGE_ROOT / "package.xml").read_text(encoding="utf-8")
+    assert '"use_rviz"' in controller
+    assert '"use_rviz"' in stack
+    assert 'package="rviz2"' in controller
+    assert "<exec_depend>rviz2</exec_depend>" in package_xml
+    assert 'default_value="false"' in controller
+    assert not (
+        PACKAGE_ROOT / "launch" / "visualize_marvin_manipulation.launch.py"
+    ).exists()
+    assert not (CONFIG_DIR / "rviz").exists()

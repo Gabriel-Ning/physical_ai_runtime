@@ -4,6 +4,110 @@ metadata: {name: marvin_bimanual, version: "2.0"}
 # bounds delayed packet pollution; it is not a control-loop latency target.
 max_command_age_s: 0.25
 
+sources:
+  Planner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      left_arm:
+        command_contract: joint_trajectory
+        action: /action_sources/planner/left_arm/follow_joint_trajectory
+      right_arm:
+        command_contract: joint_trajectory
+        action: /action_sources/planner/right_arm/follow_joint_trajectory
+      left_gripper:
+        command_contract: gripper_command
+        action: /action_sources/planner/left_gripper/gripper_command
+      right_gripper:
+        command_contract: gripper_command
+        action: /action_sources/planner/right_gripper/gripper_command
+
+  Policy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      left_arm:
+        command_contract: joint_reference
+        topic: /action_sources/policy/left_arm/joint_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/policy/left_gripper/joint_reference
+      right_arm:
+        command_contract: joint_reference
+        topic: /action_sources/policy/right_arm/joint_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/policy/right_gripper/joint_reference
+
+  Replay:
+    source_role: MEMORY
+    preempt: false
+    inputs:
+      left_arm:
+        command_contract: joint_reference
+        topic: /action_sources/replay/left_arm/joint_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/replay/left_gripper/joint_reference
+      right_arm:
+        command_contract: joint_reference
+        topic: /action_sources/replay/right_arm/joint_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/replay/right_gripper/joint_reference
+
+  DummyPolicy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      left_arm:
+        command_contract: joint_reference
+        topic: /action_sources/dummy_policy/left_arm/joint_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/dummy_policy/left_gripper/joint_reference
+      right_arm:
+        command_contract: joint_reference
+        topic: /action_sources/dummy_policy/right_arm/joint_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/dummy_policy/right_gripper/joint_reference
+
+  TeleopJoint:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      left_arm:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/left_arm/joint_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/left_gripper/joint_reference
+      right_arm:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/right_arm/joint_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/right_gripper/joint_reference
+
+  Quest3Teleop:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /teleop/quest3_bimanual/clutch
+    inputs:
+      left_arm:
+        command_contract: pose_reference
+        topic: /action_sources/quest3/left_arm/pose_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/quest3/left_gripper/joint_reference
+      right_arm:
+        command_contract: pose_reference
+        topic: /action_sources/quest3/right_arm/pose_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/quest3/right_gripper/joint_reference
+
 groups:
   left_arm:
     type: arm
@@ -16,19 +120,13 @@ groups:
     controllers:
       joint_trajectory:
         name: left_arm_jtc
-        implementation: joint_trajectory_controller/JointTrajectoryController
-        command_interface: position
         ros_actions: {follow_joint_trajectory: /execution/left_arm/follow_joint_trajectory}
         ros_topics: {trajectory_guard_heartbeat: /execution/left_arm/trajectory_guard_heartbeat}
       joint_space_reference:
         name: left_arm_jspc
-        implementation: manipulation_position_controllers/JointSpacePositionController
-        command_interface: position
         ros_topics: {joint_reference: /execution/left_arm/joint_reference}
       task_space_reference:
         name: left_arm_tskpc
-        implementation: manipulation_position_controllers/TaskSpaceKinematicPositionController
-        command_interface: position
         ros_topics: {pose_reference: /execution/left_arm/pose_reference, twist_reference: /execution/left_arm/twist_reference}
   left_gripper:
     type: parallel_gripper
@@ -42,8 +140,11 @@ groups:
       joint_space_reference:
         name: left_pika_gripper_fwd
         implementation: forward_command_controller/ForwardCommandController
-        command_interface: position
         ros_topics: {joint_reference: /execution/left_gripper/joint_reference}
+      gripper_command:
+        name: left_pika_gripper_action
+        implementation: parallel_gripper_action_controller/GripperActionController
+        ros_actions: {gripper_command: /execution/left_gripper/gripper_command}
   right_arm:
     type: arm
     joint_names: [Joint1_R, Joint2_R, Joint3_R, Joint4_R, Joint5_R, Joint6_R, Joint7_R]
@@ -55,19 +156,13 @@ groups:
     controllers:
       joint_trajectory:
         name: right_arm_jtc
-        implementation: joint_trajectory_controller/JointTrajectoryController
-        command_interface: position
         ros_actions: {follow_joint_trajectory: /execution/right_arm/follow_joint_trajectory}
         ros_topics: {trajectory_guard_heartbeat: /execution/right_arm/trajectory_guard_heartbeat}
       joint_space_reference:
         name: right_arm_jspc
-        implementation: manipulation_position_controllers/JointSpacePositionController
-        command_interface: position
         ros_topics: {joint_reference: /execution/right_arm/joint_reference}
       task_space_reference:
         name: right_arm_tskpc
-        implementation: manipulation_position_controllers/TaskSpaceKinematicPositionController
-        command_interface: position
         ros_topics: {pose_reference: /execution/right_arm/pose_reference, twist_reference: /execution/right_arm/twist_reference}
   right_gripper:
     type: parallel_gripper
@@ -81,5 +176,8 @@ groups:
       joint_space_reference:
         name: right_pika_gripper_fwd
         implementation: forward_command_controller/ForwardCommandController
-        command_interface: position
         ros_topics: {joint_reference: /execution/right_gripper/joint_reference}
+      gripper_command:
+        name: right_pika_gripper_action
+        implementation: parallel_gripper_action_controller/GripperActionController
+        ros_actions: {gripper_command: /execution/right_gripper/gripper_command}

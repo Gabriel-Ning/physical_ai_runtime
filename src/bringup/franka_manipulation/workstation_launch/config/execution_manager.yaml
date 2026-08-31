@@ -1,0 +1,99 @@
+metadata: {name: fr3_pika_single_arm, version: "2.0"}
+
+# Admission compares the envelope Header stamp with the EM ROS clock.
+max_command_age_s: 0.25
+
+# Trusted workstation sources publish plain ROS commands. EM owns their
+# internal leases, controller switching, preemption, and fallback.
+sources:
+  Policy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /action_sources/policy/arm/joint_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/policy/end_effector/joint_reference
+
+  Replay:
+    source_role: MEMORY
+    preempt: false
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /action_sources/replay/arm/joint_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/replay/end_effector/joint_reference
+
+  DummyPolicy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /action_sources/dummy_policy/arm/joint_reference
+
+  Planner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      arm:
+        command_contract: joint_trajectory
+        action: /action_sources/planner/arm/follow_joint_trajectory
+      end_effector:
+        command_contract: gripper_command
+        action: /action_sources/planner/end_effector/gripper_command
+
+  GamepadTeleop:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /teleop/gamepad/clutch
+    inputs:
+      arm:
+        command_contract: twist_reference
+        topic: /action_sources/gamepad/arm/twist
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/gamepad/end_effector/joint_reference
+
+groups:
+  arm:
+    type: arm
+    joint_names: [fr3_joint1, fr3_joint2, fr3_joint3, fr3_joint4, fr3_joint5, fr3_joint6, fr3_joint7]
+    base_frame: fr3_link0
+    flange_frame: fr3_link8
+    tcp_frame: pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_trajectory
+    controllers:
+      joint_trajectory:
+        name: franka_arm_jtc
+        ros_actions: {follow_joint_trajectory: /execution/arm/follow_joint_trajectory}
+        ros_topics: {trajectory_guard_heartbeat: /execution/arm/trajectory_guard_heartbeat}
+      joint_space_reference:
+        name: franka_arm_jspc
+        ros_topics: {joint_reference: /execution/arm/joint_reference}
+      task_space_reference:
+        name: franka_arm_tskpc
+        ros_topics: {pose_reference: /execution/arm/pose_reference, twist_reference: /execution/arm/twist_reference}
+
+  end_effector:
+    type: parallel_gripper
+    joint_names: [gripper_left_joint]
+    parent_group: arm
+    base_frame: fr3_link8
+    tcp_frame: pika_gripper_tcp
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: pika_gripper_fwd
+        implementation: forward_command_controller/ForwardCommandController
+        ros_topics: {joint_reference: /execution/end_effector/joint_reference}
+      gripper_command:
+        name: pika_gripper_action
+        implementation: parallel_gripper_action_controller/GripperActionController
+        ros_actions: {gripper_command: /execution/end_effector/gripper_command}

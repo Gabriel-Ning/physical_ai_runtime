@@ -21,6 +21,7 @@ def generate_launch_description() -> LaunchDescription:
             "right_can_interface": LaunchConfiguration("right_can_interface"),
             "left_end_effector": "piper_gripper",
             "right_end_effector": "piper_gripper",
+            "load_gripper_hardware": LaunchConfiguration("load_gripper_hardware"),
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
             "use_rviz": LaunchConfiguration("use_rviz"),
             "cpu_affinity": LaunchConfiguration("cpu_affinity"),
@@ -43,6 +44,14 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="false"),
+            DeclareLaunchArgument(
+                "load_gripper_hardware",
+                default_value="true",
+                description=(
+                    "Load both native Piper grippers and their controllers. "
+                    "Set false to omit both sides."
+                ),
+            ),
             DeclareLaunchArgument(
                 "cpu_affinity",
                 default_value="",

@@ -17,6 +17,11 @@ get_filename_component(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../.." ABSOL
 install(DIRECTORY "${REPO_ROOT}/apps/profiles/"
   DESTINATION share/${PROJECT_NAME}/profiles
 )
+install(FILES
+  "${REPO_ROOT}/apps/recording/marvin_manipulation.yaml"
+  "${REPO_ROOT}/apps/recording/marvin_manipulation_no_cam.yaml"
+  DESTINATION share/${PROJECT_NAME}/recording
+)
 
 install(DIRECTORY
   launch
