@@ -1,191 +1,259 @@
 # Physical AI Runtime Applications Suite (`apps/`)
 
-Production-ready, profile-driven CLI applications built on top of the **RMI Python SDK**.
+基于 RMI Python SDK 的 profile-driven 应用。当前抓角实验主链路已冻结为：
 
-当前 runtime 应用任务仍处于逐项验收阶段，不在 `pixi.toml` 中开放 `teleop`、
-`record`、`replay`、`eval` 快捷任务。请在 runtime 环境中显式运行对应脚本。
+- 录制：奥比中光顶部相机 + 左腕 + 右腕；
+- 模型输入：`top + left_wrist + right_wrist`；
+- 部署：只允许奥比中光作为 `top`；
+- D435i1、D435i2 不再参与新数据录制、转换、训练或部署。
 
-## 环境怎么选
+`default` / `runtime` 环境用于 ROS 2 bringup、录制和真机运行；`lerobot`
+环境用于数据转换、训练、checkpoint 加载与 GPU 推理。
 
-- `default` / `runtime`：ROS 2 bringup、Execution Manager、相机、录制、回放和
-  日常调试。进入项目后由 direnv 自动激活的通常就是这个环境。
-- `lerobot`：只在转换 LeRobot 数据集、加载 ACT/SmolVLA checkpoint、GPU
-  推理或训练时使用。它不是机械臂和相机 bringup 环境。
-- 推荐用 `pixi run -e lerobot <task>` 执行单条命令；如果使用
-  `pixi shell -e lerobot`，完成后输入 `exit` 回到外层 runtime shell。
-
-当前机器尚未通过机器人网连接 NUC 时，只运行 `--help`、转换器或有 checkpoint
-的 `--dry-run`。不要启动真实推理、人工接管、录制动作或 RT 机械臂测试。
-
----
-
-## 1. `apps/teleop.py` — Interactive Robot Teleoperation
-
-One-command startup for real-time Master-Slave teleoperation (Piper Leader Dual-Arm, Keyboard, SpaceMouse):
+## 1. 遥操作
 
 ```bash
-# Piper Bimanual Master-Slave Teleoperation (200 Hz default):
+cd /home/alpha/physical_ai_runtime
 pixi run -e runtime python apps/teleop.py
-
-# Teleoperate single arm via keyboard or custom side:
-pixi run -e runtime python apps/teleop.py --side left --left-can can0
 ```
 
-### Teleoperation Mode Flow
+## 2. 录制 MCAP
 
-```
-[启动 / 启动主手驱动]
-       │
-       ▼
-  Shadow Tracking Mode (主手伺服跟随从手位姿)
-       │
-       ▼
-  Active Preempt Mode (Admit TeleopJoint，主手 500Hz 0-G 浮动，100~200Hz 高频中继至从手)
-       │
-       ▼
-[按 Ctrl+C 退出] -> 自动释放 Preempt 回到 Shadow/下电，安全清理退出
-```
+正常的 `piper_bimanual.yaml` profile 和 recorder contract 只要求以下三路图像：
 
----
-
-## 2. `apps/record.py` — Multi-Modal Episode Dataset Recorder
-
-Interactive demonstration data collection workflow with **Quintic Spline Staging**, **Zero-Drop Preemption**, and **Parallel MCAP Sealing**:
+| 数据字段 | ROS topic |
+|---|---|
+| 顶部（奥比中光） | `/observation/orbbec/color/image_raw` |
+| 左腕 | `/observation/left_hand_realsense/color/image_raw` |
+| 右腕 | `/observation/right_hand_realsense/color/image_raw` |
 
 ```bash
-# Record 10 bimanual demonstrations (default 50 Hz):
+cd /home/alpha/physical_ai_runtime
+
 pixi run -e runtime python apps/record.py \
-  --profile piper_bimanual.yaml --task bimanual_pickup --episodes 10
-
-# Another task (rate/homing defaults come from the profile):
-pixi run -e runtime python apps/record.py \
-  --task cup_stacking --episodes 10
+  --profile piper_bimanual.yaml \
+  --task pick_corner \
+  --episodes 100
 ```
 
-`--task` 同时决定 recorder 的任务标签和数据集子目录。例如：
+`record.py` 会在启动录制前等待三路相机首帧，并在录制中监控断流。任一路缺帧或
+停流都会阻止保存该 episode。即使 ROS 图中仍存在 D435 topic，录制程序也不会订阅
+或校验它们。
+
+`--task` 同时决定 episode 的任务标签和目录，例如上面的数据写入
+`data/episodes/pick_corner/episode_*`。任务名不能包含 `/`、`\\`，也不能是
+`.` 或 `..`。
+
+每条 episode 完成后：
+
+- `S` 或回车：校验 checksum、完整读取 MCAP、核对三路相机计数并保存；
+- `D`：丢弃并重录当前编号；
+- `R`：回放检查；
+- `Q`：结束采集。
+
+## 3. 回放与只读检查
 
 ```bash
-pixi run -e runtime python apps/record.py \
-  --profile piper_bimanual.yaml --task pick_bread --episodes 20
-```
+pixi run -e runtime python apps/replay.py \
+  --profile piper_bimanual.yaml \
+  --mcap-file data/episodes/pick_corner/episode_000001/episode_000001.mcap
 
-该命令写入 `data/episodes/pick_bread/episode_*`，每条 episode manifest 中的
-task 也为 `pick_bread`。采集另一个任务时换一个 `--task`，例如
-`place_bread`，两类数据不会混到同一目录。任务名允许中文和空格，但不能包含
-`/`、`\\`，也不能是 `.` 或 `..`。
-
-### Episode Lifecycle & Teleoperation Recording Flow
-
-```
-[启动 / 周期重置]
-       │
-       ▼
- 1. 从手平滑归位 (五次多项式无冲击平滑运动至 Home 姿态，如 [0, 0.5, -0.5, 0, 0, 0] rad)
-    + 主手处于 Shadow 模式同步物理镜像伺服到桌前相同位置
-       │
-       ▼
- 2. 准备就绪，等待操作员按 [ENTER] 开始
-       │
-       ▼
- 3. 主手切入 0-G 浮动 (Active Teleop) + 启动多模态数据录制 (MCAP)
-    实时显示时长与录制帧数 (预建流零丢帧保障)
-       │
-       ▼
- 4. 操作员完成动作，再次按 [ENTER] 结束本条 Episode
-       │
-       ▼
- 5. 质量确认与落盘：
-    - [S]ave (默认/回车) -> 校验并保存 MCAP，Episode +1
-    - [D]iscard          -> 丢弃重试本条
-    - [R]eplay           -> 从手 1:1 回放校验动作质量 (主手同步 Shadow 镜像)
-    - [Q]uit             -> 退出采集
-       │
-       ▼
- 6. 主手切回 Shadow，从手再次平滑回初始 Home 姿态 (与步骤5落盘并发异步进行)，进入下一个 Episode 循环
-```
-
-### Key Technical Highlights:
-
-1. **Zero-Drop Guaranteed Start**: The ROS 2 MCAP subscription gate is primed *before* the leader enters 0-G float, ensuring initial motion frames ($t=0$) are 100% captured.
-2. **Parallel Return & I/O**: When an episode finishes, the robot immediately starts returning to Home in a background thread while MCAP serialization and user input review proceed in parallel, eliminating operator idle wait time.
-3. **Pendant / Gripper Contract**: Follower grippers operate in `[0.0, 0.04] m` per-finger space ($0 \sim 80\text{ mm}$ total opening width), strictly matching real hardware limits.
-4. **Interactive Quality Inspection**:
-   * `[S]ave` (Default / Enter): Commit `.mcap` file and advance episode counter.
-   * `[D]iscard & Retry`: Remove bad demo and repeat the current episode number.
-   * `[R]eplay`: Re-execute recorded trajectory on follower while leader mirrors in Shadow mode.
-   * `[Q]uit`: Safely conclude the dataset session.
-
----
-
-## 3. `apps/replay.py` — 1:1 Native Trajectory Replayer
-
-Performs strict 1:1 native timestamp-paced trajectory replay directly from recorded MCAP datasets on real or simulated robot embodiments:
-
-```bash
-# Replay latest recorded episode at 1:1 native rate:
-pixi run -e runtime python apps/replay.py --profile piper_bimanual.yaml
-
-# Replay specific MCAP episode:
-pixi run -e runtime python apps/replay.py --profile piper_bimanual.yaml \
-    --mcap-file data/episodes/piper_bimanual_teleop/episode_000001.mcap
-```
-
----
-
-## 4. `apps/eval.py` — Read-only Deployment Evaluation
-
-Checks joint-state availability and age, hardware diagnostics, camera readiness,
-and the current provider allocation map without acquiring control or publishing a
-command:
-
-```bash
 pixi run -e runtime python apps/eval.py \
   --profile piper_bimanual.yaml --duration 10 --check-cameras
 ```
 
-## 5. Embodiment Profiles (`apps/profiles/`)
+真机回放前必须确认安全区、急停和机械臂初始姿态。
 
-All applications are fully decoupled and driven by YAML Embodiment Profiles stored in [`apps/profiles/`](profiles/):
+## 4. MCAP 转 LeRobot v3
 
-* `piper_bimanual.yaml` — Dual-arm Piper bimanual setup with master-slave leader teleoperation.
-* `fr3_pika_single_arm.yaml` — Single-arm Franka Research 3 with Pika Gripper.
-* `marvin_bimanual.yaml` — Marvin humanoid dual-arm bimanual setup.
+新数据统一使用 `orbbec` 视角。转换器从 MCAP 读取三路图像、`/joint_states`
+和四路 `/execution/.../joint_reference`，同步到 30 Hz，并将奥比中光中心裁剪为
+4:3 后缩放到 640×480。输出 feature 固定为：
 
----
+- `observation.images.top`
+- `observation.images.left_wrist`
+- `observation.images.right_wrist`
+- `observation.state`
+- `action`
 
-## 6. MCAP 转 LeRobot v3
-
-`scripts/convert_episode_to_lerobot.py` 将 Piper recorder 生成的 episode MCAP
-同步为 30 Hz（可配置）的 LeRobot v3 数据集。转换要求三路 RGB 图像、
-`/joint_states` 和四路 `/execution/.../joint_reference`；默认会拒绝有 recorder
-drop 或 writer error 的 episode，并用转换 manifest 防止重复导入。
+批量转换：
 
 ```bash
-# 单条 episode
-pixi run -e lerobot lerobot-convert -- \
-  --episode data/episodes/pick_bread/episode_000001 \
-  --task pick_bread
+cd /home/alpha/physical_ai_runtime
 
-# 批量转换
 pixi run -e lerobot lerobot-convert -- \
-  --all --task pick_bread
+  --all \
+  --task pick_corner \
+  --camera-view orbbec \
+  --output /home/alpha/lerobot_train/pick_corner_orbbec \
+  --repo-id pick_corner \
+  --fps 30 \
+  --require-accepted-demonstration
 ```
 
-给出 `--task <task>` 时，默认从 `data/episodes/<task>` 读取，写到
-`~/lerobot_train/<task>`，并使用 `<task>` 作为 `repo_id`。任一默认值都可用同名
-参数显式覆盖；不要把不同 feature schema 或任务写进同一个输出目录。
+转换单条 episode 时将 `--all` 换成：
 
-## 7. ACT / SmolVLA 部署入口
+```text
+--episode data/episodes/pick_corner/episode_000001
+```
 
-### ACT 真实部署
+转换会先校验 SHA-256、MCAP EOF、recorder health sidecar，以及奥比中光和两路腕部
+的实际/metadata/written 帧数。不要在转换尚未自然结束时重跑同一命令或启动训练。
+转换 CLI 只开放 `--camera-view orbbec`，不会接受旧五相机参数。
+
+## 5. ACT chunk 数量实验
+
+`chunk_size` 不属于录制格式；同一份 LeRobot 数据可以训练不同 chunk 的 ACT。
+训练命令只在 `/home/alpha/lerobot_train/README.md` 中维护；本项目不复制训练命令。
+该文档采用显式写出具体 chunk 值的方式，例如 50 对应
+`policy.chunk_size=50`、`policy.n_action_steps=50`，输出目录后缀为 `_50`。
+
+- `policy.chunk_size`：每次预测的动作序列长度；
+- `policy.n_action_steps`：训练配置中每次执行的动作数，不能大于 `chunk_size`；
+- 部署参数 `--action-steps M`：只执行 chunk 前 M 步，范围为 `1..chunk_size`。
+
+为了判断训练 chunk 本身的影响，第一轮部署令 `--action-steps` 等于该 checkpoint
+的 `chunk_size`。如果后续单独研究重规划频率，再固定 checkpoint，仅扫描更小的
+`--action-steps`。
+
+## 6. ACT 三相机部署（单顶部视角）
+
+这里的 `--camera-view single` 表示只使用一个固定顶部视角，不表示模型总共只输入
+一台相机。ACT checkpoint 必须包含 `top + left_wrist + right_wrist` 三个图像 feature。
+
+`CHECKPOINT` 不是程序内置变量，需要在每个新终端中显式设置。它应指向包含
+`config.json` 的 `pretrained_model` 目录；下面的路径和 `020000` 请替换为实际训练输出。
+
+先做无 ROS、无运动的 checkpoint dry-run：
 
 ```bash
+cd /home/alpha/physical_ai_runtime
+
+export CHECKPOINT=/home/alpha/lerobot_train/outputs/pick_corner1_50/checkpoints/020000/pretrained_model
+
+test -f "${CHECKPOINT}/config.json"
+
 pixi run -e lerobot act-piper -- \
-  --checkpoint /home/alpha/lerobot_train/outputs/piper_act2 \
-  --task pick_bread \
+  --checkpoint "${CHECKPOINT}" \
+  --camera-view single \
+  --action-steps 50 \
+  --device cuda \
+  --dry-run
+```
+
+dry-run 通过后，再做真机评估：
+
+```bash
+cd /home/alpha/physical_ai_runtime
+
+export CHECKPOINT=/home/alpha/lerobot_train/outputs/pick_corner_orbbec_50/checkpoints/020000/pretrained_model
+
+test -f "${CHECKPOINT}/config.json"
+
+LD_LIBRARY_PATH=/home/alpha/physical_ai_runtime/.pixi/envs/runtime/lib \
+pixi run -e lerobot act-piper -- \
+  --checkpoint "${CHECKPOINT}" \
+  --profile apps/profiles/piper_bimanual.yaml \
+  --task pick_corner_orbbec_50_eval10 \
+  --camera-view single \
+  --action-steps 50 \
+  --record-episodes 10 \
+  --layout-ids L5,L4,L3,L2,L1,L1,L2,L3,L4,L5 \
+  --max-input-age-s 1.0 \
   --real
 ```
 
-默认以 30 Hz 持续推理，不录制 episode；`Ctrl-C` 会释放 Policy session。终端按
-`T` 可切换至 Leader teleop；不需要该功能时添加
-`--no-teleop-takeover --no-teleop-hotkey`。
+部署程序只接受 `/observation/orbbec/color/image_raw` 作为顶部相机，并始终同时使用
+左右腕部。`--action-steps` 不能超过 checkpoint 的 `chunk_size`，否则启动时直接失败。
+
+录制评估时：准备阶段回车开始；运行阶段回车提前结束、`T` 切换 ACT/Leader 接管、
+`Q` 丢弃并退出；复核阶段回车/`S` 保存、`D` 删除、`Q` 退出。切换 checkpoint 前
+先按 `Ctrl-C`，等待 Policy lease 完全释放；不要同时运行两个 `act-piper`。
+
+## 7. SmolVLA 三相机部署
+
+SmolVLA 部署固定使用 `top + left_wrist + right_wrist` 三个图像 feature。与 ACT
+不同，`--task` 是模型的语言条件，必须与训练数据中的任务文本完全一致；
+pick_corner_smo           → --task pick_corner
+pick_corner_smo_finetune  → --task pick_corner_hil
+
+```bash
+cd /home/alpha/physical_ai_runtime
+
+export CHECKPOINT=/home/alpha/lerobot_train/outputs/pick_corner_smo/checkpoints/050000/pretrained_model
+
+test -f "${CHECKPOINT}/config.json"
+
+LD_LIBRARY_PATH=/home/alpha/physical_ai_runtime/.pixi/envs/runtime/lib \
+pixi run -e lerobot smolvla-piper -- \
+  --checkpoint "${CHECKPOINT}" \
+  --profile apps/profiles/piper_bimanual.yaml \
+  --task pick_corner \
+  --device cuda \
+  --rate-hz 30 \
+  --max-input-age-s 1.0 \
+  --real
+```
+
+该入口固定订阅以下三路图像：
+
+- 顶部：`/observation/orbbec/color/image_raw`
+- 左腕：`/observation/left_hand_realsense/color/image_raw`
+- 右腕：`/observation/right_hand_realsense/color/image_raw`
+
+SmolVLA 不使用 ACT 的 `--camera-view` 和 `--action-steps` 参数；执行步数由 checkpoint
+中的 `n_action_steps` 决定，当前为 50。运行时按 `T` 可切换 Leader 接管；退出时先按
+`Ctrl-C`，等待 Policy lease 完全释放。
+
+## 8. Diffusion 三相机部署
+
+Diffusion 使用与 ACT、SmolVLA 相同的三路相机和 14 维状态/动作约定。当前
+`020000` checkpoint 配置为 `n_obs_steps=2`、`horizon=64`、`n_action_steps=32`；
+部署程序会在动作执行期间保留连续观测，供下一次 Diffusion 推理使用。
+
+先做无 ROS、无运动的 checkpoint dry-run：
+
+```bash
+cd /home/alpha/physical_ai_runtime
+
+export CHECKPOINT=/home/alpha/lerobot_train/outputs/pick_corner_diffusion/checkpoints/020000/pretrained_model
+
+test -f "${CHECKPOINT}/config.json"
+
+pixi run -e lerobot diffusion-piper -- \
+  --checkpoint "${CHECKPOINT}" \
+  --device cuda \
+  --dry-run
+```
+
+当前 checkpoint 的预期结果是 `action shape=(32, 14), finite=True`。dry-run 通过，
+并且 RT 双臂与三路相机已经启动后，再运行真机部署：
+
+```bash
+cd /home/alpha/physical_ai_runtime
+
+export CHECKPOINT=/home/alpha/lerobot_train/outputs/pick_corner_diffusion/checkpoints/020000/pretrained_model
+
+test -f "${CHECKPOINT}/config.json"
+
+LD_LIBRARY_PATH=/home/alpha/physical_ai_runtime/.pixi/envs/runtime/lib \
+pixi run -e lerobot diffusion-piper -- \
+  --checkpoint "${CHECKPOINT}" \
+  --profile apps/profiles/piper_bimanual.yaml \
+  --task pick_corner \
+  --device cuda \
+  --rate-hz 30 \
+  --action-steps 32 \
+  --max-input-age-s 1.0 \
+  --real
+```
+
+`--action-steps` 可在 `1..32` 内调小，以提高重新规划频率，但第一次真机验证应保持
+checkpoint 的训练值 32。该命令会通过 RMI 向左右机械臂和夹爪发送
+`joint_reference`；运行前必须确认安全区、急停、初始姿态和三路相机均正常。
+运行时按 `T` 可切换 Leader 接管，退出时按 `Ctrl-C` 并等待 Policy lease 释放。
+
+## 9. Profile
+
+当前双臂主流程使用 `apps/profiles/piper_bimanual.yaml`。五相机 profile 和旧 D435
+recorder contract 仅作为历史实验文件保留，不应再用于新一轮录制、训练或部署。

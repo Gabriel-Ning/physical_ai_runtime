@@ -1,9 +1,11 @@
-"""Run a LeRobot SmolVLA policy on the dual Piper RMI control plane."""
+"""Run a LeRobot Diffusion policy on the dual Piper RMI control plane."""
 
 from __future__ import annotations
 
 import argparse
 import logging
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +20,7 @@ from act_piper import (
     _run_ros,
 )
 
-LOGGER = logging.getLogger("smolvla_piper")
+LOGGER = logging.getLogger("diffusion_piper")
 
 
 def _configure_logging() -> None:
@@ -28,35 +30,32 @@ def _configure_logging() -> None:
     )
 
 
-class SmolVlaRunner:
-    """Load a SmolVLA checkpoint and run one processor-faithful inference."""
+class DiffusionRunner:
+    """Load Diffusion Policy and preserve its consecutive observation history."""
 
-    def __init__(self, checkpoint: Path, device: str, task: str) -> None:
+    def __init__(
+        self, checkpoint: Path, device: str, action_steps: int | None = None
+    ) -> None:
         import torch
         from lerobot.policies import get_policy_class, make_pre_post_processors
         from lerobot.utils.constants import OBS_STR
         from lerobot.utils.feature_utils import hw_to_dataset_features
 
         checkpoint = _resolve_checkpoint(checkpoint)
-
         self.device = _resolve_device(device)
         self.checkpoint = checkpoint
-        self.task = task
-        LOGGER.info("loading SmolVLA checkpoint: %s", checkpoint)
-        self.policy = get_policy_class("smolvla").from_pretrained(str(checkpoint))
+        LOGGER.info("loading Diffusion checkpoint: %s", checkpoint)
+        self.policy = get_policy_class("diffusion").from_pretrained(str(checkpoint))
         self.policy.to(self.device)
         self.policy.eval()
+        self.policy.reset()
 
         expected_images = set(POLICY_IMAGE_KEYS)
         actual_images = set(self.policy.config.image_features)
-        missing_images = expected_images - actual_images
-        unexpected_images = {
-            key for key in actual_images - expected_images if "empty_camera_" not in key
-        }
-        if missing_images or unexpected_images:
+        if actual_images != expected_images:
             raise ValueError(
                 "checkpoint image features do not match dual Piper training data: "
-                f"missing={sorted(missing_images)}, unexpected={sorted(unexpected_images)}"
+                f"expected={sorted(expected_images)}, actual={sorted(actual_images)}"
             )
         state_feature = self.policy.config.input_features.get("observation.state")
         action_feature = self.policy.config.output_features.get("action")
@@ -85,39 +84,81 @@ class SmolVlaRunner:
             preprocessor_overrides={"device_processor": device_override},
             postprocessor_overrides={"device_processor": device_override},
         )
-        self.action_steps = int(self.policy.config.n_action_steps)
-        self.chunk_size = int(self.policy.config.chunk_size)
-        if not 0 < self.action_steps <= self.chunk_size:
+        self.n_obs_steps = int(self.policy.config.n_obs_steps)
+        self.chunk_size = int(self.policy.config.horizon)
+        predicted_steps = int(self.policy.config.n_action_steps)
+        self.action_steps = predicted_steps if action_steps is None else action_steps
+        if not 0 < self.action_steps <= predicted_steps:
             raise ValueError(
-                f"invalid SmolVLA action steps: {self.action_steps} / {self.chunk_size}"
+                "invalid Diffusion action steps: "
+                f"{self.action_steps}; expected 1..{predicted_steps}"
             )
+        self._history: deque[dict[str, Any]] = deque(maxlen=self.n_obs_steps)
+        self._history_lock = threading.Lock()
         self._torch = torch
         LOGGER.info(
-            "SmolVLA ready: device=%s, state/action_dim=%d, chunk=%d, execute=%d",
+            "Diffusion ready: device=%s, observations=%d, horizon=%d, "
+            "predicted=%d, execute=%d",
             self.device,
-            len(JOINT_NAMES),
+            self.n_obs_steps,
             self.chunk_size,
+            predicted_steps,
             self.action_steps,
         )
 
-    def predict(self, raw_observation: dict[str, Any]) -> np.ndarray:
-        """Return a de-normalized action chunk after conditioning on task text."""
+    def observe(self, raw_observation: dict[str, Any]) -> None:
+        """Retain the latest raw observation while a predicted chunk executes."""
+        with self._history_lock:
+            self._history.append(raw_observation)
+
+    def reset_history(self) -> None:
+        """Discard observations captured before a stream or control discontinuity."""
+        with self._history_lock:
+            self._history.clear()
+
+    def _prepare_observation(self, raw_observation: dict[str, Any]) -> dict[str, Any]:
         from lerobot.utils.constants import OBS_STATE
         from lerobot.utils.feature_utils import build_dataset_frame
+        from torch.nn import functional
 
         frame = build_dataset_frame(
             self.lerobot_features, raw_observation, "observation"
         )
         observation: dict[str, Any] = {
-            OBS_STATE: self._torch.as_tensor(frame[OBS_STATE]).unsqueeze(0),
-            "task": self.task,
+            OBS_STATE: self._torch.as_tensor(frame[OBS_STATE]).unsqueeze(0)
         }
         for key in POLICY_IMAGE_KEYS:
             image = self._torch.as_tensor(frame[key]).permute(2, 0, 1).unsqueeze(0)
-            observation[key] = image.float() / 255.0
+            target_shape = self.policy.config.image_features[key].shape
+            image = functional.interpolate(
+                image.float(),
+                size=(target_shape[1], target_shape[2]),
+                mode="bilinear",
+                align_corners=False,
+            )
+            observation[key] = image / 255.0
+        return self.preprocessor(observation)
+
+    def predict(self, raw_observation: dict[str, Any]) -> np.ndarray:
+        """Return a de-normalized action chunk with shape ``[T, 14]``."""
+        from lerobot.utils.constants import OBS_STATE
+
+        self.observe(raw_observation)
+        with self._history_lock:
+            history = list(self._history)
+        while len(history) < self.n_obs_steps:
+            history.insert(0, history[0])
+        processed = [self._prepare_observation(item) for item in history]
+        temporal_keys = (OBS_STATE, *POLICY_IMAGE_KEYS)
+        temporal_observation = {
+            key: self._torch.stack([frame[key] for frame in processed], dim=1)
+            for key in temporal_keys
+        }
+
         with self._torch.inference_mode():
-            processed = self.preprocessor(observation)
-            chunk = self.policy.predict_action_chunk(processed)
+            chunk = self.policy.predict_action_chunk(temporal_observation)
+            if chunk.ndim == 2:
+                chunk = chunk.unsqueeze(0)
             chunk = chunk[:, : self.action_steps, :]
             actions = [
                 self.postprocessor(chunk[:, index, :])
@@ -128,25 +169,21 @@ class SmolVlaRunner:
         expected_shape = (self.action_steps, len(JOINT_NAMES))
         if action.shape != expected_shape:
             raise ValueError(
-                f"SmolVLA returned {action.shape}, expected {expected_shape}"
+                f"Diffusion returned {action.shape}, expected {expected_shape}"
             )
         if not np.isfinite(action).all():
-            raise ValueError("SmolVLA returned NaN or Inf")
+            raise ValueError("Diffusion returned NaN or Inf")
         return action
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run a SmolVLA policy on the dual Piper control plane",
+        description="Run a LeRobot Diffusion checkpoint on the dual Piper control plane",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--profile", default="apps/profiles/piper_bimanual.yaml")
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument(
-        "--task",
-        required=True,
-        help="exact natural-language task string used in the SmolVLA demonstrations",
-    )
+    parser.add_argument("--task", default="pick_corner")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
     parser.add_argument("--rate-hz", type=float, default=30.0)
     parser.add_argument("--state-topic", default="/joint_states")
@@ -161,13 +198,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "--right-wrist-topic",
         default="/observation/right_hand_realsense/color/image_raw",
     )
+    parser.add_argument(
+        "--action-steps",
+        type=int,
+        default=None,
+        help="execute this many actions from each predicted Diffusion chunk",
+    )
     parser.add_argument("--input-timeout-s", type=float, default=10.0)
     parser.add_argument("--max-input-age-s", type=float, default=0.5)
     parser.add_argument(
         "--record-episodes",
         type=int,
         default=0,
-        help="record this many successful SmolVLA-assisted MCAP episodes; 0 keeps continuous inference",
+        help="record this many successful Diffusion-assisted MCAP episodes; 0 keeps continuous inference",
     )
     parser.add_argument(
         "--layout-ids",
@@ -189,7 +232,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--teleop-takeover",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="enable local Piper leader takeover through T or /smolvla_piper/set_teleop",
+        help="enable local Piper leader takeover through T or /diffusion_piper/set_teleop",
     )
     parser.add_argument(
         "--teleop-hotkey",
@@ -205,7 +248,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="load the checkpoint and run one synthetic task-conditioned inference without ROS or motion",
+        help="load the checkpoint and run one synthetic inference without ROS or motion",
     )
     return parser
 
@@ -213,16 +256,12 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     _configure_logging()
     args = _build_parser().parse_args()
-    if not args.task.strip():
-        raise SystemExit(
-            "--task must be the non-empty task sentence used during training"
-        )
     if args.rate_hz <= 0.0:
         raise SystemExit("--rate-hz must be positive")
     if args.record_episodes < 0:
         raise SystemExit("--record-episodes must be non-negative")
 
-    runner = SmolVlaRunner(args.checkpoint, args.device, args.task)
+    runner = DiffusionRunner(args.checkpoint, args.device, args.action_steps)
     if args.dry_run:
         state = np.zeros(len(JOINT_NAMES), dtype=np.float32)
         images = {
@@ -231,14 +270,13 @@ def main() -> None:
         }
         action = runner.predict(_raw_from_arrays(state, images))
         LOGGER.info(
-            "dry-run passed: task=%r, action shape=%s, finite=%s",
-            args.task,
+            "dry-run passed: action shape=%s, finite=%s",
             action.shape,
             np.isfinite(action).all(),
         )
         return
 
-    args.policy_type = "smolvla"
+    args.policy_type = "diffusion"
     _run_ros(args, runner)
 
 

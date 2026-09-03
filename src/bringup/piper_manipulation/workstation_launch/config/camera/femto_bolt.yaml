@@ -10,13 +10,15 @@
     color_fps: 30
     color_format: "MJPG"
 
-    enable_depth: true
+    # This experiment records RGB only.  Disabling the unused sensors also
+    # leaves enough USB bandwidth for the two wrist D435i cameras.
+    enable_depth: false
     depth_width: 640
     depth_height: 576
     depth_fps: 30
     depth_format: "Y16"
 
-    enable_ir: true
+    enable_ir: false
     ir_width: 640
     ir_height: 576
     ir_fps: 30
@@ -30,9 +32,9 @@
     align_mode: "SW"
     align_target_stream: "COLOR"
     sync_mode: "standalone"
-    enable_frame_sync: true
+    enable_frame_sync: false
     # Stamp frames with the host realtime clock so their header timestamps can
     # be compared with the two RealSense streams.
     time_domain: "system"
     timestamp_clock_type: "realtime"
-    publish_tf: true
+    publish_tf: false

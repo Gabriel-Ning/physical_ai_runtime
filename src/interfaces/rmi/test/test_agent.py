@@ -172,6 +172,17 @@ def test_session_claim_binds_commands_and_releases_exact_lease():
     assert client.bound == ""
 
 
+def test_session_exit_is_idempotent_after_clean_shutdown():
+    robot, authority, policy, _, _, _ = _fixture()
+    session = policy.run(robot)
+
+    session.__enter__()
+    session.__exit__(None, None, None)
+    session.__exit__(None, None, None)
+
+    assert authority.releases == ["lease-1"]
+
+
 def test_takeover_fences_old_session_and_requires_explicit_reacquire():
     robot, authority, policy, policy_client, teleop, _ = _fixture()
     with policy.run(robot) as old_policy:

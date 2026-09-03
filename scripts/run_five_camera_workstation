@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COLLECTION_OVERLAY="${RUNTIME_ROOT}/install_collection_overlay"
+
+# This workstation has repeatedly taken unrelated user-space faults on logical
+# CPU 8 (its SMT sibling is CPU 9).  Keep the collection process tree off that
+# core until the host BIOS/CPU stability issue is repaired.  Override with an
+# explicit cpulist, or set FIVE_CAMERA_CPUSET=off to disable the workaround.
+FIVE_CAMERA_CPUSET="${FIVE_CAMERA_CPUSET:-0-7,10-31}"
+if [[ "${FIVE_CAMERA_CPUSET}" != "off" ]] && command -v taskset >/dev/null 2>&1; then
+  taskset -pc "${FIVE_CAMERA_CPUSET}" "$$" >/dev/null
+  echo "Collection CPU affinity: ${FIVE_CAMERA_CPUSET} (CPU 8/9 excluded)"
+fi
+
+required=(
+  piper_manipulation_workstation_launch
+  piper_leader_teleop
+  piper_description
+  pika_gripper_description
+)
+for package in "${required[@]}"; do
+  prefix="${COLLECTION_OVERLAY}/${package}"
+  if [[ ! -d "${prefix}" ]]; then
+    echo "Missing collection overlay package: ${prefix}" >&2
+    echo "Rebuild install_collection_overlay before collection." >&2
+    exit 1
+  fi
+done
+
+if [[ "${FIVE_CAMERA_SKIP_CAN_SETUP:-0}" != "1" ]]; then
+  if pgrep -f '/piper_leader_node' >/dev/null 2>&1; then
+    echo "A Piper leader process is already running; refusing to reset can1/can0." >&2
+    echo "Stop the previous workstation launch before starting another one." >&2
+    exit 1
+  fi
+
+  can_reset_required=0
+  for interface in can1 can0; do
+    if ! ip link show "${interface}" >/dev/null 2>&1; then
+      echo "Missing local Leader CAN interface: ${interface}" >&2
+      exit 1
+    fi
+    if ! ip link show "${interface}" | head -n 1 | grep -q '<[^>]*UP'; then
+      can_reset_required=1
+    fi
+  done
+  if [[ "${can_reset_required}" == "1" ]]; then
+    echo "Local Leader CAN is down; configuring can1(left) and can0(right)."
+    sudo "${RUNTIME_ROOT}/scripts/reset_teleop_piper_can.sh" can1 can0
+  fi
+  for interface in can1 can0; do
+    if ! ip link show "${interface}" | head -n 1 | grep -q '<[^>]*UP'; then
+      echo "Leader CAN interface did not become UP: ${interface}" >&2
+      exit 1
+    fi
+  done
+
+  # An UP SocketCAN interface does not prove that a powered Piper is sending
+  # feedback.  Shadow autostart deliberately defers without fresh joint frames,
+  # which otherwise looks like a successful launch that simply does not follow.
+  declare -A rx_before
+  for interface in can1 can0; do
+    rx_before["${interface}"]="$(<"/sys/class/net/${interface}/statistics/rx_packets")"
+  done
+  sleep 0.5
+  for interface in can1 can0; do
+    rx_after="$(<"/sys/class/net/${interface}/statistics/rx_packets")"
+    if (( rx_after <= rx_before["${interface}"] )); then
+      echo "No Piper feedback frames received on ${interface}." >&2
+      echo "Power on/release the local Leader arm, then rerun this command." >&2
+      exit 1
+    fi
+  done
+fi
+
+export ROS_DISTRO="${ROS_DISTRO:-jazzy}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+export AMENT_PREFIX_PATH="${COLLECTION_OVERLAY}/piper_manipulation_workstation_launch:${COLLECTION_OVERLAY}/piper_leader_teleop:${COLLECTION_OVERLAY}/piper_description:${COLLECTION_OVERLAY}/pika_gripper_description:${RUNTIME_ROOT}/.pixi/envs/default"
+export PATH="${RUNTIME_ROOT}/scripts/compat_bin:${PATH}"
+
+launch_arguments=()
+for argument in "$@"; do
+  case "${argument}" in
+    autostart:=true)
+      echo "Leader autostart is fixed to true for five-camera collection."
+      ;;
+    autostart:=false)
+      echo "This production entry fixes Leader autostart=true." >&2
+      echo "Use piper_leaders.launch.py directly for a no-motion diagnostic." >&2
+      exit 2
+      ;;
+    *) launch_arguments+=("${argument}") ;;
+  esac
+done
+
+exec "${RUNTIME_ROOT}/.pixi/envs/runtime/bin/python" \
+  "${RUNTIME_ROOT}/.pixi/envs/runtime/bin/ros2" launch \
+  piper_manipulation_workstation_launch \
+  five_camera_workstation.launch.py \
+  "${launch_arguments[@]}"

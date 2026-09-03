@@ -19,8 +19,10 @@ import threading
 import time
 import tty
 from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,18 @@ IMAGE_SHAPES = {
     "right_wrist": (480, 640, 3),
 }
 POLICY_IMAGE_KEYS = tuple(f"observation.images.{name}" for name in IMAGE_KEYS)
+ALL3_IMAGE_SHAPES = {
+    "external_1": (720, 1280, 3),
+    "external_2": (480, 640, 3),
+    "external_3": (480, 640, 3),
+    "left_wrist": (480, 640, 3),
+    "right_wrist": (480, 640, 3),
+}
+ALL3_CAMERA_TOPICS = {
+    "external_1": "/observation/orbbec/color/image_raw",
+    "external_2": "/observation/d435i1/color/image_raw",
+    "external_3": "/observation/d435i2/color/image_raw",
+}
 LOGGER = logging.getLogger("act_piper")
 
 
@@ -84,10 +98,73 @@ def _resolve_checkpoint(path: Path) -> Path:
     )
 
 
+def _resolve_action_steps(
+    configured_steps: int, chunk_size: int, requested_steps: int | None
+) -> int:
+    action_steps = configured_steps if requested_steps is None else requested_steps
+    if not 0 < action_steps <= chunk_size:
+        raise ValueError(
+            f"invalid ACT action steps: {action_steps}; expected 1..{chunk_size}"
+        )
+    return action_steps
+
+
+def _apply_gripper_guard(
+    action: np.ndarray, *, hold_open: bool, open_position: float
+) -> np.ndarray:
+    """Override both gripper channels for approach-only policies."""
+    if not hold_open:
+        return action
+    if not 0.0 <= open_position <= 0.04:
+        raise ValueError("open gripper position must be within [0.0, 0.04] m")
+    guarded = action.copy()
+    guarded[6] = open_position
+    guarded[13] = open_position
+    return guarded
+
+
+def _parse_layout_ids(value: str | None, episode_count: int) -> list[str]:
+    if value is None:
+        return [f"layout_{index:02d}" for index in range(episode_count)]
+    layouts = [item.strip() for item in value.split(",") if item.strip()]
+    if len(layouts) != episode_count:
+        raise ValueError(
+            f"--layout-ids contains {len(layouts)} names, expected {episode_count}"
+        )
+    return layouts
+
+
+def _policy_image_shapes(camera_view: str) -> dict[str, tuple[int, int, int]]:
+    if camera_view == "single":
+        return dict(IMAGE_SHAPES)
+    if camera_view == "all3":
+        return dict(ALL3_IMAGE_SHAPES)
+    raise ValueError(f"unsupported camera view: {camera_view}")
+
+
+def _policy_image_topics(args: argparse.Namespace) -> dict[str, str]:
+    camera_view = getattr(args, "camera_view", "single")
+    wrist_topics = {
+        "left_wrist": args.left_wrist_topic,
+        "right_wrist": args.right_wrist_topic,
+    }
+    if camera_view == "single":
+        return {"top": args.top_camera_topic, **wrist_topics}
+    if camera_view == "all3":
+        return {**ALL3_CAMERA_TOPICS, **wrist_topics}
+    raise ValueError(f"unsupported camera view: {camera_view}")
+
+
 class ActRunner:
     """Load ACT and convert raw ROS observations into action chunks."""
 
-    def __init__(self, checkpoint: Path, device: str) -> None:
+    def __init__(
+        self,
+        checkpoint: Path,
+        device: str,
+        action_steps: int | None = None,
+        camera_view: str = "single",
+    ) -> None:
         import torch
         from lerobot.policies import get_policy_class, make_pre_post_processors
         from lerobot.utils.constants import OBS_STR
@@ -103,8 +180,13 @@ class ActRunner:
         self.policy.to(self.device)
         self.policy.eval()
 
+        self.image_shapes = _policy_image_shapes(camera_view)
+        self.image_keys = tuple(self.image_shapes)
+        self.policy_image_keys = tuple(
+            f"observation.images.{name}" for name in self.image_keys
+        )
         image_features = self.policy.config.image_features
-        expected = set(POLICY_IMAGE_KEYS)
+        expected = set(self.policy_image_keys)
         actual = set(image_features)
         if actual != expected:
             raise ValueError(
@@ -127,7 +209,7 @@ class ActRunner:
         hardware_features: dict[str, type | tuple[int, int, int]] = {
             name: float for name in JOINT_NAMES
         }
-        hardware_features.update(IMAGE_SHAPES)
+        hardware_features.update(self.image_shapes)
         self.lerobot_features = hw_to_dataset_features(
             hardware_features, OBS_STR, use_video=False
         )
@@ -139,17 +221,16 @@ class ActRunner:
             postprocessor_overrides={"device_processor": device_override},
         )
         self.chunk_size = int(getattr(self.policy.config, "chunk_size", 100))
-        self.action_steps = int(
+        configured_action_steps = int(
             getattr(self.policy.config, "n_action_steps", self.chunk_size)
         )
-        if not 0 < self.action_steps <= self.chunk_size:
-            raise ValueError(
-                f"invalid ACT action steps: {self.action_steps} / {self.chunk_size}"
-            )
+        self.action_steps = _resolve_action_steps(
+            configured_action_steps, self.chunk_size, action_steps
+        )
         LOGGER.info(
             "ACT ready: device=%s, images=%s, state/action_dim=%d, chunk=%d, execute=%d",
             self.device,
-            ", ".join(POLICY_IMAGE_KEYS),
+            ", ".join(self.policy_image_keys),
             len(JOINT_NAMES),
             self.chunk_size,
             self.action_steps,
@@ -168,7 +249,7 @@ class ActRunner:
         observation: dict[str, Any] = {
             OBS_STATE: self._torch.as_tensor(frame[OBS_STATE]).unsqueeze(0)
         }
-        for key in POLICY_IMAGE_KEYS:
+        for key in self.policy_image_keys:
             image = self._torch.as_tensor(frame[key]).permute(2, 0, 1).unsqueeze(0)
             target_shape = self.policy.config.image_features[key].shape
             image = functional.interpolate(
@@ -198,14 +279,20 @@ class ActRunner:
 
 
 def _raw_from_arrays(
-    state: np.ndarray, images: dict[str, np.ndarray]
+    state: np.ndarray,
+    images: dict[str, np.ndarray],
+    image_keys: tuple[str, ...] = IMAGE_KEYS,
 ) -> dict[str, Any]:
     if state.shape != (len(JOINT_NAMES),):
         raise ValueError(
             f"state shape must be {(len(JOINT_NAMES),)}, got {state.shape}"
         )
     raw = {name: float(value) for name, value in zip(JOINT_NAMES, state, strict=True)}
-    for name in IMAGE_KEYS:
+    if set(images) != set(image_keys):
+        raise ValueError(
+            f"image keys must be {sorted(image_keys)}, got {sorted(images)}"
+        )
+    for name in image_keys:
         image = images[name]
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError(f"{name} image must be HxWx3, got {image.shape}")
@@ -247,7 +334,8 @@ def _decode_rgb_image(message: Any) -> np.ndarray:
 class InputBuffer:
     """Thread-safe latest-value cache for ROS callbacks."""
 
-    def __init__(self) -> None:
+    def __init__(self, image_keys: tuple[str, ...] = IMAGE_KEYS) -> None:
+        self._image_keys = image_keys
         self._lock = threading.Lock()
         self._state: np.ndarray | None = None
         self._state_time = 0.0
@@ -275,16 +363,16 @@ class InputBuffer:
     def snapshot(self) -> tuple[dict[str, Any] | None, float]:
         now = time.monotonic()
         with self._lock:
-            if self._state is None or set(self._images) != set(IMAGE_KEYS):
+            if self._state is None or set(self._images) != set(self._image_keys):
                 return None, now
             state = self._state.copy()
             images = {name: image.copy() for name, image in self._images.items()}
             times = [self._state_time, *self._image_times.values()]
-        return _raw_from_arrays(state, images), now - min(times)
+        return _raw_from_arrays(state, images, self._image_keys), now - min(times)
 
     def ready(self) -> bool:
         with self._lock:
-            return self._state is not None and set(self._images) == set(IMAGE_KEYS)
+            return self._state is not None and set(self._images) == set(self._image_keys)
 
 
 class ActPiperNode:
@@ -298,12 +386,29 @@ class ActPiperNode:
         self.node = node
         self.runner = runner
         self.args = args
-        self.inputs = InputBuffer()
+        image_keys = tuple(
+            getattr(
+                runner,
+                "image_keys",
+                _policy_image_shapes(getattr(args, "camera_view", "single")),
+            )
+        )
+        self.inputs = InputBuffer(image_keys)
         self.session: Any | None = None
         self.actions: deque[np.ndarray] = deque()
+        self._prediction_future: Future[tuple[np.ndarray, int]] | None = None
+        self._prediction_context: dict[str, Any] | None = None
+        self._prediction_generation = 0
+        self._prediction_pool = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="act-piper-inference"
+        )
+        self._control_lock = threading.Lock()
+        self._running = False
         self.fatal_error: BaseException | None = None
         self._last_inactive_log = 0.0
         self._last_publish_log = 0.0
+        self._last_stale_log = 0.0
+        self._episode_trace: dict[str, Any] | None = None
         self._timer_group = MutuallyExclusiveCallbackGroup()
         self.timer: Any | None = None
 
@@ -313,11 +418,7 @@ class ActPiperNode:
             self.inputs.update_state,
             qos_profile_sensor_data,
         )
-        image_topics = {
-            "top": args.top_camera_topic,
-            "left_wrist": args.left_wrist_topic,
-            "right_wrist": args.right_wrist_topic,
-        }
+        image_topics = _policy_image_topics(args)
         for name, topic in image_topics.items():
             node.create_subscription(
                 Image,
@@ -328,17 +429,36 @@ class ActPiperNode:
 
     def start(self) -> None:
         """Start the control timer after RMI has granted the policy session."""
-        if self.timer is None:
+        with self._control_lock:
+            if self.timer is not None:
+                return
+            self._running = True
             self.timer = self.node.create_timer(
                 1.0 / self.args.rate_hz,
                 self._tick,
                 callback_group=self._timer_group,
             )
+        LOGGER.info("asynchronous policy inference enabled; controller retains last target")
 
     def stop(self) -> None:
-        if self.timer is not None:
-            self.node.destroy_timer(self.timer)
-            self.timer = None
+        with self._control_lock:
+            self._running = False
+            timer, self.timer = self.timer, None
+            future = self._discard_prediction_locked()
+            self.actions.clear()
+        if timer is not None:
+            self.node.destroy_timer(timer)
+        if future is not None:
+            future.cancel()
+            if not future.cancelled():
+                try:
+                    future.result()
+                except Exception as exc:  # noqa: BLE001
+                    LOGGER.warning("discarding failed in-flight policy query: %s", exc)
+
+    def close(self) -> None:
+        self.stop()
+        self._prediction_pool.shutdown(wait=True, cancel_futures=True)
 
     def _make_image_callback(self, name: str):
         def callback(message: Any) -> None:
@@ -354,57 +474,219 @@ class ActPiperNode:
         while not self.inputs.ready():
             if time.monotonic() >= deadline:
                 raise TimeoutError(
-                    "timed out waiting for /joint_states and all three RGB camera topics"
+                    "timed out waiting for /joint_states and all policy RGB camera topics"
                 )
             time.sleep(0.05)
 
     def set_session(self, session: Any) -> None:
-        self.session = session
+        with self._control_lock:
+            self.session = session
 
     def clear_session(self) -> None:
-        self.session = None
-        self.actions.clear()
+        with self._control_lock:
+            self.session = None
+            self.actions.clear()
+            self._prediction_generation += 1
+            reset_history = getattr(
+                getattr(self, "runner", None), "reset_history", None
+            )
+            if reset_history is not None:
+                reset_history()
+
+    def start_episode_trace(self) -> None:
+        """Start an in-memory trace; recording never performs I/O in the timer."""
+        self._episode_trace = {
+            "schema_version": "1.0",
+            "start_time_ns": time.time_ns(),
+            "queries": [],
+            "published_actions": [],
+        }
+
+    def finish_episode_trace(self) -> dict[str, Any] | None:
+        trace, self._episode_trace = self._episode_trace, None
+        if trace is not None:
+            trace["end_time_ns"] = time.time_ns()
+            query_times = [item["duration_ms"] for item in trace["queries"]]
+            query_starts = [item["start_time_ns"] for item in trace["queries"]]
+            query_intervals_ms = [
+                (later - earlier) / 1e6
+                for earlier, later in pairwise(query_starts)
+            ]
+            publish_times = [
+                item["time_ns"] for item in trace["published_actions"]
+            ]
+            publish_intervals_ms = [
+                (later - earlier) / 1e6
+                for earlier, later in pairwise(publish_times)
+            ]
+            trace["summary"] = {
+                "query_count": len(query_times),
+                "published_action_count": len(trace["published_actions"]),
+                "policy_action_count": sum(
+                    item.get("source", "policy") == "policy"
+                    for item in trace["published_actions"]
+                ),
+                "hold_action_count": sum(
+                    item.get("source") == "hold" for item in trace["published_actions"]
+                ),
+                "query_duration_ms_mean": (
+                    float(np.mean(query_times)) if query_times else None
+                ),
+                "query_duration_ms_p95": (
+                    float(np.percentile(query_times, 95)) if query_times else None
+                ),
+                "query_interval_ms_mean": (
+                    float(np.mean(query_intervals_ms)) if query_intervals_ms else None
+                ),
+                "actual_query_rate_hz": (
+                    1000.0 / float(np.mean(query_intervals_ms))
+                    if query_intervals_ms
+                    else None
+                ),
+                "publish_interval_ms_mean": (
+                    float(np.mean(publish_intervals_ms))
+                    if publish_intervals_ms
+                    else None
+                ),
+                "publish_interval_ms_p95": (
+                    float(np.percentile(publish_intervals_ms, 95))
+                    if publish_intervals_ms
+                    else None
+                ),
+                "publish_interval_ms_max": (
+                    float(np.max(publish_intervals_ms))
+                    if publish_intervals_ms
+                    else None
+                ),
+                "actual_publish_rate_hz": (
+                    1000.0 / float(np.mean(publish_intervals_ms))
+                    if publish_intervals_ms
+                    else None
+                ),
+            }
+        return trace
 
     def _tick(self) -> None:
-        if self.fatal_error is not None or self.session is None:
-            return
         raw_observation, age_s = self.inputs.snapshot()
         if raw_observation is None:
             return
-        if age_s > self.args.max_input_age_s:
-            self.actions.clear()
-            self._fail(
-                RuntimeError(
-                    f"input stream is stale ({age_s:.3f}s > "
-                    f"{self.args.max_input_age_s:.3f}s)"
-                )
-            )
-            return
         try:
-            if not self.session.active:
-                self.actions.clear()
-                now = time.monotonic()
-                if now - self._last_inactive_log > 1.0:
-                    LOGGER.warning(
-                        "Policy session is no longer authoritative; holding output"
+            with self._control_lock:
+                if (
+                    not self._running
+                    or self.fatal_error is not None
+                    or self.session is None
+                ):
+                    return
+                if age_s > self.args.max_input_age_s:
+                    self.actions.clear()
+                    self._prediction_generation += 1
+                    reset_history = getattr(
+                        getattr(self, "runner", None), "reset_history", None
                     )
-                    self._last_inactive_log = now
-                return
-            if not self.actions:
-                chunk = self.runner.predict(raw_observation)
-                self.actions.extend(chunk)
-                LOGGER.info("inferred action chunk: shape=%s", chunk.shape)
-            action = self.actions.popleft()
-            self._publish_action(action)
+                    if reset_history is not None:
+                        reset_history()
+                    now = time.monotonic()
+                    if now - self._last_stale_log > 1.0:
+                        LOGGER.warning(
+                            "input stream is stale (%.3fs > %.3fs); holding output "
+                            "until fresh inputs arrive",
+                            age_s,
+                            self.args.max_input_age_s,
+                        )
+                        self._last_stale_log = now
+                    return
+                if not self.session.active:
+                    self.actions.clear()
+                    self._prediction_generation += 1
+                    reset_history = getattr(
+                        getattr(self, "runner", None), "reset_history", None
+                    )
+                    if reset_history is not None:
+                        reset_history()
+                    now = time.monotonic()
+                    if now - self._last_inactive_log > 1.0:
+                        LOGGER.warning(
+                            "Policy session is no longer authoritative; holding output"
+                        )
+                        self._last_inactive_log = now
+                    return
+
+                self._accept_prediction_locked()
+                if self.actions:
+                    observe = getattr(self.runner, "observe", None)
+                    if observe is not None:
+                        observe(raw_observation)
+                    action = self.actions.popleft()
+                    self._publish_action(action, source="policy")
+                    return
+
+                self._submit_prediction_locked(raw_observation, age_s)
         except Exception as exc:  # noqa: BLE001
-            self.actions.clear()
+            with self._control_lock:
+                self.actions.clear()
             self._fail(exc)
 
-    def _publish_action(self, action: np.ndarray) -> None:
+    def _submit_prediction_locked(
+        self, raw_observation: dict[str, Any], age_s: float
+    ) -> None:
+        if self._prediction_future is not None:
+            return
+        query_start_ns = time.time_ns()
+        self._prediction_context = {
+            "generation": self._prediction_generation,
+            "start_time_ns": query_start_ns,
+            "input_age_s": age_s,
+            "observation_state": [float(raw_observation[name]) for name in JOINT_NAMES],
+        }
+        self._prediction_future = self._prediction_pool.submit(
+            self._predict_timed, raw_observation
+        )
+
+    def _predict_timed(self, raw_observation: dict[str, Any]) -> tuple[np.ndarray, int]:
+        return self.runner.predict(raw_observation), time.time_ns()
+
+    def _accept_prediction_locked(self) -> None:
+        future = self._prediction_future
+        if future is None or not future.done():
+            return
+        context = self._prediction_context
+        self._prediction_future = None
+        self._prediction_context = None
+        chunk, query_end_ns = future.result()
+        if context is None or context["generation"] != self._prediction_generation:
+            return
+        self.actions.extend(chunk)
+        if self._episode_trace is not None:
+            query_start_ns = context["start_time_ns"]
+            self._episode_trace["queries"].append(
+                {
+                    "start_time_ns": query_start_ns,
+                    "end_time_ns": query_end_ns,
+                    "duration_ms": (query_end_ns - query_start_ns) / 1e6,
+                    "input_age_s": context["input_age_s"],
+                    "observation_state": context["observation_state"],
+                    "predicted_action_chunk": chunk.astype(float).tolist(),
+                }
+            )
+        LOGGER.info("inferred action chunk: shape=%s", chunk.shape)
+
+    def _discard_prediction_locked(self) -> Future[tuple[np.ndarray, int]] | None:
+        self._prediction_generation += 1
+        future, self._prediction_future = self._prediction_future, None
+        self._prediction_context = None
+        return future
+
+    def _publish_action(self, action: np.ndarray, *, source: str = "policy") -> None:
         if action.shape != (len(JOINT_NAMES),) or not np.isfinite(action).all():
             raise ValueError(f"invalid action shape/value: {action.shape}")
         from rmi import Action
 
+        action = _apply_gripper_guard(
+            action,
+            hold_open=self.args.hold_grippers_open,
+            open_position=self.args.open_gripper_position,
+        )
         offsets = {
             "left_arm": slice(0, 6),
             "left_gripper": slice(6, 7),
@@ -418,6 +700,14 @@ class ActPiperNode:
                     command="joint_reference",
                     value=action[indices].astype(float).tolist(),
                 )
+            )
+        if self._episode_trace is not None:
+            self._episode_trace["published_actions"].append(
+                {
+                    "time_ns": time.time_ns(),
+                    "source": source,
+                    "action": action.astype(float).tolist(),
+                }
             )
         now = time.monotonic()
         if now - self._last_publish_log > 1.0:
@@ -533,11 +823,11 @@ class PolicyControl:
         LOGGER.info("Policy session acquired for %s", ", ".join(PARTS))
 
     def stop(self) -> None:
-        self.bridge.clear_session()
         self.bridge.stop()
-        if self.session is not None:
-            self.session.__exit__(None, None, None)
-            self.session = None
+        self.bridge.clear_session()
+        session, self.session = self.session, None
+        if session is not None:
+            session.__exit__(None, None, None)
 
     def close(self) -> None:
         self.stop()
@@ -555,6 +845,11 @@ class AssistEpisode:
     intervals: list[dict[str, int]]
     active_teleop_start_ns: int | None = None
     policy_type: str = "act"
+    prediction_horizon_k: int | None = None
+    executed_steps_m: int | None = None
+    rate_hz: float | None = None
+    hold_grippers_open: bool = False
+    layout_id: str | None = None
 
     @classmethod
     def start(
@@ -568,6 +863,10 @@ class AssistEpisode:
         rate_hz: float,
         stop_timeout_s: float,
         policy_type: str = "act",
+        prediction_horizon_k: int | None = None,
+        executed_steps_m: int | None = None,
+        hold_grippers_open: bool = False,
+        layout_id: str | None = None,
     ) -> AssistEpisode:
         metadata = {
             "task": task,
@@ -577,6 +876,10 @@ class AssistEpisode:
             "policy_type": policy_type,
             "policy_checkpoint": str(checkpoint.resolve()),
             "operator": f"{policy_type}_policy_assist",
+            "prediction_horizon_k": prediction_horizon_k,
+            "executed_steps_m": executed_steps_m,
+            "hold_grippers_open": hold_grippers_open,
+            "layout_id": layout_id,
         }
         scope = recorder.episode(
             task=task,
@@ -592,6 +895,11 @@ class AssistEpisode:
             started_time_ns=time.time_ns(),
             intervals=[],
             policy_type=policy_type,
+            prediction_horizon_k=prediction_horizon_k,
+            executed_steps_m=executed_steps_m,
+            rate_hz=rate_hz,
+            hold_grippers_open=hold_grippers_open,
+            layout_id=layout_id,
         )
 
     def teleop_started(self) -> None:
@@ -612,7 +920,9 @@ class AssistEpisode:
         )
         self.active_teleop_start_ns = None
 
-    def finish(self, *, discard: bool) -> Path | None:
+    def finish(
+        self, *, discard: bool, policy_trace: dict[str, Any] | None = None
+    ) -> Path | None:
         self.teleop_ended()
         if discard:
             self.scope.discard()
@@ -628,12 +938,25 @@ class AssistEpisode:
         payload = {
             "schema_version": "1.0",
             "policy": {"type": self.policy_type, "checkpoint": str(self.checkpoint)},
+            "deployment": {
+                "prediction_horizon_k": self.prediction_horizon_k,
+                "executed_steps_m": self.executed_steps_m,
+                "control_rate_hz": self.rate_hz,
+                "nominal_query_rate_hz": (
+                    self.rate_hz / self.executed_steps_m
+                    if self.rate_hz is not None and self.executed_steps_m
+                    else None
+                ),
+                "hold_grippers_open": self.hold_grippers_open,
+            },
             "task": self.task,
+            "layout_id": self.layout_id,
             "episode_index": self.episode_index,
             "start_time_ns": self.started_time_ns,
             "end_time_ns": time.time_ns(),
             "teleop_count": len(self.intervals),
             "teleop_intervals": self.intervals,
+            "policy_trace": policy_trace,
         }
         destination = episode_dir / "episode_assist.json"
         temporary = destination.with_suffix(".tmp")
@@ -853,7 +1176,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rate-hz", type=float, default=30.0)
     parser.add_argument("--state-topic", default="/joint_states")
     parser.add_argument(
-        "--top-camera-topic", default="/observation/static_orbbec/color/image_raw"
+        "--top-camera-topic",
+        choices=("/observation/orbbec/color/image_raw",),
+        default="/observation/orbbec/color/image_raw",
+    )
+    parser.add_argument(
+        "--camera-view",
+        choices=("single",),
+        default="single",
+        help="use the Orbbec top camera plus left/right wrist cameras",
     )
     parser.add_argument(
         "--left-wrist-topic",
@@ -864,13 +1195,35 @@ def _build_parser() -> argparse.ArgumentParser:
         default="/observation/right_hand_realsense/color/image_raw",
     )
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
+    parser.add_argument(
+        "--action-steps",
+        type=int,
+        default=None,
+        help="execute this many actions from each predicted chunk before querying again",
+    )
+    parser.add_argument(
+        "--hold-grippers-open",
+        action="store_true",
+        help="hard-override both policy gripper channels during approach-only tests",
+    )
+    parser.add_argument(
+        "--open-gripper-position",
+        type=float,
+        default=0.020,
+        help="per-finger position used by --hold-grippers-open, in metres",
+    )
     parser.add_argument("--input-timeout-s", type=float, default=10.0)
     parser.add_argument("--max-input-age-s", type=float, default=0.5)
     parser.add_argument(
         "--record-episodes",
         type=int,
         default=0,
-        help="record this many successful ACT-assisted MCAP episodes; 0 keeps continuous inference",
+        help="record this many ACT-assisted trial episodes; 0 keeps continuous inference",
+    )
+    parser.add_argument(
+        "--layout-ids",
+        default=None,
+        help="comma-separated layout IDs, one for each recorded episode",
     )
     parser.add_argument(
         "--teleop-takeover",
@@ -900,9 +1253,10 @@ def _build_parser() -> argparse.ArgumentParser:
 def _run_dry_run(args: argparse.Namespace, runner: ActRunner) -> None:
     state = np.zeros(len(JOINT_NAMES), dtype=np.float32)
     images = {
-        name: np.zeros(shape, dtype=np.uint8) for name, shape in IMAGE_SHAPES.items()
+        name: np.zeros(shape, dtype=np.uint8)
+        for name, shape in runner.image_shapes.items()
     }
-    action = runner.predict(_raw_from_arrays(state, images))
+    action = runner.predict(_raw_from_arrays(state, images, runner.image_keys))
     LOGGER.info(
         "dry-run passed: action shape=%s, finite=%s",
         action.shape,
@@ -950,24 +1304,46 @@ def _run_recording(
     keys: TerminalKeyReader,
 ) -> None:
     """Collect complete autonomous-plus-correction episodes in one control context."""
-    recorder_cfg = context.profile.raw_data.get("recorder", {})
+    from record import (
+        _normalize_task_name,
+        _task_recorder_config,
+    )
+
+    recorder_cfg = dict(context.profile.recording)
     max_duration_s = float(recorder_cfg.get("max_duration_s", 60.0))
     if max_duration_s <= 0.0:
         raise ValueError("profile recorder.max_duration_s must be positive")
-    recorder = context.make_recorder(autostart=True)
+    task = _normalize_task_name(args.task)
+    expected_top_topic = "/observation/orbbec/color/image_raw"
+    if args.top_camera_topic != expected_top_topic:
+        raise RuntimeError(
+            "deployment only supports the Orbbec top camera: "
+            f"{args.top_camera_topic} != {expected_top_topic}"
+        )
+    recorder = context.make_recorder(
+        config=_task_recorder_config(
+            recorder_cfg, task, f"{getattr(args, 'policy_type', 'act')}_policy"
+        ),
+        autostart=True,
+    )
     recorder.activate()
+    LOGGER.info("recording camera contract: Orbbec + left/right wrist")
     saved = 0
     source_episode_index = 1
+    layout_ids = _parse_layout_ids(args.layout_ids, args.record_episodes)
 
     while saved < args.record_episodes:
+        layout_id = layout_ids[saved]
         LOGGER.info(
-            "recording episode %d/%d: returning to staging home pose",
+            "recording episode %d/%d (%s): returning to staging home pose",
             saved + 1,
             args.record_episodes,
+            layout_id,
         )
         _smooth_homing(context, control)
         LOGGER.warning(
-            "READY: press Enter to start episode %d/%d; press Q to exit",
+            "READY layout=%s: arrange the cloth, then press Enter to start episode %d/%d; press Q to exit",
+            layout_id,
             saved + 1,
             args.record_episodes,
         )
@@ -985,18 +1361,23 @@ def _run_recording(
         episode = AssistEpisode.start(
             recorder,
             checkpoint=args.checkpoint,
-            task=args.task,
+            task=task,
             episode_index=source_episode_index,
             profile=args.profile,
             rate_hz=args.rate_hz,
             stop_timeout_s=max_duration_s + 30.0,
             policy_type=policy_type,
+            prediction_horizon_k=bridge.runner.chunk_size,
+            executed_steps_m=bridge.runner.action_steps,
+            hold_grippers_open=args.hold_grippers_open,
+            layout_id=layout_id,
         )
         source_episode_index += 1
         started = time.monotonic()
         LOGGER.warning(
             "RECORDING: Enter finishes; T toggles ACT/teleop; Q discards and exits"
         )
+        bridge.start_episode_trace()
         control.start()
         episode_dir: Path | None = None
         aborted = False
@@ -1036,17 +1417,20 @@ def _run_recording(
             if teleop is not None and teleop.active:
                 teleop.deactivate()
             control.stop()
-            episode.finish(discard=True)
+            episode.finish(
+                discard=True, policy_trace=bridge.finish_episode_trace()
+            )
             raise
 
         if teleop is not None and teleop.active:
             teleop.deactivate()
             episode.teleop_ended()
         control.stop()
+        policy_trace = bridge.finish_episode_trace()
         if aborted:
-            episode.finish(discard=True)
+            episode.finish(discard=True, policy_trace=policy_trace)
             return
-        episode_dir = episode.finish(discard=False)
+        episode_dir = episode.finish(discard=False, policy_trace=policy_trace)
         LOGGER.warning("REVIEW: Enter/S saves; D deletes this episode; Q exits")
         while True:
             key = keys.next(0.1)
@@ -1069,8 +1453,11 @@ def _run_recording(
 def _run_ros(args: argparse.Namespace, runner: ActRunner) -> None:
     import rclpy
     import rmi
+    from rclpy.signals import SignalHandlerOptions
 
-    rclpy.init()
+    # Keep the ROS context valid while Python handles Ctrl+C so the Policy
+    # lease can be released through Execution Manager before shutdown.
+    rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     policy_type = getattr(args, "policy_type", "act")
     node = rclpy.create_node(f"{policy_type}_piper_policy")
     bridge = ActPiperNode(node, runner, args)
@@ -1147,6 +1534,7 @@ def _run_ros(args: argparse.Namespace, runner: ActRunner) -> None:
         else:
             bridge.stop()
             bridge.clear_session()
+        bridge.close()
         if context is not None:
             context.close()
         node.destroy_node()
@@ -1160,7 +1548,9 @@ def main() -> None:
         raise SystemExit("--rate-hz must be positive")
     if args.record_episodes < 0:
         raise SystemExit("--record-episodes must be non-negative")
-    runner = ActRunner(args.checkpoint, args.device)
+    runner = ActRunner(
+        args.checkpoint, args.device, args.action_steps, camera_view=args.camera_view
+    )
     if args.dry_run:
         _run_dry_run(args, runner)
     else:

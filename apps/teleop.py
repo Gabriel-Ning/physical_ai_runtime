@@ -19,7 +19,9 @@ import time
 from contextlib import ExitStack
 from typing import Any
 
+import rclpy
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.signals import SignalHandlerOptions
 from std_srvs.srv import SetBool
 from trajectory_msgs.msg import JointTrajectory
 
@@ -89,6 +91,10 @@ def main() -> None:
 
     # 1. Connect to Runtime & Profile
     print("[1/3] Connecting to robot embodiment runtime...")
+    # Keep the ROS context alive while Python handles Ctrl+C.  Session cleanup
+    # must still be able to call the Leader release services before shutdown.
+    if not rclpy.ok():
+        rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     ctx = rmi.Context.from_profile(args.profile)
     ctx.wait_until_ready(timeout=6.0)
 
@@ -202,7 +208,6 @@ def main() -> None:
     except (KeyboardInterrupt, EOFError):
         print("\n\n[!] Teleoperation stopped by operator.")
     finally:
-        set_teleop_preempt(ctx.node, teleoperators, False)
         ctx.close()
         print("[✓] Teleoperation session closed safely.")
 

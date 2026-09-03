@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+runtime_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+selection_root="$runtime_root/data/selections/pick_corner_mix1_seed1000"
+output_root=/home/alpha/lerobot_train/pick_corner_mix1_100_staging
+
+if [[ -e "$output_root" ]]; then
+  echo "[ERROR] staging 目录已存在，请先让 Codex 校验，不要覆盖: $output_root" >&2
+  exit 1
+fi
+
+cd "$runtime_root"
+
+for view in d435i1 d435i2 orbbec; do
+  pixi run -e lerobot lerobot-convert -- \
+    --episode-list "$selection_root/$view.txt" \
+    --episodes-root data/episodes/pick_corner \
+    --task pick_corner \
+    --camera-view "$view" \
+    --output "$output_root" \
+    --repo-id pick_corner_mix1_100 \
+    --fps 30 \
+    --require-accepted-demonstration
+done
+
+echo "[OK] Mix-1 staging 转换完成: $output_root"

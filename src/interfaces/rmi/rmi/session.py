@@ -155,6 +155,8 @@ class Session:
         traceback: TracebackType | None,
     ) -> None:
         del exc, traceback
+        if not self._entered:
+            return
         try:
             if self._is_explicitly_displaced():
                 self.diagnostics.displaced_exits += 1

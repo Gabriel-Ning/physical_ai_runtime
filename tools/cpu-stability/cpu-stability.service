@@ -1,0 +1,13 @@
+[Unit]
+Description=Conservative Intel CPU settings for system stability
+After=power-profiles-daemon.service thermald.service
+ConditionPathExists=/sys/devices/system/cpu/intel_pstate
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cpu-stability-guard apply
+ExecStop=/usr/local/sbin/cpu-stability-guard rollback
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

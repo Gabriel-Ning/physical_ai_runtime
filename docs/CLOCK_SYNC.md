@@ -4,7 +4,7 @@
 
 | 机器 | 作用 | 例子 |
 |---|---|---|
-| 工作站 / host | 跑 marker / `new_apps`，给局域网供 NTP | `192.168.1.13` |
+| 工作站 / host | 跑 marker / `new_apps`，给局域网供 NTP | `192.168.1.18` |
 | RT | 跑 `ros2_control` / EM，跟着工作站的钟 | `delta@192.168.1.101` |
 
 看 **chrony offset**。不要看 SSH `date` 的 skew。
@@ -43,13 +43,13 @@ host 先供时，再 SSH 进 RT 让它 follow。
 
 ```bash
 # host terminal（仓库根目录）
-sudo scripts/sync_clock --serve --local-ip 192.168.1.13
+sudo scripts/sync_clock --serve --local-ip 192.168.1.18
 ssh delta@192.168.1.101
 ```
 
 ```bash
 # ssh rt host terminal（已经 ssh 进去之后）
-sudo scripts/sync_clock --ip 192.168.1.13 --follow
+sudo scripts/sync_clock --ip 192.168.1.18 --follow
 ```
 
 等到打印 `Converged (|offset| <= 100 us)`。

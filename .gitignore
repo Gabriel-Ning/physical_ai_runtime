@@ -14,6 +14,11 @@ __pycache__/
 build/
 install/
 log/
+Log/
+build_collection_overlay/
+install_collection_overlay/
+log_collection_overlay/
+log_collection_overlay_*/
 output/
 compile_commands.json
 
@@ -47,6 +52,7 @@ MUJOCO_LOG.TXT
 !/docs/CPU_HOST_SETUP.md
 !/docs/UDEV_HOST_SETUP.md
 !/docs/FRANKA_RT_COMMUNICATION.md
+!/docs/WORKSTATION_FREEZE_RECOVERY.md
 
 # Editor and operating-system noise
 .vscode/*

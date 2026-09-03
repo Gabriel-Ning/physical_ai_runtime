@@ -128,7 +128,7 @@ print_verdict() {
   # Prefer chrony offset (ms). SSH date skew is a noisy cross-check.
   local offset_ms="$1"
   local abs
-  abs="$(awk -v s="$offset_ms" 'BEGIN { s = (s < 0 ? -s : s); printf "%.1f", s }')"
+  abs="$(awk -v s="$offset_ms" 'BEGIN { printf "%.3f", sqrt(s * s) }')"
   local us
   us="$(awk -v a="$abs" 'BEGIN { printf "%.0f", a * 1000.0 }')"
   if awk -v a="$abs" 'BEGIN { exit !(a <= 0.1) }'; then
@@ -144,12 +144,18 @@ print_verdict() {
 
 remote_chrony_offset_ms() {
   ssh_base 'chronyc tracking 2>/dev/null' | awk -F': ' '
+    /Reference ID/ { ref = $2 }
     /System time/ {
       split($2, a, " ")
       ms = a[1] * 1000.0
       if ($2 ~ /slow/) ms = -ms
-      printf "%.2f", ms
-      exit
+      have_offset = 1
+    }
+    /Leap status/ { leap = $2 }
+    END {
+      if (have_offset && leap == "Normal" && ref !~ /^00000000/) {
+        printf "%.2f", ms
+      }
     }'
 }
 
@@ -163,11 +169,11 @@ print_status() {
   echo "remote UTC:        $(ssh_base "date -u +'%Y-%m-%d %H:%M:%S.%N %Z'")"
   echo "ssh-date skew:     ${skew} ms  (RTT ${rtt} ms, noisy)"
   if [[ -n "${chrono}" ]]; then
-    echo "chrony offset:     ${chrono} ms  ($(awk -v c="$chrono" 'BEGIN { printf "%.0f", (c < 0 ? -c : c) * 1000 }') us, RT vs NTP peer)"
+    echo "chrony offset:     ${chrono} ms  ($(awk -v c="$chrono" 'BEGIN { printf "%.0f", sqrt(c * c) * 1000 }') us, RT vs NTP peer)"
     print_verdict "$chrono"
   else
-    echo "chrony offset:     (chronyc not available on remote — using ssh-date)"
-    print_verdict "$skew"
+    echo "chrony offset:     (remote chrony is unavailable or not synchronized)"
+    echo "verdict:           NOT_SYNC  (wait for Leap status: Normal and a real Reference ID)"
   fi
   ssh_base 'timedatectl 2>/dev/null | sed -n "1,8p"; echo; chronyc tracking 2>/dev/null | sed -n "1,8p"' || true
 }
@@ -230,7 +236,7 @@ apply_remote() {
   ws_ip="$(detect_local_ip "$peer")"
   if [[ -z "$ws_ip" ]]; then
     echo "Could not detect the LAN IP this host uses toward ${peer}." >&2
-    echo "Pass it explicitly: --local-ip 192.168.1.13" >&2
+    echo "Pass it explicitly: --local-ip 192.168.1.18" >&2
     exit 1
   fi
 
@@ -300,7 +306,8 @@ EOF
     offset="$(chronyc tracking 2>/dev/null | awk -F': ' '/System time/ {print $2}')"
     offset_s="$(awk '{print $1}' <<<"${offset:-}")"
     printf '[%3ds] synchronized=%-3s  leap=%-16s  %s\n' "$i" "$sync" "${leap:-?}" "${offset:-}"
-    if [[ -n "$offset_s" ]] && awk -v o="$offset_s" 'BEGIN { o = (o < 0 ? -o : o); exit !(o <= 0.0001) }'; then
+    if [[ "$sync" == "yes" && "$leap" == "Normal" && -n "$offset_s" ]] \
+      && awk -v o="$offset_s" 'BEGIN { o = (o < 0 ? -o : o); exit !(o <= 0.0001) }'; then
       echo "Converged (|offset| <= 100 us)."
       break
     fi

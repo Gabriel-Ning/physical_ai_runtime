@@ -1,73 +1,110 @@
 # piper_manipulation_workstation_launch
 
-Piper 工作站侧 bringup：双 Leader 臂、1 路 Orbbec Femto Bolt、2 路腕部
-RealSense D435i、Execution Manager 和 episode recorder。机械臂 follower 的
-`ros2_control` 仍由 `piper_manipulation_rt_launch` 管理。
+Piper 当前标准链路使用三路相机：一台 Orbbec 顶部相机和左右腕部两台 RealSense。
+相机全部连接工作站；NUC 只运行 follower 双臂 RT stack。两台主机必须使用相同的
+`ROS_DOMAIN_ID`（当前为 `1`），录制前时钟偏差应不超过 100 us。
 
-## 配置归属
+## 设备与话题
 
-- `config/execution_manager.yaml`：四个执行资源与 `/execution/...` 路由；人工接管和策略推理由 RMI lease/preempt 决定。
-- `config/recording/rmi_piper_bimanual.yaml`：MCAP stream contract。
-- `config/camera/femto_bolt.yaml`：静态 Orbbec 参数。
-- `config/camera/d435i_dual.yaml`：左右腕部 RealSense 参数。
-- `config/teleop/piper_leaders.yaml`：Leader CAN 与发布话题默认值。
-- `apps/profiles/piper_bimanual.yaml`：应用、传感器、teleoperator 和 recorder client 配置；通过 `execution_manager_config` 引用路由表。
+| 主机 | 设备 | RGB topic |
+|---|---|---|
+| 本地 `192.168.1.18` | Orbbec Femto Bolt `CL8384201CG` | `/observation/orbbec/color/image_raw` |
+| 本地 | 左腕 D435i `332522075913` | `/observation/left_hand_realsense/color/image_raw` |
+| 本地 | 右腕 D435i `332322073584` | `/observation/right_hand_realsense/color/image_raw` |
 
-## 一键启动
+NUC 双臂的实际 CAN 映射为左臂 `piper1`、右臂 `piper0`。本地 Leader 默认左臂
+`can1`、右臂 `can0`。
 
-先启动 RT Host，再在 workstation 执行：
+## 1. NUC：启动 Follower 双臂
+
+NUC 仓库为 `/home/delta/Documents/physical_ai_runtime`：
 
 ```bash
+cd /home/delta/Documents/physical_ai_runtime
+pixi run -e cpu bash -lc \
+  'source install/setup.bash && ros2 launch piper_manipulation_rt_launch rt_stack.launch.py use_fake_hardware:=false left_can_interface:=piper1 right_can_interface:=piper0 use_rviz:=false'
+```
+
+三相机主链路不要启动 `piper_external_cameras.launch.py`，也不要求 NUC 上的
+`d435i1`、`d435i2` topic。
+
+## 2. 本地：一键启动标准工作站
+
+本地仓库固定为 `/home/alpha/physical_ai_runtime`，ACT 独立位于 `/home/alpha/ACT`。
+
+```bash
+cd /home/alpha/physical_ai_runtime
 ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py
 ```
 
-该入口固定启动全部工作站子系统，不提供 `with_*` 开关。需要单独调试时使用：
+这个标准入口一次启动：
+
+- 左右两台 Leader（shadow/teleop）
+- Orbbec 与左右腕部 D435i
+- Execution Manager
+- episode recorder daemon
+
+只查看相机且不启动机械臂/服务时，可运行：
 
 ```bash
-ros2 launch piper_manipulation_workstation_launch piper_leaders.launch.py
-ros2 launch piper_manipulation_workstation_launch piper_orbbec.launch.py
-ros2 launch piper_manipulation_workstation_launch piper_realsense.launch.py
-ros2 launch piper_manipulation_workstation_launch recorder.launch.py
-ros2 launch piper_manipulation_workstation_launch execution_manager.launch.py
+ros2 launch piper_manipulation_workstation_launch piper_local_cameras.launch.py
 ```
 
-要在连接真机传感器的情况下验证完整工作站图、但不激活 Leader 电机，请使用：
+在 RViz2 中查看三路画面：
 
 ```bash
-ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py autostart:=false
+pixi run -e runtime rviz2
 ```
 
-该参数只阻止 Leader 节点打开 CAN / 启动控制环；其余服务（Execution Manager、
-recorder、Orbbec、两路 D435i）都会启动。
+## 3. 遥操作或三相机采集
 
-## 无运动检查
+标准 `piper_bimanual.yaml` 只包含上述三个相机。NUC 双臂和本地标准工作站都运行后，
+另开本地终端执行：
 
-Execution Manager 本身只仲裁和转发命令，不会主动生成运动命令。启动后先检查：
+```bash
+cd /home/alpha/physical_ai_runtime
+pixi run -e runtime python apps/teleop.py
+```
+
+或采集十条：
+
+```bash
+cd /home/alpha/physical_ai_runtime
+pixi run -e runtime python apps/record.py \
+  --profile piper_bimanual.yaml --task bimanual_pickup --episodes 10
+```
+
+recorder 的三路相机都设为 `required` / `start_gate`，少任何一路都不会开始写有效
+episode。`d435i1`、`d435i2` 不参与新数据录制、转换、训练或部署。
+
+## 4. 最小验收检查
 
 ```bash
 ros2 node list | grep -E 'execution_manager|episode_recorder|piper_leader'
-ros2 topic list | grep -E '^/observation/|^/execution_manager/'
-ros2 topic hz /observation/static_orbbec/color/image_raw
+ros2 topic list | grep -E '/observation/(orbbec|left_hand_realsense|right_hand_realsense)'
+ros2 topic hz /observation/orbbec/color/image_raw
 ros2 topic hz /observation/left_hand_realsense/color/image_raw
 ros2 topic hz /observation/right_hand_realsense/color/image_raw
 ```
 
-预期三个 RGB topic 均约 30 Hz。开始录制后检查 `episode_health.json`：三个相机
-stream count 应增长，`recorder_drops` 应为 0。
-
-Leader 进入 teleop 后，客户端必须逐一打印左右臂的 `Preempt ACTIVE` 成功回执；任
-一侧超时或拒绝时会撤销已取得的 lease，不能开始遥操。可用以下命令确认驱动真实
-启动了重力补偿控制环：
+三路 RGB 预期约 30 Hz。正式采集前再运行：
 
 ```bash
-ros2 topic echo /teleop/piper_leader_left/status --once
-ros2 topic echo /teleop/piper_leader_right/status --once
+scripts/sync_clock --status delta@192.168.1.101
 ```
 
-两条状态都应包含 `"mode":"active_preempt"` 和
-`"gravity_compensation_running":true`。D435i 在 USB 枚举延迟期间会等待最多 30 秒，
-短暂断连后每 2 秒重连；启动后仍应以上述 `ros2 topic hz` 对两个腕部 topic 分别验
-证约 30 Hz。
+输出必须为 `GOOD`。三相机的数据录制、转换和 ACT 部署步骤见
+`/home/alpha/physical_ai_runtime/apps/README.md`。
 
-真实 Leader 接管前还应确认 `can1`/`can0` 分别对应左/右 Leader，RT follower
-控制器状态与预期一致，并保持急停可用。
+## 配置归属
+
+- `config/execution_manager.yaml`：四个执行资源与 `/execution/...` 路由。
+- `config/recording/rmi_piper_bimanual.yaml`：三相机 MCAP stream contract。
+- `config/camera/femto_bolt.yaml`：Orbbec 参数。
+- `config/camera/d435i_dual.yaml`：左右腕部 RealSense 参数。
+- `config/teleop/piper_leaders.yaml`：Leader CAN 与发布话题。
+- `apps/profiles/piper_bimanual.yaml`：应用、三相机、teleoperator 和 recorder client 配置。
+
+`five_camera_workstation.launch.py`、`piper_external_cameras.launch.py`、
+`rmi_piper_bimanual_five_camera.yaml` 和 `piper_bimanual_five_camera.yaml` 仅保留用于复现
+历史五相机实验，不属于当前标准入口。

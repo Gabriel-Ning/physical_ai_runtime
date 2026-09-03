@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!-- Default CycloneDDS profile for the Hik camera LAN.
+<!-- Default CycloneDDS profile for the Piper two-host camera/robot LAN.
 
-     Local interface: enp132s0 (192.168.10.13/24)
-     Camera host peer: 192.168.10.100
+     Workstation / external-camera host: 192.168.1.18
+     RT / wrist-camera host peer: 192.168.1.101
      ROS domain: configured as ROS_DOMAIN_ID=1 in pixi.toml
 -->
 <CycloneDDS xmlns="https://cdds.io/config"
@@ -11,14 +11,14 @@
   <Domain id="any">
     <General>
       <Interfaces>
-        <NetworkInterface address="192.168.1.13" />
+        <NetworkInterface address="192.168.1.18" />
       </Interfaces>
       <AllowMulticast>true</AllowMulticast>
     </General>
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
       <Peers>
-        <Peer address="192.168.1.102" />
+        <Peer address="192.168.1.101" />
       </Peers>
     </Discovery>
     <Internal>

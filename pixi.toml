@@ -299,6 +299,7 @@ lerobot-versions = "python -c \"import flash_attn, lerobot, torch, torchvision; 
 lerobot-convert = "bash -c 'exec python scripts/convert_episode_to_lerobot.py \"$@\"' --"
 act-piper = "bash -c 'source install/setup.bash && exec python apps/act_piper.py \"$@\"' --"
 smolvla-piper = "bash -c 'source install/setup.bash && exec python apps/smolvla_piper.py \"$@\"' --"
+diffusion-piper = "bash -c 'source install/setup.bash && exec python apps/diffusion_piper.py \"$@\"' --"
 
 [environments]
 # default is the previous cpu robot stack. `runtime` is the same feature set

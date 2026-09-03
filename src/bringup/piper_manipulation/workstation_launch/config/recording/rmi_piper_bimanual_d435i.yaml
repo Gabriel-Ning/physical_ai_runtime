@@ -1,0 +1,15 @@
+# Stream contract selected by apps/record.py --static-camera d435i.
+metadata:
+  format: rmi_episode_recorder/v1
+  robot: piper_bimanual
+
+streams:
+  - {id: execution_left_arm_joint_reference, topic: /execution/left_arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_right_arm_joint_reference, topic: /execution/right_arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_left_gripper_joint_reference, topic: /execution/left_gripper/joint_reference, expected_type: std_msgs/msg/Float64MultiArray, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: execution_right_gripper_joint_reference, topic: /execution/right_gripper/joint_reference, expected_type: std_msgs/msg/Float64MultiArray, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+
+  - {id: robot_joint_states, topic: /joint_states, expected_type: sensor_msgs/msg/JointState, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: static_d435i_color, topic: /observation/static_d435i/color/image_raw, expected_type: sensor_msgs/msg/Image, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: left_wrist_realsense_color, topic: /observation/left_hand_realsense/color/image_raw, expected_type: sensor_msgs/msg/Image, required: true, start_gate: true, qos: {mode: sensor_data}}
+  - {id: right_wrist_realsense_color, topic: /observation/right_hand_realsense/color/image_raw, expected_type: sensor_msgs/msg/Image, required: true, start_gate: true, qos: {mode: sensor_data}}

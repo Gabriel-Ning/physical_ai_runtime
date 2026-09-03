@@ -9,7 +9,7 @@ rgb_camera.color_profile: 640x480x30
 # A D435i can enumerate its USB interfaces a few seconds apart.  Keep each
 # driver alive until its serial is usable, then retry short USB disconnects
 # instead of exiting and requiring a manual launch restart.
-wait_for_device_timeout: 30.0
+wait_for_device_timeout: -1.0
 reconnect_timeout: 2.0
 
 # The recording contract and RViz validation consume color only. Disabling

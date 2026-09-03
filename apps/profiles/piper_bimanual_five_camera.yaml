@@ -1,5 +1,5 @@
 metadata:
-  name: "piper_bimanual"
+  name: "piper_bimanual_five_camera"
   embodiment_type: "bimanual"
   vendor: "piper"
   version: "1.0"
@@ -14,14 +14,13 @@ host_roles:
         use_rviz: false
         left_can_interface: piper1
         right_can_interface: piper0
-    owns: ["ros2_control", "local_safety"]
+    owns: ["ros2_control", "local_safety", "external_realsense_cameras"]
   workstation_host:
     bringup:
       package: "piper_manipulation_workstation_launch"
-      launch_file: "workstation_stack.launch.py"
-    owns: ["sensors", "teleoperators", "rmi", "execution_manager", "action_provider_nodes", "application_nodes", "episode_recorder_client"]
+      launch_file: "five_camera_workstation.launch.py"
+    owns: ["orbbec_external_camera", "wrist_cameras", "teleoperators", "rmi", "execution_manager", "episode_recorder_client"]
 
-# Execution capability and command routes are owned by the workstation package.
 execution_manager_config:
   package: "piper_manipulation_workstation_launch"
   file: "config/execution_manager.yaml"
@@ -41,10 +40,6 @@ agents:
     source_role: POLICY
     resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
-  Planner:
-    source_role: PLANNER
-    resources: {left_arm: joint_trajectory, right_arm: joint_trajectory}
-    frequency: 30.0
   TeleopJoint_Left:
     source_role: TELEOP
     resources: {left_arm: joint_reference, left_gripper: joint_reference}
@@ -53,27 +48,15 @@ agents:
     source_role: TELEOP
     resources: {right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 200.0
-  TeleopCartesian_Left:
-    source_role: TELEOP
-    resources: {left_arm: pose_reference}
-    frequency: 100.0
-  TeleopCartesian_Right:
-    source_role: TELEOP
-    resources: {right_arm: pose_reference}
-    frequency: 100.0
-  TeleopTwist_Left:
-    source_role: TELEOP
-    resources: {left_arm: twist_reference}
-    frequency: 100.0
-  TeleopTwist_Right:
-    source_role: TELEOP
-    resources: {right_arm: twist_reference}
-    frequency: 100.0
 
 sensors:
   cameras:
     orbbec:
       ros_topic: "/observation/orbbec/color/image_raw"
+    d435i1:
+      ros_topic: "/observation/d435i1/color/image_raw"
+    d435i2:
+      ros_topic: "/observation/d435i2/color/image_raw"
     left_wrist_cam:
       ros_topic: "/observation/left_hand_realsense/color/image_raw"
     right_wrist_cam:
@@ -82,11 +65,14 @@ sensors:
 recorder:
   config:
     package: "piper_manipulation_workstation_launch"
-    file: "config/recording/rmi_piper_bimanual.yaml"
+    file: "config/recording/rmi_piper_bimanual_five_camera.yaml"
   root_dir: "data/episodes"
-  experiment_name: "bimanual_manipulation"
-  task: "bimanual_manipulation"
-  episodes: 5
+  experiment_name: "towel_corner_grasp_v1"
+  task: "towel_corner_grasp_v1"
+  dataset_version: "towel_corner_grasp_five_camera_v1"
+  config_id: "act_multiview_screening_v1"
+  camera_setup: "piper_five_camera_20260827"
+  episodes: 100
   rate_hz: 50.0
   max_duration_s: 60.0
   homing_duration_s: 2.5
@@ -110,15 +96,23 @@ teleoperators:
 
 features:
   observation:
-    "observation.images.orbbec":
+    "observation.images.external_1":
       type: "image"
       shape: [3, 720, 1280]
       source: "sensors.cameras.orbbec"
-    "observation.images.left_wrist_cam":
+    "observation.images.external_2":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.d435i1"
+    "observation.images.external_3":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.d435i2"
+    "observation.images.left_wrist":
       type: "image"
       shape: [3, 480, 640]
       source: "sensors.cameras.left_wrist_cam"
-    "observation.images.right_wrist_cam":
+    "observation.images.right_wrist":
       type: "image"
       shape: [3, 480, 640]
       source: "sensors.cameras.right_wrist_cam"

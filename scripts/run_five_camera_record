@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNTIME_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+COLLECTION_OVERLAY="${RUNTIME_ROOT}/install_collection_overlay"
+
+# Match the workstation launch affinity.  See run_five_camera_workstation.
+FIVE_CAMERA_CPUSET="${FIVE_CAMERA_CPUSET:-0-7,10-31}"
+if [[ "${FIVE_CAMERA_CPUSET}" != "off" ]] && command -v taskset >/dev/null 2>&1; then
+  taskset -pc "${FIVE_CAMERA_CPUSET}" "$$" >/dev/null
+  echo "Collection CPU affinity: ${FIVE_CAMERA_CPUSET} (CPU 8/9 excluded)"
+fi
+
+export ROS_DISTRO="${ROS_DISTRO:-jazzy}"
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+export AMENT_PREFIX_PATH="${COLLECTION_OVERLAY}/piper_manipulation_workstation_launch:${COLLECTION_OVERLAY}/piper_leader_teleop:${COLLECTION_OVERLAY}/piper_description:${COLLECTION_OVERLAY}/pika_gripper_description:${RUNTIME_ROOT}/.pixi/envs/default"
+export PYTHONPATH="${RUNTIME_ROOT}/src/interfaces/rmi${PYTHONPATH:+:${PYTHONPATH}}"
+export PATH="${RUNTIME_ROOT}/scripts/compat_bin:${PATH}"
+
+cd "${RUNTIME_ROOT}"
+exec "${RUNTIME_ROOT}/.pixi/envs/runtime/bin/python" apps/record.py \
+  --profile piper_bimanual.yaml \
+  --task towel_corner_grasp_v1 \
+  "$@"

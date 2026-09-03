@@ -1,0 +1,20 @@
+# RGB-only RealSense profile shared by d435i1 and d435i2
+# on the NUC. rs_launch.py reads this file directly, so its parameter names are
+# intentionally flat. Camera identity is selected separately by serial number.
+enable_color: true
+rgb_camera.color_profile: 640x480x30
+
+# Use RGB only so both NUC cameras can stream concurrently within the USB budget.
+wait_for_device_timeout: 30.0
+reconnect_timeout: 2.0
+
+enable_depth: false
+enable_infra: false
+enable_infra1: false
+enable_infra2: false
+enable_gyro: false
+enable_accel: false
+
+align_depth.enable: false
+pointcloud.enable: false
+publish_tf: true
