@@ -1,0 +1,109 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.5
+      Cell Size: 0.25
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
+      Enabled: false
+      Name: World Grid
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: world
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Marker Scale: 0.18
+      Name: XR TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Value: true
+    - Class: rviz_default_plugins/PoseArray
+      Alpha: 1
+      Arrow Length: 0.18
+      Axes Length: 0.16
+      Axes Radius: 0.012
+      Color: 25; 180; 255
+      Enabled: true
+      Head Length: 0.06
+      Head Radius: 0.025
+      Name: Reference XR EE Poses
+      Shaft Length: 0.12
+      Shaft Radius: 0.01
+      Shape: Axes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /xr_teleop/ee_poses
+      Value: false
+    - Alpha: 1
+      Axes Length: 0.2
+      Axes Radius: 0.014
+      Class: rviz_default_plugins/Pose
+      Color: 25; 180; 255
+      Enabled: true
+      Head Length: 0.07
+      Head Radius: 0.03
+      Name: Bimanual Target Left
+      Shaft Length: 0.15
+      Shaft Radius: 0.012
+      Shape: Axes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /quest3_bimanual_target/left_pose_target
+      Value: true
+    - Alpha: 1
+      Axes Length: 0.2
+      Axes Radius: 0.014
+      Class: rviz_default_plugins/Pose
+      Color: 255; 190; 35
+      Enabled: true
+      Head Length: 0.07
+      Head Radius: 0.03
+      Name: Bimanual Target Right
+      Shaft Length: 0.15
+      Shaft Radius: 0.012
+      Shape: Axes
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /quest3_bimanual_target/right_pose_target
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 32; 32; 32
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.0
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.6
+      Name: Orbit
+      Near Clip Distance: 0.01
+      Pitch: 0.55
+      Target Frame: world
+      Yaw: 0.8

@@ -48,29 +48,59 @@ def test_recording_gripper_streams_use_float64_multiarray():
     )
 
 
-def test_leader_defaults_live_in_teleop_config_not_launch():
-    leaders = yaml.safe_load(
-        (ROOT / "config" / "teleop" / "piper_leaders.yaml").read_text(encoding="utf-8")
+def test_no_camera_recording_contract_contains_no_image_streams():
+    contract = ROOT.parents[3] / "apps" / "recording" / "piper_bimanual_no_cam.yaml"
+    recording = yaml.safe_load(contract.read_text(encoding="utf-8"))
+    assert all(
+        not stream["expected_type"].startswith("sensor_msgs/msg/Image")
+        for stream in recording["streams"]
     )
-    assert leaders["piper_leader_left"]["ros__parameters"]["can_interface"] == "can1"
-    assert leaders["piper_leader_right"]["ros__parameters"]["can_interface"] == "can0"
-    bringup = (LAUNCH_DIR / "piper_leaders.launch.py").read_text(encoding="utf-8")
-    assert 'default_value=""' in bringup
-    assert "left_joint1,left_joint2" not in bringup
-    assert "/action_sources/piper_leader_left/arm/joint_reference" not in bringup
+
+    profile = yaml.safe_load(
+        (ROOT.parents[3] / "apps" / "profiles" / "piper_bimanual.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert profile["recorder"]["config"].endswith("piper_bimanual_no_cam.yaml")
+    assert {
+        config["preempt_service"] for config in profile["teleoperators"].values()
+    } == {"/piper_leader_left/preempt", "/piper_leader_right/preempt"}
 
 
-def test_leader_autostart_override_is_forwarded_to_both_includes():
-    bringup = (LAUNCH_DIR / "piper_leaders.launch.py").read_text(encoding="utf-8")
-    assert 'DeclareLaunchArgument("autostart", default_value="")' in bringup
-    assert '"autostart": LaunchConfiguration("autostart")' in bringup
+def test_leader_defaults_live_in_teleop_config_not_launch():
+    config = yaml.safe_load(
+        (ROOT / "config" / "teleop" / "piper_leaders.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    for side, can_interface in (("left", "can1"), ("right", "can0")):
+        params = config[f"piper_leader_{side}"]["ros__parameters"]
+        assert params["can_interface"] == can_interface
+        assert params["autostart"] is True
+        assert params["joint_reference_topic"] == (
+            f"/action_sources/piper_leader_{side}/arm/joint_reference"
+        )
+
+        launch = (LAUNCH_DIR / "piper_leaders.launch.py").read_text(encoding="utf-8")
+        assert "piper_leaders.yaml" in launch
+        assert '"node_name": f"piper_leader_{side}"' in launch
 
 
 def test_workstation_stack_launches_em_recorder_and_optional_peripherals():
-    launch = (LAUNCH_DIR / "piper_workstation.launch.py").read_text(encoding="utf-8")
+    launch = (LAUNCH_DIR / "workstation_stack.launch.py").read_text(encoding="utf-8")
     assert "piper_manipulation_workstation_launch" in launch
     assert "execution_manager" in launch
     assert "recorder.launch.py" in launch
     assert "piper_orbbec.launch.py" in launch
     assert "piper_realsense.launch.py" in launch
     assert "piper_leaders.launch.py" in launch
+
+
+def test_workstation_stack_does_not_forward_child_configs():
+    workstation = (LAUNCH_DIR / "workstation_stack.launch.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "launch_arguments=" not in workstation
+    assert "em_config" not in workstation
+    assert "leader_config" not in workstation

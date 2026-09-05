@@ -3,13 +3,13 @@
 Layout::
 
     contracts.py         Action / Observation / planner DTOs
+    command_messages.py  RMI command validation and ROS payload encoding
     config.py            Embodiment profile loader
     context.py           Context factories for one application process
+    errors.py            Explicit cause-bearing RMI exceptions
     node.py              Action producer binding and authority status
     robot.py             Joint-state facade
-    provider.py          Command client for /action_sources
     selection.py         authority protocol and Execution Manager client
-    controllers.py       internal/test-only ros2_control diagnostics
     sensing.py           Camera / sensor facades
     recording.py         EpisodeRecorder (MCAP) and MemoryReplayBuffer (RL)
     replay.py            MCAP action replay pacing
@@ -19,9 +19,12 @@ from .config import (
     CameraSensorConfig,
     ControllerConfig,
     EmbodimentConfig,
+    JointGroup,
+    JointLayout,
     NodeConfig,
     NodeInputConfig,
     PartConfig,
+    PolicyLayout,
 )
 from .context import Context
 from .contracts import (
@@ -36,7 +39,16 @@ from .contracts import (
     PoseHorizonResult,
     ResolveResult,
 )
-from .errors import ControllerClientError, TrajectoryCanceledError
+from .errors import (
+    ActionTimeoutError,
+    ControllerClientError,
+    ExecutionError,
+    ExecutionManagerUnavailableError,
+    GoalRejectedError,
+    NodeAlreadyActiveError,
+    RmiError,
+    TrajectoryCanceledError,
+)
 from .node import (
     Execution,
     ExecutionState,
@@ -61,12 +73,12 @@ from .selection import (
     AuthorityClient,
     AuthoritySnapshot,
     ExecutionManagerClient,
-    ExecutionManagerUnavailableError,
 )
 from .sensing import Camera, SampleBuffer, Sensor, TimestampedSample
 
 __all__ = [
     "Action",
+    "ActionTimeoutError",
     "ActionTimestampRebaser",
     "AuthorityClient",
     "AuthoritySnapshot",
@@ -82,15 +94,20 @@ __all__ = [
     "EpisodeReplayPolicy",
     "EpisodeScope",
     "Execution",
+    "ExecutionError",
     "ExecutionManagerClient",
     "ExecutionManagerUnavailableError",
     "ExecutionState",
+    "GoalRejectedError",
+    "JointGroup",
     "JointHorizonPoint",
     "JointHorizonResult",
+    "JointLayout",
     "McapActionSource",
     "MemoryReplayBuffer",
     "Node",
     "NodeActivation",
+    "NodeAlreadyActiveError",
     "NodeConfig",
     "NodeInputConfig",
     "NodeResource",
@@ -99,6 +116,7 @@ __all__ = [
     "PartConfig",
     "PlanPoint",
     "PlanResult",
+    "PolicyLayout",
     "PoseHorizonPoint",
     "PoseHorizonResult",
     "RecordedAction",
@@ -106,6 +124,7 @@ __all__ = [
     "ReplayPacer",
     "ReplayPlayer",
     "ResolveResult",
+    "RmiError",
     "Robot",
     "RobotResource",
     "SampleBuffer",

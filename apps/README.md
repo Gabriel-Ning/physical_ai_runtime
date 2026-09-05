@@ -105,17 +105,38 @@ pixi run replay --profile piper_bimanual.yaml \
 
 ---
 
-## 4. `pixi run eval` — Read-only Deployment Evaluation
+## 4. `apps/check_runtime.py` — Read-only Runtime Check
 
 Checks joint-state availability and age, hardware diagnostics, camera readiness,
 and the current provider allocation map without acquiring control or publishing a
 command:
 
 ```bash
-pixi run eval --profile piper_bimanual.yaml --duration 10 --check-cameras
+python apps/check_runtime.py \
+    --profile piper_bimanual.yaml \
+    --duration 10 \
+    --check-cameras
 ```
 
-## 5. Embodiment Profiles (`apps/profiles/`)
+## 5. `apps/eval.py` — LeRobot Policy Evaluation
+
+Loads a checkpoint and evaluates it through the standard RMI application loop:
+
+```text
+observation = robot[resource].get_observation()
+actions = policy.select_action(observation)
+policy_node[resource].submit(actions)
+```
+
+```bash
+python apps/eval.py \
+    --profile piper_bimanual.yaml \
+    --checkpoint /path/to/pretrained_model \
+    --task "pick up the object" \
+    --resource dual_manipulator
+```
+
+## 6. Embodiment Profiles (`apps/profiles/`)
 
 All applications are fully decoupled and driven by YAML Embodiment Profiles stored in [apps/profiles/](file:///home/gn/Documents/Git_Space/physical_ai_runtime/apps/profiles/):
 

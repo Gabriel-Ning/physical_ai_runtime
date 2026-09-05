@@ -56,6 +56,32 @@ def test_fake_hardware_uses_position_command_controllers() -> None:
     ]
 
 
+def test_mujoco_streams_only_profile_observation_cameras() -> None:
+    config = _load_config("mujoco_plugins.yaml")
+    camera = config["/**"]["ros__parameters"]["mujoco_plugins"][
+        "mujoco_camera_plugin"
+    ]
+
+    assert camera["camera_publish_rate"] == 30.0
+    policies = {
+        name: values["policy"]
+        for name, values in camera.items()
+        if isinstance(values, dict)
+    }
+    assert {name for name, policy in policies.items() if policy == "streaming"} == {
+        "agentview",
+        "pika_d405",
+    }
+    assert {name for name, policy in policies.items() if policy == "disabled"} == {
+        "frontview",
+        "birdview",
+        "sideview",
+        "head_camera",
+        "wrist_camera",
+        "robot0_eye_in_hand",
+    }
+
+
 def _collect_topic_params(config: dict) -> dict[str, str]:
     found: dict[str, str] = {}
 
@@ -265,3 +291,58 @@ def test_readme_matches_launch_files_and_udev_names() -> None:
     assert "use_fake_hardware:=false" in readme
     assert '"use_fake_hardware"' in stack
     assert 'DeclareLaunchArgument("use_fake_hardware"' in stack
+
+
+def test_camera_bridge_uses_plugin_configuration(tmp_path) -> None:
+    import ast
+
+    source = (PACKAGE_ROOT / 'launch/controller_bringup.launch.py').read_text()
+    function = next(node for node in ast.parse(source).body
+                    if isinstance(node, ast.FunctionDef)
+                    and node.name == '_camera_bridge_parameters')
+    namespace = {'yaml': yaml}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), '<bridge-config>', 'exec'), namespace)
+    parameters = namespace['_camera_bridge_parameters']
+    config = _load_config('mujoco_plugins.yaml')
+    camera = config['/**']['ros__parameters']['mujoco_plugins']['mujoco_camera_plugin']
+    assert camera['output'] == 'shm'
+    assert camera['default_policy'] == 'disabled'
+    result = parameters(str(CONFIG_DIR / 'mujoco_plugins.yaml'))
+    assert set(result['camera_names']) == {'agentview', 'pika_d405'}
+    assert result['use_sim_time'] is False
+    assert result['shm_prefix'] == '/pai_mj_cam_'
+    camera['new_camera'] = {'policy': 'streaming'}
+    camera['pika_d405']['policy'] = 'disabled'
+    camera['shm_prefix'] = '/custom_'
+    path = tmp_path / 'plugins.yaml'
+    path.write_text(yaml.safe_dump(config))
+    result = parameters(str(path))
+    assert set(result['camera_names']) == {'agentview', 'new_camera'}
+    assert result['shm_prefix'] == '/custom_'
+    camera['output'] = 'ros'
+    path.write_text(yaml.safe_dump(config))
+    assert parameters(str(path)) is None
+    assert 'mujoco_image_relay' not in source
+    assert '/mujoco/raw' not in source
+    assert 'executable="mujoco_image_bridge"' in source
+    assert 'if is_mujoco and bridge_parameters is not None:' in source
+
+
+def test_bridge_dds_override_preserves_parent_configuration(monkeypatch) -> None:
+    import ast
+    import os
+
+    source = (PACKAGE_ROOT / 'launch/controller_bringup.launch.py').read_text()
+    function = next(node for node in ast.parse(source).body
+                    if isinstance(node, ast.FunctionDef)
+                    and node.name == '_camera_bridge_environment')
+    namespace = {'os': os}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), '<bridge-env>', 'exec'), namespace)
+    monkeypatch.setenv('CYCLONEDDS_URI', 'file:///custom/nic-and-peers.xml')
+    monkeypatch.delenv('MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI', raising=False)
+    result = namespace['_camera_bridge_environment']()['CYCLONEDDS_URI']
+    assert result.startswith('file:///custom/nic-and-peers.xml,')
+    assert '<AllowMulticast>spdp</AllowMulticast>' in result
+    assert os.environ['CYCLONEDDS_URI'] == 'file:///custom/nic-and-peers.xml'
+    monkeypatch.setenv('MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI', 'file:///explicit.xml')
+    assert namespace['_camera_bridge_environment']() == {'CYCLONEDDS_URI': 'file:///explicit.xml'}

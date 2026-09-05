@@ -22,6 +22,11 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
             DeclareLaunchArgument(
+                "use_sim_time",
+                default_value="false",
+                description="Use simulation clock (/clock)",
+            ),
+            DeclareLaunchArgument(
                 "gamepad_config", default_value=default_config
             ),
             IncludeLaunchDescription(
@@ -31,7 +36,8 @@ def generate_launch_description() -> LaunchDescription:
                     )
                 ),
                 launch_arguments={
-                    "config": LaunchConfiguration("gamepad_config")
+                    "config": LaunchConfiguration("gamepad_config"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
                 }.items(),
             ),
         ]

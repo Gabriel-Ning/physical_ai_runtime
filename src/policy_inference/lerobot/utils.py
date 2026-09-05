@@ -5,26 +5,26 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..common.contract import PolicyIOContract
+from rmi import PolicyLayout
 
 
 def make_dataset_features(
-    contract: PolicyIOContract, *, use_video: bool = False
+    layout: PolicyLayout, *, use_video: bool = False
 ) -> dict[str, dict]:
     """Build the one dataset schema shared by conversion and inference."""
     from lerobot.utils.constants import ACTION, OBS_STR
     from lerobot.utils.feature_utils import hw_to_dataset_features
 
     observations: dict[str, type | tuple[int, int, int]] = {
-        name: float for name in contract.state_feature_names
+        name: float for name in layout.state_feature_names
     }
     observations.update(
         {
             name.removeprefix("observation.images."): shape
-            for name, shape in contract.camera_shapes.items()
+            for name, shape in layout.camera_shapes.items()
         }
     )
-    actions = {name: float for name in contract.action_feature_names}
+    actions = {name: float for name in layout.action_feature_names}
     return {
         **hw_to_dataset_features(observations, OBS_STR, use_video=use_video),
         **hw_to_dataset_features(actions, ACTION, use_video=use_video),
@@ -32,7 +32,7 @@ def make_dataset_features(
 
 
 def make_native_resize_step(
-    contract: PolicyIOContract,
+    layout: PolicyLayout,
     checkpoint_image_features: Mapping[str, Any],
     *,
     rename_map: Mapping[str, str] | None = None,
@@ -40,7 +40,7 @@ def make_native_resize_step(
     """Return LeRobot's resize step only when every checkpoint camera needs one size."""
     targets: set[tuple[int, int]] = set()
     needs_resize = False
-    for profile_name, (height, width, channels) in contract.camera_shapes.items():
+    for profile_name, (height, width, channels) in layout.camera_shapes.items():
         policy_name = (rename_map or {}).get(profile_name, profile_name)
         feature = checkpoint_image_features.get(policy_name)
         if feature is None:

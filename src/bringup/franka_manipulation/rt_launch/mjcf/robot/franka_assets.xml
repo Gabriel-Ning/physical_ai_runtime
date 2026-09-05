@@ -1,0 +1,50 @@
+<mujoco>
+  <asset>
+    <!-- Premium Realistic Franka FR3 & Pika Gripper Materials -->
+    <material name="fr3_white" rgba="0.94 0.94 0.96 1" specular="0.6" shininess="0.5"/>
+    <material name="fr3_joint_black" rgba="0.14 0.14 0.16 1" specular="0.4" shininess="0.4"/>
+    <material name="fr3_metal_grey" rgba="0.45 0.45 0.48 1" specular="0.8" shininess="0.7"/>
+    <material name="fr3_accent_blue" rgba="0.08 0.45 0.85 1" specular="0.6" shininess="0.5"/>
+
+    <!-- Pika Gripper Materials -->
+    <material name="pika_adaptor_mat" rgba="0.20 0.20 0.22 1" specular="0.7" shininess="0.6"/>
+    <material name="pika_chassis_white" rgba="0.95 0.95 0.97 1" specular="0.5" shininess="0.5"/>
+    <material name="pika_glass_black" rgba="0.08 0.08 0.10 1" specular="0.9" shininess="0.9"/>
+    <material name="pika_camera_lens" rgba="0.15 0.55 0.95 1" specular="0.9" shininess="0.9"/>
+    <material name="pika_finray_blue" rgba="0.15 0.48 0.78 1" specular="0.4" shininess="0.3"/>
+    <material name="pika_grip_pad" rgba="0.22 0.24 0.26 1" specular="0.2" shininess="0.1"/>
+
+    <!-- Franka FR3 Arm meshes (from franka_description) -->
+    <mesh name="fr3_link0" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link0.stl"/>
+    <mesh name="fr3_link1" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link1.stl"/>
+    <mesh name="fr3_link2" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link2.stl"/>
+    <mesh name="fr3_link3" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link3.stl"/>
+    <mesh name="fr3_link4" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link4.stl"/>
+    <mesh name="fr3_link5" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link5.stl"/>
+    <mesh name="fr3_link6" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link6.stl"/>
+    <mesh name="fr3_link7" file="../../../../../franka_description/share/franka_description/meshes/robots/fr3/collision/link7.stl"/>
+
+    <!-- Pika Gripper meshes (from pika_gripper_description) -->
+    <mesh name="pika_franka_adaptor" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_adaptor/pika_franka_adaptor.STL"/>
+    <mesh name="pika_gripper_base" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/gripper_base_link.STL"/>
+    <mesh name="pika_finray_finger" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_finray_link.STL"/>
+  </asset>
+
+  <default>
+    <default class="fr3_arm">
+      <joint damping="1.0" armature="0.1" frictionloss="0.1"/>
+      <geom type="mesh" material="fr3_white" contype="1" conaffinity="1"/>
+      <position kp="800" kv="40" forcerange="-87 87"/>
+    </default>
+    <default class="fr3_wrist">
+      <joint damping="0.5" armature="0.05" frictionloss="0.05"/>
+      <geom type="mesh" material="fr3_white" contype="1" conaffinity="1"/>
+      <position kp="300" kv="20" forcerange="-12 12"/>
+    </default>
+    <default class="pika_gripper">
+      <joint frictionloss="0.01" damping="0.1" type="slide"/>
+      <geom type="mesh" material="pika_finray_blue" contype="1" conaffinity="1" condim="4" friction="3.0 0.05 0.005"/>
+      <position forcerange="-50 50" kp="400" kv="25"/>
+    </default>
+  </default>
+</mujoco>

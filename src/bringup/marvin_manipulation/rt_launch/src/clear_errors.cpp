@@ -116,14 +116,10 @@ int main(int argc, char ** argv)
   }
 
   std::printf("\n[3/4] Dispatching Clear Error commands to Arm A & Arm B...\n");
-  if (!OnClearSet()) {
-    std::fprintf(stderr, "[!] Warning: OnClearSet returned false, attempting direct clear...\n");
-  }
+  // OnClearErr_* already builds+sends via OnSetIntPara("RESETx"); do not wrap
+  // with OnClearSet / an empty OnSetSend (libmarvin >= 0.1.1 rejects empty frames).
   OnClearErr_A();
   OnClearErr_B();
-  if (!OnSetSend()) {
-    std::fprintf(stderr, "[!] Warning: OnSetSend returned false.\n");
-  }
 
   // Allow controller to process reset
   std::this_thread::sleep_for(std::chrono::milliseconds(300));

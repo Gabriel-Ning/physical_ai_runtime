@@ -54,7 +54,7 @@ def _continue_or_shutdown(event, next_actions, stage):
 
 
 def _resolve_cpu_affinity(context) -> str:
-    """Prefer launch arg; else RT_CM_CPU_AFFINITY from the cpu RT profile."""
+    """Prefer launch arg; else RT_CM_CPU_AFFINITY from the RT host profile."""
     explicit = LaunchConfiguration("cpu_affinity").perform(context).strip()
     if explicit in ("none", "off", "-"):
         return ""
@@ -402,7 +402,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="",
                 description=(
                     "Comma-separated CPUs for ros2_control_node taskset. "
-                    "Empty uses RT_CM_CPU_AFFINITY from the cpu RT profile "
+                    "Empty uses RT_CM_CPU_AFFINITY from the RT host profile "
                     "(see docs/CPU_HOST_SETUP.md). Pass an explicit list to "
                     "override."
                 ),

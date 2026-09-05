@@ -1,89 +1,112 @@
 metadata:
+  # 【严禁修改】具身本体与工作台唯一标识，与底座硬件强绑定
   name: "fr3_pika_single_arm"
   embodiment_type: "single_arm"
   vendor: "franka"
   version: "1.0"
 
-# Routing table lives in the workstation EM config. RMI only consumes it.
+# 【严禁修改】调度中枢入口，指向 workstation_launch 的 EM 路由配置
 execution_manager_config:
   package: "franka_manipulation_workstation_launch"
   file: "config/execution_manager.yaml"
 
+# 【严禁修改】运动学逻辑分组（机械臂 + 夹爪）
 compound_groups:
   manipulator:
     included_groups: ["arm", "end_effector"]
 
+# 【契约绑定】工作台支持的控制与示教通道目录（通道名称与 resources 必须严格与 EM sources 保持一致）
 nodes:
   DummyPolicy:
     source_role: POLICY
     resources: {arm: joint_reference}
     frequency: 100.0
-  Policy:
+  JointPolicy:
     source_role: POLICY
     resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 30.0
+  CartesianPolicy:
+    source_role: POLICY
+    resources: {arm: pose_reference, end_effector: joint_reference}
     frequency: 30.0
   Replay:
     source_role: MEMORY
     resources: {arm: joint_reference, end_effector: joint_reference}
     frequency: 30.0
-  Planner:
+  TrajectoryPlanner:
     source_role: PLANNER
     resources: {arm: joint_trajectory, end_effector: gripper_command}
+    # 备注：Action 式轨迹规划器为一次性调度 (One-shot)，frequency 仅作为 RMI 句柄判活心跳，非周期发布
     frequency: 30.0
-  TeleopJoint:
-    source_role: TELEOP
+  StreamingPlanner:
+    source_role: PLANNER
     resources: {arm: joint_reference, end_effector: joint_reference}
-    frequency: 30.0
-  TeleopCartesian:
-    source_role: TELEOP
-    resources: {arm: pose_reference}
-    frequency: 30.0
+    frequency: 100.0
   TeleopTwist:
-    source_role: TELEOP
-    resources: {arm: twist_reference}
-    frequency: 30.0
-  GamepadTeleop:
     source_role: TELEOP
     resources: {arm: twist_reference, end_effector: joint_reference}
     frequency: 100.0
+  TeleopCartesian:
+    source_role: TELEOP
+    resources: {arm: pose_reference, end_effector: joint_reference}
+    frequency: 50.0
+  TeleopJoint:
+    source_role: TELEOP
+    resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 100.0
 
+# 【硬件绑定】物理传感器拓扑（话题名、编码与底层硬件/仿真驱动严格强绑定，严禁随意修改）
 sensors:
-  # Wrist stream size/rate live in
-  # src/bringup/franka_manipulation/rt_launch/config/camera/pika_cameras.yaml
-  # (RT host: one FR3 + one Pika cable — gripper, fisheye, D405).
-  # Hikvision (7 cams on workstation): deferred.
   cameras:
-    wrist_d405:
+    # 腕部 RealSense D405（手眼视角）
+    pika_d405:
       ros_topic: "/pika_d405/camera/color/image_raw"
       encoding: "rgb8"
       fps: 30
-      resolution: [480, 848]
+      # MuJoCo MJCF wrist cam is 640x480; real D405 is 848x480 (see site profile).
+      resolution: [480, 640]
       qos_profile: "sensor_data"
-    wrist_d405_depth:
+    pika_d405_depth:
       ros_topic: "/pika_d405/camera/aligned_depth_to_color/image_raw"
       encoding: "16UC1"
       fps: 30
-      resolution: [480, 848]
+      resolution: [480, 640]
       qos_profile: "sensor_data"
-    wrist_fisheye:
-      ros_topic: "/pika_fisheye/image/compressed"
-      encoding: "jpeg"
+    # 外部全局第三人称视角相机（AgentView，来自 MuJoCo 仿真）
+    agentview:
+      ros_topic: "/agentview/camera/color/image_raw"
+      encoding: "rgb8"
       fps: 30
-      resolution: [720, 1280]
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    agentview_depth:
+      ros_topic: "/agentview/camera/aligned_depth_to_color/image_raw"
+      encoding: "16UC1"
+      fps: 30
+      resolution: [480, 640]
       qos_profile: "sensor_data"
 
+# ==============================================================================
+# ↑ 【物理固定层 (Hardware Invariant)】
+#   上方内容：与物理台架/仿真环境强绑定，台架安装搭建确定后不可变更。
+#   (metadata, execution_manager_config, compound_groups, nodes, sensors)
+# ==============================================================================
+# ↓ 【应用/实验可变层 (Task & Experiment Specific)】
+#   下方内容：随具体采集实验、训练配置、任务类型按需调整或覆盖。
+#   (homing, recorder 默认配置, features 数据集与特征定义)
+# ==============================================================================
+
+# 【可修改】机械臂归位安全姿态（根据实验台场景障碍物调整关节弧度）
 homing:
   duration_s: 8.0
-  # Captured by joint name from /joint_states at the Franka fake-hardware
-  # initial pose on 2026-08-30.
   joint_positions:
     arm: [0.0, -0.7853981633974483, 0.0, -2.356194490192345,
           0.0, 1.5707963267948966, 0.7853981633974483]
     end_effector: [0.0]
 
-# The application selects the stream contract injected during recorder PREPARE.
+# 【可修改】数据录制默认缺省参数（执行 apps/record.py 时可通过命令行参数动态覆盖）
 recorder:
-  config: "../recording/franka_manipulation_no_cam.yaml"
+  config: "../recording/franka_manipulation_mujoco.yaml"
   root_dir: "data/episodes"
   experiment_name: "fr3_pika_policy"
   task: "pika_manipulation_demo"
@@ -91,16 +114,17 @@ recorder:
   rate_hz: 30.0
   max_duration_s: 60.0
 
+# 【可修改】策略模型与数据集特征映射（根据所训练模型的输入输出 Tensor Schema 调整）
 features:
   observation:
-    "observation.images.wrist_d405":
+    "observation.images.pika_d405":
       type: "image"
-      shape: [3, 480, 848]
-      source: "sensors.cameras.wrist_d405"
-    "observation.images.wrist_fisheye":
+      shape: [3, 480, 640]
+      source: "sensors.cameras.pika_d405"
+    "observation.images.agentview":
       type: "image"
-      shape: [3, 720, 1280]
-      source: "sensors.cameras.wrist_fisheye"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.agentview"
     "observation.state":
       type: "vector"
       shape: [8]
@@ -110,3 +134,10 @@ features:
       type: "vector"
       shape: [8]
       command_contract: "joint_reference"
+      units: "rad"
+      # 【核心约定】动作空间表达模式:
+      # - "abs": 绝对目标动作 (Absolute: a_t = q_{target})
+      # - "rel": 相对当前状态的动作增量 (Delta: Δa_t = q_{target} - q_{current})
+      # 架构定则: 底层通信 (EM) 与控制器严禁接收累加增量，只接收绝对目标 (abs) 或速度 (twist)。
+      # 若模型训练为 rel，推理端 (Policy Client) 必须在本地闭环积分转换后 (a_target = s_actual + Δa_rel) 提交至 EM。
+      space: "abs"  # 可选: ["abs", "rel"]

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..common.contract import PolicyIOContract
+from rmi import PolicyLayout
 
 CONTRACT_MANIFEST = "policy_contract.json"
 
@@ -26,13 +26,13 @@ class PolicyContractManifest:
     image_features: tuple[str, ...]
 
     @classmethod
-    def from_contract(cls, contract: PolicyIOContract) -> PolicyContractManifest:
+    def from_layout(cls, layout: PolicyLayout) -> PolicyContractManifest:
         return cls(
-            profile=contract.profile_name,
-            profile_hash=contract.profile_hash,
-            state_names=contract.state_feature_names,
-            action_names=contract.action_feature_names,
-            image_features=tuple(contract.camera_shapes),
+            profile=layout.profile_name,
+            profile_hash=layout.profile_hash,
+            state_names=layout.state_feature_names,
+            action_names=layout.action_feature_names,
+            image_features=tuple(layout.camera_shapes),
         )
 
     @classmethod
@@ -90,17 +90,17 @@ def load_contract_manifest(checkpoint: str) -> PolicyContractManifest | None:
     return PolicyContractManifest.from_json(manifest) if manifest.is_file() else None
 
 
-def write_contract_manifest(output_dir: str | Path, contract: PolicyIOContract) -> Path:
+def write_contract_manifest(output_dir: str | Path, layout: PolicyLayout) -> Path:
     """Write the semantic vector/image order beside a dataset or trained checkpoint."""
     path = Path(output_dir) / CONTRACT_MANIFEST
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = PolicyContractManifest.from_contract(contract).to_dict()
+    payload = PolicyContractManifest.from_layout(layout).to_dict()
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return path
 
 
 def validate_policy_compatibility(
-    contract: PolicyIOContract,
+    layout: PolicyLayout,
     config: Any,
     *,
     checkpoint: str,
@@ -120,7 +120,7 @@ def validate_policy_compatibility(
 
     mapped_images = {
         (rename_map or {}).get(name, name): shape
-        for name, shape in contract.camera_shapes.items()
+        for name, shape in layout.camera_shapes.items()
     }
     checkpoint_images = {
         name: tuple(feature.shape)
@@ -149,21 +149,21 @@ def validate_policy_compatibility(
                 )
 
     _check_vector_shape(
-        errors, config.input_features, "observation.state", contract.action_dim
+        errors, config.input_features, "observation.state", layout.joints.dimension
     )
-    _check_vector_shape(errors, config.output_features, "action", contract.action_dim)
+    _check_vector_shape(errors, config.output_features, "action", layout.joints.dimension)
 
     if manifest is None:
         warnings.append(
             f"{CONTRACT_MANIFEST} is absent; vector dimensions were checked but joint order cannot be proven"
         )
     else:
-        if manifest.state_names != contract.state_feature_names:
+        if manifest.state_names != layout.state_feature_names:
             errors.append("checkpoint state_names do not match profile joint order")
-        if manifest.action_names != contract.action_feature_names:
+        if manifest.action_names != layout.action_feature_names:
             errors.append("checkpoint action_names do not match profile joint order")
         expected_images = tuple(
-            (rename_map or {}).get(name, name) for name in contract.camera_shapes
+            (rename_map or {}).get(name, name) for name in layout.camera_shapes
         )
         if manifest.image_features != expected_images:
             errors.append(

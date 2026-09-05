@@ -9,8 +9,9 @@ never imports RMI and never writes datasets.
 
 Marvin real-hardware validation is complete. Examples 17--20 verified Quest 3
 teleop, transparent preemption and recovery, episode recording, replay, and
-long-duration trajectory recording. The current validation target is Franka
-fake hardware with gamepad teleop and no camera nodes.
+long-duration trajectory recording. Franka fake-hardware validation uses example
+16. Piper bimanual fake-hardware validation uses examples 21--24 with dual
+leaders, dual grippers, recorder, and no camera nodes.
 
 Demo 07 MCAP path uses the recorder started by `workstation_stack`. The `memory`
 path is entirely in process. Camera demos additionally require their configured
@@ -42,6 +43,32 @@ Run commands from the repository root after `source install/setup.bash`.
 | `18_marvin_joint_slider.py` | GUI sliders for both Marvin arms and Pika grippers through EM | `python examples/18_marvin_joint_slider.py --profile marvin_bimanual.yaml` |
 | `19_marvin_homing_replay.py` | Smooth homing followed by MEMORY-source episode replay | `python examples/19_marvin_homing_replay.py --profile site/marvin_bimanual_no_cam.yaml` |
 | `20_marvin_trajectory_recording.py` | Smooth homing followed by recording a two-cycle bimanual JTC trajectory | `python examples/20_marvin_trajectory_recording.py --profile site/marvin_bimanual_no_cam.yaml` |
+| `21_piper_leader_recording.py` | Dual Piper leader relay through EM with episode recording | `python examples/21_piper_leader_recording.py` |
+| `22_piper_joint_slider.py` | GUI sliders for both Piper arms and native grippers through EM | `python examples/22_piper_joint_slider.py` |
+| `23_piper_homing_replay.py` | Piper homing followed by latest episode replay | `python examples/23_piper_homing_replay.py` |
+| `24_piper_trajectory_recording.py` | Piper homing followed by a recorded bimanual JTC trajectory | `python examples/24_piper_trajectory_recording.py` |
+
+## Piper bimanual fake-hardware validation
+
+Start the fake dual-arm/dual-gripper RT stack:
+
+```bash
+ros2 launch piper_manipulation_rt_launch rt_stack.launch.py \
+  use_fake_hardware:=true load_gripper_hardware:=true \
+  use_rviz:=true cpu_affinity:=none
+```
+
+Start EM, recorder, and both physical leaders without cameras:
+
+```bash
+ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py \
+  with_execution_manager:=true with_recorder:=true with_leaders:=true \
+  with_orbbec:=false with_realsense:=false
+```
+
+Run examples 21, 22, and 24 independently. Example 21 produces an episode;
+example 23 homes fake hardware and replays the latest episode from
+`data/episodes/piper_bimanual`.
 
 ## Franka fake-hardware gamepad setup
 

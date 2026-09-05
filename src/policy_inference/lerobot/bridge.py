@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
-from rmi import Action, Observation
-
-from ..common.contract import PolicyIOContract
+from rmi import Action, Observation, PolicyLayout
 
 
 class RmiToLeRobotObservationBridge:
@@ -15,13 +13,13 @@ class RmiToLeRobotObservationBridge:
 
     def __init__(
         self,
-        contract: PolicyIOContract,
+        layout: PolicyLayout,
         *,
         max_stream_skew_s: float = 0.5,
     ) -> None:
         if max_stream_skew_s <= 0.0:
             raise ValueError("max_stream_skew_s must be positive")
-        self.contract = contract
+        self.layout = layout
         self.max_stream_skew_s = max_stream_skew_s
 
     def encode(self, observation: Observation) -> dict[str, Any]:
@@ -32,9 +30,10 @@ class RmiToLeRobotObservationBridge:
                 strict=False,
             )
         )
+        feature_names = self.layout.state_feature_names
         missing_joints = tuple(
             name.removesuffix(".pos")
-            for name in self.contract.state_feature_names
+            for name in feature_names
             if name.removesuffix(".pos") not in positions
         )
         if missing_joints:
@@ -42,10 +41,10 @@ class RmiToLeRobotObservationBridge:
 
         values: dict[str, Any] = {
             name: float(positions[name.removesuffix(".pos")])
-            for name in self.contract.state_feature_names
+            for name in feature_names
         }
         receive_times = [observation.receive_time_s]
-        for feature_name, sensor_name in self.contract.camera_sources.items():
+        for feature_name, sensor_name in self.layout.camera_sources.items():
             try:
                 sample = observation.sensors[sensor_name]
             except KeyError as exc:
@@ -54,7 +53,7 @@ class RmiToLeRobotObservationBridge:
                     f"for {feature_name!r}"
                 ) from exc
             value = sample.value
-            expected_shape = self.contract.camera_shapes[feature_name]
+            expected_shape = self.layout.camera_shapes[feature_name]
             if tuple(value.shape) != expected_shape:
                 raise ValueError(
                     f"camera {feature_name!r} shape {tuple(value.shape)} "
@@ -73,8 +72,8 @@ class RmiToLeRobotObservationBridge:
 class LeRobotToRmiActionBridge:
     """Validate and split one postprocessed LeRobot action into native RMI actions."""
 
-    def __init__(self, contract: PolicyIOContract) -> None:
-        self.contract = contract
+    def __init__(self, layout: PolicyLayout) -> None:
+        self.layout = layout
 
     def decode(self, action: Any) -> tuple[Action, ...]:
         if hasattr(action, "detach"):
@@ -82,16 +81,16 @@ class LeRobotToRmiActionBridge:
         if hasattr(action, "cpu"):
             action = action.cpu()
         values = np.asarray(action, dtype=np.float64)
-        if values.shape != (self.contract.action_dim,):
+        if values.shape != (self.layout.joints.dimension,):
             raise ValueError(
                 f"LeRobot action shape {values.shape} does not match "
-                f"Profile ({self.contract.action_dim},)"
+                f"Profile ({self.layout.joints.dimension},)"
             )
         if not np.isfinite(values).all():
             raise ValueError("LeRobot action contains NaN or Inf")
         return tuple(
             Action(part=group.part, command=group.command, value=group_values)
-            for group, group_values in self.contract.split_action(values)
+            for group, group_values in self.layout.joints.split_values(values)
         )
 
 

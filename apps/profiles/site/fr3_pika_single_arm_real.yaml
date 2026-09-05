@@ -1,0 +1,137 @@
+metadata:
+  # 【严禁修改】具身本体与工作台唯一标识（真机工装台真实物理画像）
+  name: "fr3_pika_single_arm_real"
+  embodiment_type: "single_arm"
+  vendor: "franka"
+  version: "1.0"
+
+# 【严禁修改】调度中枢入口，指向 workstation_launch 的 EM 路由配置
+execution_manager_config:
+  package: "franka_manipulation_workstation_launch"
+  file: "config/execution_manager.yaml"
+
+# 【严禁修改】运动学逻辑分组（机械臂 + 夹爪）
+compound_groups:
+  manipulator:
+    included_groups: ["arm", "end_effector"]
+
+# 【契约绑定】工作台支持的控制与示教通道目录（通道名称与 resources 必须严格与 EM sources 保持一致）
+nodes:
+  DummyPolicy:
+    source_role: POLICY
+    resources: {arm: joint_reference}
+    frequency: 100.0
+  JointPolicy:
+    source_role: POLICY
+    resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 30.0
+  CartesianPolicy:
+    source_role: POLICY
+    resources: {arm: pose_reference, end_effector: joint_reference}
+    frequency: 30.0
+  Replay:
+    source_role: MEMORY
+    resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 30.0
+  TrajectoryPlanner:
+    source_role: PLANNER
+    resources: {arm: joint_trajectory, end_effector: gripper_command}
+    # 备注：Action 式轨迹规划器为一次性调度 (One-shot)，frequency 仅作为 RMI 句柄判活心跳，非周期发布
+    frequency: 30.0
+  StreamingPlanner:
+    source_role: PLANNER
+    resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 100.0
+  TeleopTwist:
+    source_role: TELEOP
+    resources: {arm: twist_reference, end_effector: joint_reference}
+    frequency: 100.0
+  TeleopCartesian:
+    source_role: TELEOP
+    resources: {arm: pose_reference, end_effector: joint_reference}
+    frequency: 50.0
+  TeleopJoint:
+    source_role: TELEOP
+    resources: {arm: joint_reference, end_effector: joint_reference}
+    frequency: 100.0
+
+# 【硬件绑定】真实物理台架传感器（与 RT 工控机真实发布的 RealSense D405 与 USB 鱼眼严格强绑定）
+sensors:
+  cameras:
+    # 真实腕部 RealSense D405 彩色流
+    pika_d405:
+      ros_topic: "/pika_d405/camera/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 848]
+      qos_profile: "sensor_data"
+    # 真实腕部 RealSense D405 对齐深度流
+    pika_d405_depth:
+      ros_topic: "/pika_d405/camera/aligned_depth_to_color/image_raw"
+      encoding: "16UC1"
+      fps: 30
+      resolution: [480, 848]
+      qos_profile: "sensor_data"
+    # 真实腕部 USB 鱼眼（大视野防遮挡）
+    pika_fisheye:
+      ros_topic: "/pika_fisheye/image/compressed"
+      encoding: "jpeg"
+      fps: 30
+      resolution: [720, 1280]
+      qos_profile: "sensor_data"
+
+# ==============================================================================
+# ↑ 【物理固定层 (Hardware Invariant)】
+#   上方内容：与物理台架硬件强绑定，台架安装搭建确定后不可变更。
+#   (metadata, execution_manager_config, compound_groups, nodes, sensors)
+# ==============================================================================
+# ↓ 【应用/实验可变层 (Task & Experiment Specific)】
+#   下方内容：随具体采集实验、训练配置、任务类型按需调整或覆盖。
+#   (homing, recorder 默认配置, features 数据集与特征定义)
+# ==============================================================================
+
+# 【可修改】机械臂归位安全姿态（真实台架安全防撞初始姿态）
+homing:
+  duration_s: 8.0
+  joint_positions:
+    arm: [0.0, -0.7853981633974483, 0.0, -2.356194490192345,
+          0.0, 1.5707963267948966, 0.7853981633974483]
+    end_effector: [0.0]
+
+# 【可修改】数据录制默认缺省参数
+recorder:
+  config: "../recording/franka_manipulation_real.yaml"
+  root_dir: "data/episodes"
+  experiment_name: "fr3_pika_real_policy"
+  task: "pika_real_manipulation"
+  episodes: 5
+  rate_hz: 30.0
+  max_duration_s: 60.0
+
+# 【可修改】真实真机策略训练/推理特征映射
+features:
+  observation:
+    "observation.images.pika_d405":
+      type: "image"
+      shape: [3, 480, 848]
+      source: "sensors.cameras.pika_d405"
+    "observation.images.pika_fisheye":
+      type: "image"
+      shape: [3, 720, 1280]
+      source: "sensors.cameras.pika_fisheye"
+    "observation.state":
+      type: "vector"
+      shape: [8]
+      units: "rad"
+  action:
+    "action":
+      type: "vector"
+      shape: [8]
+      command_contract: "joint_reference"
+      units: "rad"
+      # 【核心约定】动作空间表达模式:
+      # - "abs": 绝对目标动作 (Absolute: a_t = q_{target})
+      # - "rel": 相对当前状态的动作增量 (Delta: Δa_t = q_{target} - q_{current})
+      # 架构定则: 底层通信 (EM) 与控制器严禁接收累加增量，只接收绝对目标 (abs) 或速度 (twist)。
+      # 若模型训练为 rel，推理端 (Policy Client) 必须在本地闭环积分转换后 (a_target = s_actual + Δa_rel) 提交至 EM。
+      space: "abs"  # 可选: ["abs", "rel"]

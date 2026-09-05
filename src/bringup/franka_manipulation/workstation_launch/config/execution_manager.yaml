@@ -6,17 +6,30 @@ max_command_age_s: 0.25
 # Trusted workstation sources publish plain ROS commands. EM owns their
 # internal leases, controller switching, preemption, and fallback.
 sources:
-  Policy:
+  # 1. 策略推理通道 (Policy)
+  JointPolicy:
     source_role: POLICY
     preempt: false
     inputs:
       arm:
         command_contract: joint_reference
-        topic: /action_sources/policy/arm/joint_reference
+        topic: /action_sources/joint_policy/arm/joint_reference
       end_effector:
         command_contract: joint_reference
-        topic: /action_sources/policy/end_effector/joint_reference
+        topic: /action_sources/joint_policy/end_effector/joint_reference
 
+  CartesianPolicy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      arm:
+        command_contract: pose_reference
+        topic: /action_sources/cartesian_policy/arm/pose_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/cartesian_policy/end_effector/joint_reference
+
+  # 2. 轨迹回放通道 (Memory Replay)
   Replay:
     source_role: MEMORY
     preempt: false
@@ -28,6 +41,7 @@ sources:
         command_contract: joint_reference
         topic: /action_sources/replay/end_effector/joint_reference
 
+  # 3. 冒烟测试通道 (DummyPolicy)
   DummyPolicy:
     source_role: POLICY
     preempt: false
@@ -35,6 +49,31 @@ sources:
       arm:
         command_contract: joint_reference
         topic: /action_sources/dummy_policy/arm/joint_reference
+
+  # 4. 规划通道 (Planners - 具最高抢占特权 preempt: true)
+  # (1) 离线轨迹规划通道 (MoveIt / Homing 等样条轨迹 Action)
+  TrajectoryPlanner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      arm:
+        command_contract: joint_trajectory
+        action: /action_sources/trajectory_planner/arm/follow_joint_trajectory
+      end_effector:
+        command_contract: gripper_command
+        action: /action_sources/trajectory_planner/end_effector/gripper_command
+
+  # (2) 实时高频流式规划通道 (CuRobo MPC / OCS2 / 动态避障 50~100Hz Topic)
+  StreamingPlanner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /action_sources/streaming_planner/arm/joint_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/streaming_planner/end_effector/joint_reference
 
   Planner:
     source_role: PLANNER
@@ -47,17 +86,41 @@ sources:
         command_contract: gripper_command
         action: /action_sources/planner/end_effector/gripper_command
 
-  GamepadTeleop:
+  # 5. 人类遥操作通道 (Human Teleop - 具最高抢占特权 preempt: true)
+  # 空间 6-DoF 速度遥操作（当前主要承接 Gamepad 手柄遥操作）
+  TeleopTwist:
     source_role: TELEOP
     preempt: true
-    activation_topic: /teleop/gamepad/clutch
+    activation_topic: /teleop/gamepad/clutch  # Gamepad 手柄 L1 物理离合
     inputs:
       arm:
         command_contract: twist_reference
-        topic: /action_sources/gamepad/arm/twist
+        topic: /action_sources/teleop_twist/arm/twist
       end_effector:
         command_contract: joint_reference
-        topic: /action_sources/gamepad/end_effector/joint_reference
+        topic: /action_sources/teleop_twist/end_effector/joint_reference
+
+  TeleopCartesian:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      arm:
+        command_contract: pose_reference
+        topic: /action_sources/teleop_cartesian/arm/pose_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_cartesian/end_effector/joint_reference
+
+  TeleopJoint:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/arm/joint_reference
+      end_effector:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint/end_effector/joint_reference
 
 groups:
   arm:
@@ -67,7 +130,7 @@ groups:
     flange_frame: fr3_link8
     tcp_frame: pika_gripper_tcp
     controller_manager: /controller_manager
-    default_controller: joint_trajectory
+    default_controller: joint_space_reference
     controllers:
       joint_trajectory:
         name: franka_arm_jtc

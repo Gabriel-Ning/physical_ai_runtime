@@ -107,6 +107,20 @@ def test_sim_replay_rejects_backward_clock_jump():
         pacer.wait_until(0.0000001)
 
 
+def test_sim_replay_clock_start_has_steady_timeout():
+    steady_values = iter([0, 5_000_000, 10_000_000])
+    pacer = ReplayPacer(
+        ros_clock_ns=lambda: 0,
+        steady_clock_ns=lambda: next(steady_values),
+        use_sim_time=True,
+        startup_timeout_s=0.01,
+        sleep=lambda _: None,
+    )
+
+    with pytest.raises(TimeoutError, match="valid simulation clock"):
+        pacer.start()
+
+
 def test_player_follows_sim_clock_instead_of_steady_clock():
     clock_values = iter([1_000, 1_000, 1_000, 1_100])
     sleeps = []

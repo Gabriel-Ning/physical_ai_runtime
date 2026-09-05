@@ -4,7 +4,8 @@ schema_version: 1
 streams:
   - {id: authority_status, topic: /execution_manager/authority_status, expected_type: execution_manager_interfaces/msg/AuthorityStatus, required: true, start_gate: true, start_gate_max_age_s: 2.0, qos: {mode: explicit, reliability: reliable, durability: transient_local, depth: 1}}
   - {id: authority_events, topic: /execution_manager/authority_events, expected_type: execution_manager_interfaces/msg/AuthorityEvent, required: true, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 100}}
-  - {id: quest3_clutch, topic: /teleop/quest3_bimanual/clutch, expected_type: std_msgs/msg/Bool, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: quest3_left_clutch, topic: /teleop/quest3_bimanual/left_clutch, expected_type: std_msgs/msg/Bool, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
+  - {id: quest3_right_clutch, topic: /teleop/quest3_bimanual/right_clutch, expected_type: std_msgs/msg/Bool, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
 
   - {id: source_policy_left_arm, topic: /action_sources/policy/left_arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}
   - {id: source_policy_right_arm, topic: /action_sources/policy/right_arm/joint_reference, expected_type: trajectory_msgs/msg/JointTrajectory, required: false, start_gate: false, qos: {mode: explicit, reliability: reliable, durability: volatile, depth: 10}}

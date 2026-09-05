@@ -1,38 +1,66 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
+from rmi import PolicyLayout
 from rmi.config import EmbodimentConfig
 
-from toolbox.dataset_tools.contract import DatasetContract
 from toolbox.dataset_tools.episode import ProfileEpisodeReader, ros_image_to_numpy
+from toolbox.dataset_tools.lerobot_converter import (
+    _make_dataset_features,
+    _write_contract_manifest,
+)
 
 
 def _profile() -> EmbodimentConfig:
     return EmbodimentConfig.from_yaml("apps/profiles/piper_bimanual.yaml")
 
 
-def _camera_shape_contract(shape: tuple[int, int, int]) -> DatasetContract:
-    contract = DatasetContract.from_profile(_profile())
-    policy = replace(
-        contract.policy,
-        camera_shapes={name: shape for name in contract.policy.camera_shapes},
-    )
-    return replace(contract, policy=policy)
+def _dataset_inputs(
+    shape: tuple[int, int, int] | None = None,
+) -> PolicyLayout:
+    profile = _profile()
+    layout = profile.policy_layout()
+    if shape is not None:
+        layout = replace(
+            layout,
+            camera_shapes={name: shape for name in layout.camera_shapes},
+        )
+    return layout
 
 
-def test_dataset_contract_uses_profile_execution_and_policy_names() -> None:
-    contract = DatasetContract.from_profile(_profile())
+def test_policy_layout_uses_profile_execution_topics() -> None:
+    layout = _dataset_inputs()
 
-    assert contract.state_topic == "/joint_states"
-    assert contract.action_topics["left_arm"] == "/execution/left_arm/joint_reference"
-    assert tuple(contract.policy.camera_topics) == (
+    assert layout.state_topic == "/joint_states"
+    assert layout.action_topics["left_arm"] == "/execution/left_arm/joint_reference"
+    assert tuple(layout.camera_topics) == (
         "observation.images.top",
         "observation.images.left_wrist",
         "observation.images.right_wrist",
     )
+
+
+def test_lerobot_schema_and_manifest_consume_rmi_feature_names(tmp_path) -> None:
+    layout = SimpleNamespace(
+        profile_name="test_robot",
+        profile_hash="profile-hash",
+        state_feature_names=("measured_joint",),
+        action_feature_names=("commanded_joint",),
+        camera_shapes={},
+    )
+
+    features = _make_dataset_features(layout, use_video=False)
+    manifest_path = _write_contract_manifest(tmp_path, layout)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    assert features["observation.state"]["names"] == ["measured_joint"]
+    assert features["action"]["names"] == ["commanded_joint"]
+    assert manifest["state_names"] == ["measured_joint"]
+    assert manifest["action_names"] == ["commanded_joint"]
 
 
 def test_raw_ros_image_handles_row_padding_and_bgr() -> None:
@@ -70,8 +98,8 @@ class _Reader:
 
 
 def test_episode_reader_causally_emits_complete_profile_frame() -> None:
-    contract = _camera_shape_contract((1, 1, 3))
-    names = [name.removesuffix(".pos") for name in contract.policy.state_feature_names]
+    layout = _dataset_inputs((1, 1, 3))
+    names = list(layout.joints.joint_names)
     joint_state = SimpleNamespace(name=names, position=list(range(14)))
     image_message = SimpleNamespace(
         encoding="rgb8",
@@ -80,19 +108,19 @@ def test_episode_reader_causally_emits_complete_profile_frame() -> None:
         step=3,
         data=bytes([1, 2, 3]),
     )
-    messages = [(contract.state_topic, joint_state, 0)]
-    for group in contract.policy.action_groups:
+    messages = [(layout.state_topic, joint_state, 0)]
+    for group in layout.joints.groups:
         point = SimpleNamespace(positions=[0.1] * len(group.joint_names))
         command = SimpleNamespace(points=[point], joint_names=group.joint_names)
-        messages.append((contract.action_topics[group.part], command, 50_000_000))
-    for topic in contract.policy.camera_topics.values():
+        messages.append((layout.action_topics[group.part], command, 50_000_000))
+    for topic in layout.camera_topics.values():
         messages.extend(
             [(topic, image_message, 0), (topic, image_message, 100_000_000)]
         )
-    messages.append((contract.state_topic, joint_state, 100_000_000))
+    messages.append((layout.state_topic, joint_state, 100_000_000))
     messages.sort(key=lambda item: item[2])
 
-    reader = ProfileEpisodeReader(_Reader(messages), contract)
+    reader = ProfileEpisodeReader(_Reader(messages), layout)
     frames = list(reader.frames())
     frame = frames[0]
 
@@ -105,25 +133,25 @@ def test_episode_reader_causally_emits_complete_profile_frame() -> None:
 
 
 def test_episode_reader_decodes_only_images_needed_by_the_next_frame() -> None:
-    contract = _camera_shape_contract((1, 1, 3))
-    names = [name.removesuffix(".pos") for name in contract.policy.state_feature_names]
+    layout = _dataset_inputs((1, 1, 3))
+    names = list(layout.joints.joint_names)
     joint_state = SimpleNamespace(name=names, position=list(range(14)))
     image = SimpleNamespace(
         encoding="rgb8", height=1, width=1, step=3, data=bytes([1, 2, 3])
     )
     messages = [
-        (contract.state_topic, joint_state, 0),
-        (contract.state_topic, joint_state, 100_000_000),
+        (layout.state_topic, joint_state, 0),
+        (layout.state_topic, joint_state, 100_000_000),
     ]
-    for group in contract.policy.action_groups:
+    for group in layout.joints.groups:
         point = SimpleNamespace(positions=[0.1] * len(group.joint_names))
         command = SimpleNamespace(points=[point], joint_names=group.joint_names)
-        messages.append((contract.action_topics[group.part], command, 0))
-    for topic in contract.policy.camera_topics.values():
+        messages.append((layout.action_topics[group.part], command, 0))
+    for topic in layout.camera_topics.values():
         messages.extend([(topic, image, 0), (topic, image, 100_000_000)])
     messages.sort(key=lambda item: item[2])
     reader = _Reader(messages)
-    frames = ProfileEpisodeReader(reader, contract).frames()
+    frames = ProfileEpisodeReader(reader, layout).frames()
 
     next(frames)
     assert reader.image_deserializations == 3
@@ -132,23 +160,23 @@ def test_episode_reader_decodes_only_images_needed_by_the_next_frame() -> None:
 
 
 def test_episode_reader_rejects_camera_shape_mismatch_at_decode_boundary() -> None:
-    contract = _camera_shape_contract((2, 2, 3))
-    names = [name.removesuffix(".pos") for name in contract.policy.state_feature_names]
+    layout = _dataset_inputs((2, 2, 3))
+    names = list(layout.joints.joint_names)
     joint_state = SimpleNamespace(name=names, position=list(range(14)))
     image = SimpleNamespace(
         encoding="rgb8", height=1, width=1, step=3, data=bytes([1, 2, 3])
     )
     messages = [
-        (contract.state_topic, joint_state, 0),
-        (contract.state_topic, joint_state, 100_000_000),
+        (layout.state_topic, joint_state, 0),
+        (layout.state_topic, joint_state, 100_000_000),
     ]
-    for group in contract.policy.action_groups:
+    for group in layout.joints.groups:
         point = SimpleNamespace(positions=[0.1] * len(group.joint_names))
         command = SimpleNamespace(points=[point], joint_names=group.joint_names)
-        messages.append((contract.action_topics[group.part], command, 0))
-    for topic in contract.policy.camera_topics.values():
+        messages.append((layout.action_topics[group.part], command, 0))
+    for topic in layout.camera_topics.values():
         messages.extend([(topic, image, 0), (topic, image, 100_000_000)])
     messages.sort(key=lambda item: item[2])
 
     with pytest.raises(ValueError, match="does not match Profile"):
-        next(ProfileEpisodeReader(_Reader(messages), contract).frames())
+        next(ProfileEpisodeReader(_Reader(messages), layout).frames())

@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from rmi import JointLayout, PolicyLayout
 
-from .contract import DatasetContract
 from .mcap_reader import McapReader
 
 
@@ -29,20 +29,20 @@ class EpisodeFrame:
 class ProfileEpisodeReader:
     """Synchronize native-rate streams onto a regular Profile-defined timeline."""
 
-    def __init__(self, reader: McapReader, contract: DatasetContract) -> None:
+    def __init__(self, reader: McapReader, layout: PolicyLayout) -> None:
         self.reader = reader
-        self.contract = contract
+        self.layout = layout
 
     def frames(self) -> Iterator[EpisodeFrame]:
         topic_types = self.reader.topic_types()
-        missing = sorted(set(self.contract.topics) - set(topic_types))
+        missing = sorted(set(self.layout.topics) - set(topic_types))
         if missing:
             raise ValueError(f"MCAP is missing required Profile topics: {missing}")
 
         numeric, image_times = self._collect_index(topic_types)
         start_ns = max(times[0] for times in image_times.values())
         end_ns = min(times[-1] for times in image_times.values())
-        period_ns = 1_000_000_000 / self.contract.policy.frequency
+        period_ns = 1_000_000_000 / self.layout.frequency
         count = math.floor((end_ns - start_ns) / period_ns) + 1
         if count < 2:
             raise ValueError("camera streams have no usable common time range")
@@ -61,19 +61,19 @@ class ProfileEpisodeReader:
                 feature,
                 image_indices[feature],
             )
-            for feature in self.contract.policy.camera_shapes
+            for feature in self.layout.camera_shapes
         }
 
-        state_samples = numeric[self.contract.state_topic]
+        state_samples = numeric[self.layout.state_topic]
         for timestamp_ns in targets:
             state = _nearest(
                 state_samples,
-                numeric_times[self.contract.state_topic],
+                numeric_times[self.layout.state_topic],
                 timestamp_ns,
             ).value
             action_values = dict(state)
-            for group in self.contract.policy.action_groups:
-                topic = self.contract.action_topics[group.part]
+            for group in self.layout.joints.groups:
+                topic = self.layout.action_topics[group.part]
                 latest = _latest(
                     numeric[topic], numeric_times[topic], timestamp_ns
                 )
@@ -81,13 +81,13 @@ class ProfileEpisodeReader:
                     action_values.update(latest)
             values: dict[str, Any] = {
                 "observation.state": _ordered_vector(
-                    state, self.contract.policy.state_feature_names
+                    state, self.layout.joints
                 ),
                 "action": _ordered_vector(
-                    action_values, self.contract.policy.action_feature_names
+                    action_values, self.layout.joints
                 ),
             }
-            for feature_name in self.contract.policy.camera_shapes:
+            for feature_name in self.layout.camera_shapes:
                 values[feature_name] = next(image_streams[feature_name])
             yield EpisodeFrame(timestamp_ns * 1e-9, values)
 
@@ -95,21 +95,21 @@ class ProfileEpisodeReader:
         self, topic_types: dict[str, str]
     ) -> tuple[dict[str, list[Sample]], dict[str, list[int]]]:
         numeric_topics = {
-            self.contract.state_topic,
-            *self.contract.action_topics.values(),
+            self.layout.state_topic,
+            *self.layout.action_topics.values(),
         }
         camera_by_topic = {
             topic: feature
-            for feature, topic in self.contract.policy.camera_topics.items()
+            for feature, topic in self.layout.camera_topics.items()
         }
         part_by_topic = {
-            topic: part for part, topic in self.contract.action_topics.items()
+            topic: part for part, topic in self.layout.action_topics.items()
         }
-        groups = {group.part: group for group in self.contract.policy.action_groups}
+        groups = {group.part: group for group in self.layout.joints.groups}
         numeric = {topic: [] for topic in numeric_topics}
-        image_times = {feature: [] for feature in self.contract.policy.camera_shapes}
+        image_times = {feature: [] for feature in self.layout.camera_shapes}
         for topic, serialized, timestamp_ns in self.reader.raw_messages(
-            self.contract.topics
+            self.layout.topics
         ):
             if topic in camera_by_topic:
                 image_times[camera_by_topic[topic]].append(timestamp_ns)
@@ -117,7 +117,7 @@ class ProfileEpisodeReader:
             message = self.reader.deserialize(topic, serialized, topic_types)
             value = (
                 _joint_positions(message)
-                if topic == self.contract.state_topic
+                if topic == self.layout.state_topic
                 else _command_positions(
                     message, groups[part_by_topic[topic]].joint_names
                 )
@@ -137,8 +137,8 @@ class ProfileEpisodeReader:
         source_indices: list[int],
     ) -> Iterator[np.ndarray]:
         """Decode selected frames lazily, reusing one image for repeated targets."""
-        topic = self.contract.policy.camera_topics[feature_name]
-        expected_shape = self.contract.policy.camera_shapes[feature_name]
+        topic = self.layout.camera_topics[feature_name]
+        expected_shape = self.layout.camera_shapes[feature_name]
         target_index = 0
         for source_index, (read_topic, serialized, _) in enumerate(
             self.reader.raw_messages((topic,))
@@ -187,12 +187,9 @@ def _latest(
     return None if index < 0 else samples[index].value
 
 
-def _ordered_vector(values: dict[str, float], names: tuple[str, ...]) -> np.ndarray:
-    joints = (name.removesuffix(".pos") for name in names)
-    try:
-        return np.asarray([values[name] for name in joints], dtype=np.float32)
-    except KeyError as exc:
-        raise ValueError(f"sample is missing joint {exc.args[0]!r}") from exc
+def _ordered_vector(values: dict[str, float], layout: JointLayout) -> np.ndarray:
+    ordered = layout.order_values(tuple(values), tuple(values.values()))
+    return np.asarray(ordered, dtype=np.float32)
 
 
 def _joint_positions(message: Any) -> dict[str, float]:

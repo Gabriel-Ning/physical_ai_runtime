@@ -90,10 +90,10 @@ sources:
         command_contract: joint_reference
         topic: /action_sources/teleop_joint/right_gripper/joint_reference
 
-  Quest3Teleop:
+  Quest3TeleopLeft:
     source_role: TELEOP
     preempt: true
-    activation_topic: /teleop/quest3_bimanual/clutch
+    activation_topic: /teleop/quest3_bimanual/left_clutch
     inputs:
       left_arm:
         command_contract: pose_reference
@@ -101,6 +101,12 @@ sources:
       left_gripper:
         command_contract: joint_reference
         topic: /action_sources/quest3/left_gripper/joint_reference
+
+  Quest3TeleopRight:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /teleop/quest3_bimanual/right_clutch
+    inputs:
       right_arm:
         command_contract: pose_reference
         topic: /action_sources/quest3/right_arm/pose_reference

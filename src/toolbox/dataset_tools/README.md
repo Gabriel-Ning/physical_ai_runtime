@@ -10,10 +10,10 @@ episode_recorder (C++ MCAP)
   -> native LeRobotDataset writer
 ```
 
-`DatasetContract` and policy inference both resolve names, shapes, camera
-sources, action groups, and frequency from the same embodiment Profile. New
-datasets include `policy_contract.json` so checkpoints can later prove vector
-element order rather than validating dimensions alone.
+RMI's `PolicyLayout` resolves the canonical joint order, state/action feature
+names, per-Part action slices, ROS stream topics, camera features, and frequency.
+New datasets include `policy_contract.json` so checkpoints can later prove
+vector element order rather than validating dimensions alone.
 
 The recorder preserves each ROS stream at its native frequency. Conversion is
 the only synchronization boundary: the output timeline is the common camera
@@ -56,6 +56,6 @@ schema or writer:
    LeRobot video encoder concurrency or streaming settings when measured memory
    or throughput requires it.
 
-These additions should keep `DatasetContract` as the single semantic contract,
-`ProfileEpisodeReader` as the synchronization boundary, and
-`LeRobotDataset` as the writer.
+These additions should keep RMI `PolicyLayout` as the single semantic layout,
+`ProfileEpisodeReader` as the synchronization boundary, and `LeRobotDataset`
+as the writer.

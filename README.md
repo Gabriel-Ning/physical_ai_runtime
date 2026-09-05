@@ -9,6 +9,7 @@ planning and recording repositories are imported into the ownership-oriented
 Host setup notes live under [`docs/`](docs/):
 
 - [Current repository architecture](docs/ARCHITECTURE.md)
+- [Sim2Real Evaluation Runtime & Long-Term Roadmap](docs/SIM2REAL_EVALUATION_RUNTIME.md)
 - [Marvin validation status and current gates](docs/MARVIN_VALIDATION_STATUS.md)
 - [Dynamic authority design rationale](docs/EM_RMI_DYNAMIC_AUTHORITY_PROPOSAL.md)
 - [Episode Recorder lifecycle](docs/EPISODE_RECORDER.md)
@@ -20,7 +21,7 @@ Host setup notes live under [`docs/`](docs/):
 ## Features
 
 - **Pixi**: locked multi-env workspace — **default = robot CPU stack** (previous
-  `cpu` env), optional **`cpu`** (same packages + RT host profile), **`curobo`**
+  `cpu` env), optional **`cpu`** (same packages + RT host profile), **`cuda13`**
   (CUDA 13 / CloudXR), **`lerobot`** (policy training stack)
 - **Direnv** (recommended): enter the directory → frozen Pixi shell + colcon overlay
 - **Pre-configured tasks**: `setup`, `build`, `test`, `clean`, `stop`
@@ -65,9 +66,9 @@ For a **CPU** / realtime-kernel control host (performance governor, `isolcpus`,
 [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md):
 
 ```bash
-pixi install --locked -e cpu
-pixi run -e cpu setup
-# if setup exits 3: sudo reboot && pixi run -e cpu setup
+pixi install --locked
+pixi run setup-rt
+# if setup exits 3: sudo reboot && pixi run setup-rt
 ```
 
 ### 3. Activate (recommended: Direnv)
@@ -87,38 +88,42 @@ echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Allow this repository:
+List the Pixi environments, pick one, then allow Direnv with that name:
 
 ```bash
-direnv allow
+pixi workspace environment list
+# Environments: default | cuda13 | lerobot
+PIXI_ENV=cuda13 direnv allow
 ```
 
-After this, entering the repository directory activates the locked Pixi
-environment and sources `install/setup.bash` when it exists. Leaving the
-directory deactivates it.
+`PIXI_ENV` selects which Pixi env `.envrc` activates on this allow/reload.
+For a lasting default without retyping `PIXI_ENV`, run
+`pixi run -e cuda13 setup` (writes `.pixi/environment`); if both are unset,
+`.envrc` uses `default`.
 
-`.envrc` follows the env you used for setup: `pixi run setup` writes
-`.pixi/environment` (`default`, `runtime`, or `cpu`), and Direnv activates
-that same env. Override with `PIXI_ENV=cpu` / `PIXI_ENV=curobo` if needed.
+After allow, entering the repository activates the locked Pixi environment and
+sources `install/setup.bash` when it exists. Leaving the directory deactivates
+it.
 
-Pixi selects the dependency environment before `setup.sh` starts. Use
-`pixi run setup` for the robot stack or `pixi run -e cpu setup` on an RT
-host; the setup script then applies environment-specific resources
-(`curobo`: `CLOUDXR_DIR`; `cpu`: RT host governor / isolcpus —
-[docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
+Pixi selects the dependency environment before `setup.sh` starts.
+`pixi run setup` initializes the selected dependency environment. On an RT
+host, `pixi run setup-rt` additionally configures the governor / isolcpus and
+enables the workspace RT profile for Direnv. The cuRobo environment also sets
+`CLOUDXR_DIR`; see
+[docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md).
 
 Without Direnv:
 
 ```bash
 eval "$(pixi shell-hook --frozen)"             # robot CPU stack (default)
-# eval "$(pixi shell-hook --frozen -e cpu)"    # same packages + RT host profile
-# eval "$(pixi shell-hook --frozen -e curobo)" # CUDA 13 / CloudXR
+# eval "$(pixi shell-hook --frozen -e cuda13)" # CUDA 13 / CloudXR
+# PIXI_RT_PROFILE=1 source .envrc               # explicitly load RT profile
 # or: source .envrc
 ```
 
 `WORKSPACE_ROOT` and `RMW_IMPLEMENTATION` come from `pixi.toml`
 `[activation.env]` via the shell hook. `CLOUDXR_DIR` is set only in the
-`curobo` environment.
+`cuda13` environment.
 
 ### 4. Clone functional packages
 
@@ -154,20 +159,18 @@ vcs pull src
 ```
 
 See each package README for launches, CloudXR setup, and tests.
-`isaacteleop_toolbox` and the motion-planner adapters need the `curobo`
-Pixi env (`pixi install -e curobo`).
+`isaacteleop_toolbox` and the motion-planner adapters need the `cuda13`
+Pixi env (`pixi install -e cuda13`).
 
 ### 5. Build / test / clean
 
 `build` / `test` / `clean` / `stop` are **runtime** tasks (colcon + the robot
-CPU stack). They are not available in `lerobot`. `default` and `cpu` include
-the same `runtime` feature, so `pixi run build` and `pixi run -e cpu build`
-are equivalent.
+stack). They are available in `default` and `cuda13`, but not in `lerobot`.
 
 ```bash
-pixi run -e runtime build
-pixi run -e runtime test
-pixi run -e runtime clean   # removes colcon build/ install/ log/
+pixi run build
+pixi run test
+pixi run clean   # removes colcon build/ install/ log/
 ```
 
 Default build type is `Release`. After the first successful build,
@@ -212,7 +215,7 @@ owns those ABIs.
 - ROS distro and the integrated stack are defined in [`pixi.toml`](pixi.toml)
   and locked by [`pixi.lock`](pixi.lock).
 - Default ROS distro is **Jazzy**. Default Pixi env is **GPU**; use
-  `pixi install -e cpu` for the conda-only RT control host (see
+  `pixi install` followed by `pixi run setup-rt` for the RT control host (see
   [docs/CPU_HOST_SETUP.md](docs/CPU_HOST_SETUP.md)).
 - Pixi tasks stay limited to workspace lifecycle (`setup` / `build` /
   `test` / `clean` / `stop`).

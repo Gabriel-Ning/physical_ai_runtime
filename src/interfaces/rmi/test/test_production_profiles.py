@@ -45,11 +45,12 @@ def test_every_node_resource_is_an_em_capability(profile_name):
 @pytest.mark.parametrize(
     "path",
     [
-        "apps/recording/franka_manipulation.yaml",
-        "apps/recording/franka_manipulation_no_cam.yaml",
+        "apps/recording/franka_manipulation_real.yaml",
+        "apps/recording/franka_manipulation_mujoco.yaml",
         "apps/recording/marvin_manipulation.yaml",
         "apps/recording/marvin_manipulation_no_cam.yaml",
         "apps/recording/piper_bimanual.yaml",
+        "apps/recording/piper_bimanual_no_cam.yaml",
     ],
 )
 def test_recording_contracts_use_typed_authority_and_commands(path):

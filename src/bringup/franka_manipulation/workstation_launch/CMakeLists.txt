@@ -18,8 +18,8 @@ install(DIRECTORY "${REPO_ROOT}/apps/profiles/"
   DESTINATION share/${PROJECT_NAME}/profiles
 )
 install(FILES
-  "${REPO_ROOT}/apps/recording/franka_manipulation.yaml"
-  "${REPO_ROOT}/apps/recording/franka_manipulation_no_cam.yaml"
+  "${REPO_ROOT}/apps/recording/franka_manipulation_real.yaml"
+  "${REPO_ROOT}/apps/recording/franka_manipulation_mujoco.yaml"
   DESTINATION share/${PROJECT_NAME}/recording
 )
 

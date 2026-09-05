@@ -18,6 +18,8 @@ from execution_manager_interfaces.msg import (
 from execution_manager_interfaces.srv import ClaimControl, ReleaseControl
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
+from .errors import ExecutionManagerUnavailableError
+
 CLAIM_SERVICE = "/execution_manager/claim"
 RELEASE_SERVICE = "/execution_manager/release"
 AUTHORITY_STATUS_TOPIC = "/execution_manager/authority_status"
@@ -105,10 +107,6 @@ class AuthoritySnapshot:
         )
 
 
-class ExecutionManagerUnavailableError(RuntimeError):
-    pass
-
-
 class AuthorityClient(Protocol):
     def require_execution_manager(self, *, timeout_sec: float | None = None) -> None: ...
 
@@ -165,6 +163,9 @@ class ExecutionManagerClient:
         status_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         event_qos = QoSProfile(depth=100)
         event_qos.reliability = ReliabilityPolicy.RELIABLE
+        # EM retains its recent audit trail so a client started after a fault
+        # can still report the original transition failure reason.
+        event_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
         self._status_subscription = node.create_subscription(
             AuthorityStatus, AUTHORITY_STATUS_TOPIC, self._on_status, status_qos
         )

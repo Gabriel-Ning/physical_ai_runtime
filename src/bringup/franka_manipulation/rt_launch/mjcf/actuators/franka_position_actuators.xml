@@ -1,0 +1,21 @@
+<mujoco>
+  <!-- Gripper Mimic Coupling (Slaved gripper_right_joint -> Master gripper_left_joint) -->
+  <equality>
+    <joint joint1="gripper_right_joint" joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+
+  <!-- Actuators for ros2_control binding -->
+  <actuator>
+    <!-- Franka FR3 Arm Joint Position Actuators -->
+    <position name="fr3_joint1" joint="fr3_joint1" ctrlrange="-2.9007 2.9007" class="fr3_arm"/>
+    <position name="fr3_joint2" joint="fr3_joint2" ctrlrange="-1.8361 1.8361" class="fr3_arm"/>
+    <position name="fr3_joint3" joint="fr3_joint3" ctrlrange="-2.9007 2.9007" class="fr3_arm"/>
+    <position name="fr3_joint4" joint="fr3_joint4" ctrlrange="-3.0770 -0.1169" class="fr3_arm"/>
+    <position name="fr3_joint5" joint="fr3_joint5" ctrlrange="-2.8763 2.8763" class="fr3_wrist"/>
+    <position name="fr3_joint6" joint="fr3_joint6" ctrlrange="0.4398 4.6216" class="fr3_wrist"/>
+    <position name="fr3_joint7" joint="fr3_joint7" ctrlrange="-3.0508 3.0508" class="fr3_wrist"/>
+
+    <!-- Pika Gripper Actuator (Master finger) -->
+    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+  </actuator>
+</mujoco>

@@ -23,10 +23,16 @@ def generate_launch_description() -> LaunchDescription:
             "right_end_effector": "piper_gripper",
             "load_gripper_hardware": LaunchConfiguration("load_gripper_hardware"),
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
+            "backend": LaunchConfiguration("backend"),
+            "task": LaunchConfiguration("task"),
+            "headless": LaunchConfiguration("headless"),
             "use_rviz": LaunchConfiguration("use_rviz"),
             "cpu_affinity": LaunchConfiguration("cpu_affinity"),
             "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
                 "jtc_guard_heartbeat_timeout_s"
+            ),
+            "jtc_guard_cancel_response_timeout_s": LaunchConfiguration(
+                "jtc_guard_cancel_response_timeout_s"
             ),
         }.items(),
     )
@@ -43,6 +49,21 @@ def generate_launch_description() -> LaunchDescription:
                 description="SocketCAN name for the right follower (default: piper1).",
             ),
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
+            DeclareLaunchArgument(
+                "backend",
+                default_value="",
+                description="real, fake, or mujoco. Empty falls back to use_fake_hardware.",
+            ),
+            DeclareLaunchArgument(
+                "task",
+                default_value="table_pick_cube",
+                description="Task name for MuJoCo simulation (e.g. table_pick_cube).",
+            ),
+            DeclareLaunchArgument(
+                "headless",
+                default_value="false",
+                description="Run MuJoCo simulation in headless mode (no GUI window).",
+            ),
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument(
                 "load_gripper_hardware",
@@ -57,10 +78,13 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="",
                 description=(
                     "Comma-separated CPUs for ros2_control_node. Empty uses "
-                    "RT_CM_CPU_AFFINITY from the cpu RT profile. Pass none to disable."
+                    "RT_CM_CPU_AFFINITY from the RT host profile. Pass none to disable."
                 ),
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
+            DeclareLaunchArgument(
+                "jtc_guard_cancel_response_timeout_s", default_value="0.5"
+            ),
             controller,
         ]
     )

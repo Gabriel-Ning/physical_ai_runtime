@@ -1,0 +1,117 @@
+<mujoco model="franka_arm">
+  <worldbody>
+    <!-- Franka FR3 7-DOF Robotic Arm (Mounted on Tabletop at Z=0.72) -->
+    <body name="fr3_link0" pos="0.0 -0.20 0.72">
+      <inertial pos="-0.0172 0.0004 0.0745" mass="2.3966" diaginertia="0.0090 0.0115 0.0085"/>
+      <geom mesh="fr3_link0" class="fr3_arm" material="fr3_white"/>
+      <geom type="cylinder" size="0.08 0.012" pos="0 0 0.012" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+      <body name="fr3_link1" pos="0 0 0.333">
+        <inertial pos="0.0000004 -0.018125 -0.038604" mass="2.927465" fullinertia="0.023927 0.022482 0.006350 0.000013 -0.000114 -0.001995"/>
+        <joint name="fr3_joint1" axis="0 0 1" range="-2.9007 2.9007" class="fr3_arm"/>
+        <geom mesh="fr3_link1" class="fr3_arm" material="fr3_white"/>
+        <geom type="cylinder" size="0.065 0.018" pos="0 0 -0.01" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+        <body name="fr3_link2" pos="0 0 0" quat="0.7071068 -0.7071068 0 0">
+          <inertial pos="0.003183 -0.074322 0.008815" mass="2.935537" fullinertia="0.041939 0.025145 0.061702 0.000203 0.004078 -0.004225"/>
+          <joint name="fr3_joint2" axis="0 0 1" range="-1.8361 1.8361" class="fr3_arm"/>
+          <geom mesh="fr3_link2" class="fr3_arm" material="fr3_white"/>
+          <geom type="cylinder" size="0.06 0.015" pos="0 -0.06 0" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+          <body name="fr3_link3" pos="0 -0.316 0" quat="0.7071068 0.7071068 0 0">
+            <inertial pos="0.040702 -0.004820 -0.028973" mass="2.244901" fullinertia="0.024101 0.019741 0.019044 0.002405 -0.002856 -0.002104"/>
+            <joint name="fr3_joint3" axis="0 0 1" range="-2.9007 2.9007" class="fr3_arm"/>
+            <geom mesh="fr3_link3" class="fr3_arm" material="fr3_white"/>
+            <geom type="cylinder" size="0.055 0.015" pos="0 0 -0.02" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+            <body name="fr3_link4" pos="0.0825 0 0" quat="0.7071068 0.7071068 0 0">
+              <inertial pos="-0.045910 0.063049 -0.008519" mass="2.615596" fullinertia="0.034530 0.028882 0.041255 0.013226 0.010151 -0.000976"/>
+              <joint name="fr3_joint4" axis="0 0 1" range="-3.0770 -0.1169" class="fr3_arm"/>
+              <geom mesh="fr3_link4" class="fr3_arm" material="fr3_white"/>
+              <geom type="cylinder" size="0.052 0.012" pos="0 0.05 0" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+              <body name="fr3_link5" pos="-0.0825 0.384 0" quat="0.7071068 -0.7071068 0 0">
+                <inertial pos="-0.001604 0.029254 -0.097297" mass="2.327121" fullinertia="0.051610 0.047877 0.016424 -0.005715 -0.003567 0.010674"/>
+                <joint name="fr3_joint5" axis="0 0 1" range="-2.8763 2.8763" class="fr3_wrist"/>
+                <geom mesh="fr3_link5" class="fr3_wrist" material="fr3_white"/>
+                <geom type="cylinder" size="0.045 0.012" pos="0 0 -0.015" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+                <body name="fr3_link6" pos="0 0 0" quat="0.7071068 0.7071068 0 0">
+                  <inertial pos="0.059713 -0.041029 -0.010169" mass="1.817038" fullinertia="0.005412 0.014058 0.016081 0.006193 0.001422 -0.001314"/>
+                  <joint name="fr3_joint6" axis="0 0 1" range="0.4398 4.6216" class="fr3_wrist"/>
+                  <geom mesh="fr3_link6" class="fr3_wrist" material="fr3_white"/>
+                  <geom type="cylinder" size="0.04 0.01" pos="0 0.025 0" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+                  <body name="fr3_link7" pos="0.088 0 0" quat="0.7071068 0.7071068 0 0">
+                    <inertial pos="0.004523 0.008626 -0.016163" mass="0.627143" diaginertia="0.000211 0.000177 0.000060"/>
+                    <joint name="fr3_joint7" axis="0 0 1" range="-3.0508 3.0508" class="fr3_wrist"/>
+                    <geom mesh="fr3_link7" class="fr3_wrist" material="fr3_white"/>
+
+                    <!-- Link8 Flange Mounting Point -->
+                    <body name="fr3_link8" pos="0 0 0.107">
+                      <site name="fr3_flange" pos="0 0 0" quat="1 0 0 0"/>
+                      <geom type="cylinder" size="0.038 0.005" pos="0 0 -0.005" material="fr3_joint_black" contype="0" conaffinity="0"/>
+
+                      <!-- Pika Adaptor Mount (yaw = 3*pi/4 = 135 deg: quat=[0.3826834 0 0 0.9238795]) -->
+                      <body name="pika_adaptor_link" pos="0 0 0" quat="0.3826834 0 0 0.9238795">
+                        <geom mesh="pika_franka_adaptor" material="pika_adaptor_mat" contype="1" conaffinity="1"/>
+
+                        <!-- Pika Gripper Base (mount xyz="0 0 0.004", yaw = -pi/2 = -90 deg: quat=[0.7071068 0 0 -0.7071068]) -->
+                        <body name="gripper_base_link" pos="0 0 0.004" quat="0.7071068 0 0 -0.7071068">
+                          <inertial pos="-0.0000008 0.0084 0.0375" mass="0.1897" diaginertia="0.00014 0.00011 0.00022"/>
+                          <geom mesh="pika_gripper_base" material="pika_chassis_white" contype="1" conaffinity="1"/>
+
+                          <!-- Front camera faceplate & RealSense lenses -->
+                          <geom type="box" size="0.042 0.008 0.012" pos="0 0.032 0.065" material="pika_glass_black" contype="0" conaffinity="0"/>
+                          <geom type="cylinder" size="0.005 0.001" pos="0.02 0.04 0.065" quat="0.7071068 0.7071068 0 0" material="pika_camera_lens" contype="0" conaffinity="0"/>
+                          <geom type="cylinder" size="0.005 0.001" pos="-0.02 0.04 0.065" quat="0.7071068 0.7071068 0 0" material="pika_camera_lens" contype="0" conaffinity="0"/>
+
+                          <!-- Pika TCP Tracking Site (matches gripper_tcp.yaml at z=0.21) -->
+                          <site name="pika_gripper_tcp" pos="0 0 0.21" quat="1 0 0 0"/>
+
+                          <!-- Pika Wrist Camera Optical Frame -->
+                          <site name="pika_wrist_color_optical_frame" pos="0.04 0.03 0.08" quat="0.5 -0.5 0.5 -0.5"/>
+
+                          <!-- Left Finger: origin at xyz="0.03898 0 0.0815", touching center at q=0 -->
+                          <body name="gripper_left_link" pos="0.03898 0 0.0815">
+                            <inertial pos="-0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="gripper_left_joint" type="slide" axis="1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+
+                          <!-- Right Finger: origin at xyz="-0.03898 0 0.0815", touching center at q=0 -->
+                          <body name="gripper_right_link" pos="-0.03898 0 0.0815" euler="0 0 -3.14159265">
+                            <inertial pos="0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="gripper_right_joint" type="slide" axis="1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+
+                        </body>
+                      </body>
+                    </body>
+
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <exclude body1="fr3_link0" body2="fr3_link1"/>
+    <exclude body1="fr3_link1" body2="fr3_link2"/>
+    <exclude body1="fr3_link2" body2="fr3_link3"/>
+    <exclude body1="fr3_link3" body2="fr3_link4"/>
+    <exclude body1="fr3_link4" body2="fr3_link5"/>
+    <exclude body1="fr3_link5" body2="fr3_link6"/>
+    <exclude body1="fr3_link6" body2="fr3_link7"/>
+    <exclude body1="fr3_link7" body2="pika_adaptor_link"/>
+    <exclude body1="pika_adaptor_link" body2="gripper_base_link"/>
+    <exclude body1="gripper_base_link" body2="gripper_left_link"/>
+    <exclude body1="gripper_base_link" body2="gripper_right_link"/>
+    <exclude body1="gripper_left_link" body2="gripper_right_link"/>
+  </contact>
+</mujoco>

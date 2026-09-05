@@ -1,0 +1,22 @@
+<mujoco>
+  <!-- Gripper Mimic Coupling (Slaved gripper_right_joint -> Master gripper_left_joint) -->
+  <equality>
+    <joint joint1="gripper_right_joint" joint2="gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+
+  <!-- Actuators for ros2_control binding -->
+  <actuator>
+    <!-- Franka FR3 Arm Joint Torque Motors (1kHz Impedance & Effort Interface) -->
+    <!-- Continuous torque limits: Joint 1-4: 87 Nm, Joint 5-7: 12 Nm -->
+    <motor name="fr3_joint1" joint="fr3_joint1" ctrlrange="-87 87"/>
+    <motor name="fr3_joint2" joint="fr3_joint2" ctrlrange="-87 87"/>
+    <motor name="fr3_joint3" joint="fr3_joint3" ctrlrange="-87 87"/>
+    <motor name="fr3_joint4" joint="fr3_joint4" ctrlrange="-87 87"/>
+    <motor name="fr3_joint5" joint="fr3_joint5" ctrlrange="-12 12"/>
+    <motor name="fr3_joint6" joint="fr3_joint6" ctrlrange="-12 12"/>
+    <motor name="fr3_joint7" joint="fr3_joint7" ctrlrange="-12 12"/>
+
+    <!-- Pika Gripper Position Actuator (Prismatic travel [0, 0.045]m) -->
+    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+  </actuator>
+</mujoco>

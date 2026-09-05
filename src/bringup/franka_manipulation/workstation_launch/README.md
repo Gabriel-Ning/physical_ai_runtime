@@ -13,8 +13,8 @@ ROS package name: `franka_manipulation_workstation_launch`
 ## 配置
 
 - `config/execution_manager.yaml` — 唯一 EM routing table，包含 controller 和 command endpoint
-- `apps/recording/franka_manipulation.yaml` — 应用选择的 MCAP 流契约（腕部 D405 对齐深度 + 鱼眼；Hikvision 稍后补）
-- `apps/recording/franka_manipulation_no_cam.yaml` — 当前 fake-hardware 验证契约；相机流可选且不参与 start gate
+- `apps/recording/franka_manipulation_real.yaml` — 物理实物真机录制契约（腕部 D405 对齐深度 + 鱼眼）
+- `apps/recording/franka_manipulation_mujoco.yaml` — MuJoCo 仿真录制契约（腕部 D405 对齐深度 + agentview 全局视角）
 - `config/teleop/gamepad.yaml` — Franka base frame 和 Pika gripper joint 映射
 - `apps/profiles/fr3_pika_single_arm.yaml` — RMI 应用 API，通过 `execution_manager_config` 引用 routing table，不再定义 `groups`
 

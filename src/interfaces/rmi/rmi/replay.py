@@ -255,15 +255,19 @@ class ReplayPacer:
         sleep: Callable[[float], None] = time.sleep,
         keep_running: Callable[[], bool] = lambda: True,
         poll_interval_s: float = 0.01,
+        startup_timeout_s: float = 10.0,
     ) -> None:
         if poll_interval_s <= 0.0:
             raise ValueError("poll_interval_s must be positive")
+        if startup_timeout_s <= 0.0:
+            raise ValueError("startup_timeout_s must be positive")
         self._ros_clock_ns = ros_clock_ns
         self._use_sim_time = use_sim_time
         self._steady_clock_ns = steady_clock_ns
         self._sleep = sleep
         self._keep_running = keep_running
         self._poll_interval_s = poll_interval_s
+        self._startup_timeout_ns = int(startup_timeout_s * 1_000_000_000)
         self._origin_ns: int | None = None
         self._last_clock_ns: int | None = None
 
@@ -325,10 +329,13 @@ class ReplayPacer:
         raise RuntimeError("ROS context stopped while waiting for replay time")
 
     def _wait_for_valid_sim_time(self) -> int:
+        deadline_ns = self._steady_clock_ns() + self._startup_timeout_ns
         while self._keep_running():
             now_ns = self._ros_clock_ns()
             if now_ns > 0:
                 return now_ns
+            if self._steady_clock_ns() >= deadline_ns:
+                raise TimeoutError("timed out waiting for a valid simulation clock")
             self._sleep(self._poll_interval_s)
         raise RuntimeError(
             "ROS context stopped before a valid simulation clock arrived"

@@ -45,6 +45,16 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="false",
                 description="Launch the workstation Quest 3 teleop stack.",
             ),
+            DeclareLaunchArgument(
+                "teleop_mode",
+                default_value="absolute",
+                description="Teleop mode for Quest 3: 'absolute' (default) or 'relative'.",
+            ),
+            DeclareLaunchArgument(
+                "quest3_config",
+                default_value="",
+                description="Optional custom Quest 3 YAML parameter file path override.",
+            ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(launch_dir, "execution_manager.launch.py")
@@ -69,6 +79,10 @@ def generate_launch_description() -> LaunchDescription:
                     os.path.join(launch_dir, "quest3_teleop.launch.py")
                 ),
                 condition=IfCondition(LaunchConfiguration("with_teleop")),
+                launch_arguments={
+                    "teleop_mode": LaunchConfiguration("teleop_mode"),
+                    "quest3_config": LaunchConfiguration("quest3_config"),
+                }.items(),
             ),
         ]
     )

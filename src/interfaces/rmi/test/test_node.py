@@ -22,6 +22,7 @@ class FakePublisher:
 class FakeNode:
     def __init__(self):
         self.publishers: list[tuple[type, str, Any, FakePublisher]] = []
+        self.subscriptions: list[tuple[Any, str, Any]] = []
         self._current_time = SimpleNamespace(sec=100, nanosec=500000)
 
     def create_publisher(self, message_type, endpoint, qos):
@@ -29,6 +30,14 @@ class FakeNode:
         publisher = FakePublisher()
         self.publishers.append((message_type, endpoint, publisher))
         return publisher
+
+    def create_subscription(self, message_type, endpoint, callback, qos):
+        del message_type, qos
+        self.subscriptions.append((endpoint, callback))
+        return SimpleNamespace(endpoint=endpoint, callback=callback)
+
+    def destroy_subscription(self, subscription):
+        del subscription
 
     def get_clock(self):
         return SimpleNamespace(
@@ -275,6 +284,16 @@ def test_node_compound_resource_splits_flat_joint_vector():
         0.2,
     ]
     assert list(fake_node.publishers[1][2].messages[0].points[0].positions) == [0.04]
+
+
+def test_node_resource_accepts_no_policy_action():
+    profile = EmbodimentConfig.from_dict(_sample_profile_dict())
+    fake_node = FakeNode()
+    node = Node("Policy", fake_node, profile, FakeAuthority())
+
+    node["manipulator"].submit(None)
+
+    assert fake_node.publishers == []
 
 
 def test_node_compound_resource_executes_all_action_parts():
@@ -639,3 +658,139 @@ def test_publisher_cached_and_reused():
     assert len(fake_node.publishers) == 1
     pub = fake_node.publishers[0][2]
     assert len(pub.messages) == 2
+
+
+def test_format_jtc_guard_diagnostic_lines_heartbeat_timeout():
+    from rmi.errors import format_jtc_guard_diagnostic_lines
+
+    lines = format_jtc_guard_diagnostic_lines(
+        part_name="arm",
+        latest={
+            "fault_code": "NONE",
+            "guard_state": "IDLE",
+            "heartbeat_timeout_ms": "500",
+            "time_source": "ros_sim_time",
+            "fault_sequence": "1",
+            "heartbeat_topic": "/execution/arm/trajectory_guard_heartbeat",
+        },
+        last_fault={
+            "fault_code": "TRAJECTORY_HEARTBEAT_TIMEOUT",
+            "guard_state": "CANCELING",
+            "heartbeat_timeout_ms": "500",
+            "time_source": "ros_sim_time",
+            "fault_sequence": "1",
+            "heartbeat_topic": "/execution/arm/trajectory_guard_heartbeat",
+        },
+        status_name="franka_arm_jtc_guard: liveness",
+    )
+    assert any("likely_cause=" in line and "heartbeat timeout" in line for line in lines)
+    assert any("TRAJECTORY_HEARTBEAT_TIMEOUT" in line for line in lines)
+
+
+def test_format_jtc_guard_diagnostic_lines_without_guard_fault():
+    from rmi.errors import format_jtc_guard_diagnostic_lines
+
+    lines = format_jtc_guard_diagnostic_lines(
+        part_name="arm",
+        latest={
+            "fault_code": "NONE",
+            "guard_state": "IDLE",
+            "heartbeat_timeout_ms": "500",
+            "time_source": "ros_sim_time",
+            "fault_sequence": "0",
+            "heartbeat_topic": "/execution/arm/trajectory_guard_heartbeat",
+        },
+        last_fault=None,
+        status_name="franka_arm_jtc_guard: liveness",
+    )
+    assert any("without jtc_guard fault" in line for line in lines)
+
+
+def test_execute_aborted_externally_includes_jtc_guard_heartbeat_cause():
+    data = _sample_profile_dict()
+    data["groups"]["arm"]["controllers"]["joint_trajectory"] = {
+        "name": "arm_jtc",
+        "ros_actions": {
+            "follow_joint_trajectory": "/execution/arm/follow_joint_trajectory",
+        },
+        "ros_topics": {
+            "trajectory_guard_heartbeat": "/execution/arm/trajectory_guard_heartbeat",
+        },
+    }
+    data["groups"]["arm"]["default_controller"] = "joint_trajectory"
+    profile = EmbodimentConfig.from_dict(data)
+
+    class AbortedGoalHandle(FakeGoalHandle):
+        def get_result_async(self):
+            return FakeFuture(
+                SimpleNamespace(
+                    status=GoalStatus.STATUS_ABORTED,
+                    result=SimpleNamespace(error_code=0, error_string=""),
+                )
+            )
+
+    class AbortingActionClient(FakeActionClient):
+        def send_goal_async(self, goal, feedback_callback=None):
+            del feedback_callback
+            self.goals.append(goal)
+            # Guard buffer already subscribed; publish a fault before wait returns.
+            assert fake_node.subscriptions
+            _endpoint, callback = fake_node.subscriptions[-1]
+            callback(
+                SimpleNamespace(
+                    status=[
+                        SimpleNamespace(
+                            name="franka_arm_jtc_guard: liveness",
+                            values=[
+                                SimpleNamespace(
+                                    key="fault_code",
+                                    value="TRAJECTORY_HEARTBEAT_TIMEOUT",
+                                ),
+                                SimpleNamespace(key="guard_state", value="CANCELING"),
+                                SimpleNamespace(
+                                    key="heartbeat_timeout_ms", value="500"
+                                ),
+                                SimpleNamespace(
+                                    key="time_source", value="ros_sim_time"
+                                ),
+                                SimpleNamespace(key="fault_sequence", value="3"),
+                                SimpleNamespace(
+                                    key="heartbeat_topic",
+                                    value="/execution/arm/trajectory_guard_heartbeat",
+                                ),
+                                SimpleNamespace(
+                                    key="jtc_action",
+                                    value="/execution/arm/follow_joint_trajectory",
+                                ),
+                            ],
+                        )
+                    ]
+                )
+            )
+            return FakeFuture(AbortedGoalHandle())
+
+    AbortingActionClient.instances.clear()
+    fake_node = FakeNode()
+    node = Node(
+        "Planner",
+        fake_node,
+        profile,
+        FakeAuthority(),
+        action_client_factory=AbortingActionClient,
+    )
+    plan = SimpleNamespace(
+        valid=True,
+        points=[SimpleNamespace(positions=[0.1, 0.2], time_from_start_s=1.0)],
+    )
+
+    with pytest.raises(RuntimeError, match="cause=.*heartbeat timeout") as exc_info:
+        node["arm"].execute(plan)
+
+    text = str(exc_info.value)
+    assert text.startswith("execution failed for arm: ABORTED")
+    assert "cause=" in text
+    assert "TRAJECTORY_HEARTBEAT_TIMEOUT" in text
+    from rmi.errors import ExecutionError
+
+    assert isinstance(exc_info.value, ExecutionError)
+    assert "heartbeat timeout" in exc_info.value.cause

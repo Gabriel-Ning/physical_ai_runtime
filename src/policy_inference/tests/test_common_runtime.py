@@ -6,10 +6,9 @@ from typing import ClassVar
 
 import numpy as np
 import pytest
-from rmi import Observation
+from rmi import JointGroup, JointLayout, Observation, PolicyLayout
 from rmi.sensing import TimestampedSample
 
-from policy_inference.common.contract import PolicyIOContract
 from policy_inference.lerobot.bridge import (
     LeRobotToRmiActionBridge,
     RmiToLeRobotObservationBridge,
@@ -67,31 +66,58 @@ class _Profile:
     def profile_hash() -> str:
         return "profile-digest"
 
+    def joint_layout(self, node_name: str) -> JointLayout:
+        node = self.nodes[node_name]
+        groups = []
+        names = []
+        offset = 0
+        for part_name, command in node.resources.items():
+            joint_names = self.parts[part_name].joint_names
+            stop = offset + len(joint_names)
+            groups.append(
+                JointGroup(part_name, command, joint_names, offset, stop)
+            )
+            names.extend(joint_names)
+            offset = stop
+        return JointLayout(tuple(groups), tuple(names))
 
-def test_contract_resolves_order_once_and_splits_action() -> None:
-    contract = PolicyIOContract.from_profile(_Profile())
 
-    assert contract.action_feature_names == (
+def _layout() -> PolicyLayout:
+    profile = _Profile()
+    return PolicyLayout(
+        profile_name=profile.name,
+        profile_hash=profile.profile_hash(),
+        joints=profile.joint_layout("Policy"),
+        state_topic="/joint_states",
+        action_topics={
+            "left_arm": "/execution/left_arm/joint_reference",
+            "left_gripper": "/execution/left_gripper/joint_reference",
+            "right_arm": "/execution/right_arm/joint_reference",
+        },
+        camera_sources={"observation.images.wrist": "wrist"},
+        camera_topics={"observation.images.wrist": "/wrist/image_raw"},
+        camera_shapes={"observation.images.wrist": (8, 8, 3)},
+        frequency=30.0,
+    )
+
+
+def test_policy_features_follow_rmi_joint_layout() -> None:
+    layout = _layout()
+
+    assert layout.state_feature_names == (
         "left_1.pos",
         "left_2.pos",
         "left_gripper.pos",
         "right_1.pos",
         "right_2.pos",
     )
-    assert contract.camera_shapes == {"observation.images.wrist": (8, 8, 3)}
-    assert contract.camera_sources == {"observation.images.wrist": "wrist"}
-    assert [values for _, values in contract.split_action(np.arange(5.0))] == [
+    assert layout.camera_shapes == {"observation.images.wrist": (8, 8, 3)}
+    assert layout.camera_sources == {"observation.images.wrist": "wrist"}
+    assert [values for _, values in layout.joints.split_values(np.arange(5.0))] == [
         [0.0, 1.0],
         [2.0],
         [3.0, 4.0],
     ]
-
-
-def test_contract_rejects_profile_shape_mismatch() -> None:
-    profile = _Profile()
-    profile.features = {"action": {"action": {"shape": [4]}}}
-    with pytest.raises(ValueError, match="resolved action dimension 5"):
-        PolicyIOContract.from_profile(profile)
 
 
 def _observation(image: np.ndarray, *, camera_receive_time: float = 1.1) -> Observation:
@@ -124,24 +150,24 @@ def test_observation_bridge_orders_joints_and_reuses_rmi_camera_payload() -> Non
 
     from policy_inference.lerobot.utils import make_dataset_features
 
-    contract = PolicyIOContract.from_profile(_Profile())
-    bridge = RmiToLeRobotObservationBridge(contract)
+    layout = _layout()
+    bridge = RmiToLeRobotObservationBridge(layout)
     image = np.zeros((8, 8, 3), dtype=np.uint8)
 
     values = bridge.encode(_observation(image))
     frame = build_dataset_frame(
-        make_dataset_features(contract), values, prefix=OBS_STR
+        make_dataset_features(layout), values, prefix=OBS_STR
     )
 
-    assert [values[name] for name in contract.state_feature_names] == list(range(5))
+    assert [values[name] for name in layout.state_feature_names] == list(range(5))
     assert values["wrist"] is image
     assert frame["observation.state"].tolist() == list(range(5))
     assert frame["observation.images.wrist"] is image
 
 
 def test_observation_bridge_rejects_missing_sensor_and_stream_skew() -> None:
-    contract = PolicyIOContract.from_profile(_Profile())
-    bridge = RmiToLeRobotObservationBridge(contract, max_stream_skew_s=0.5)
+    layout = _layout()
+    bridge = RmiToLeRobotObservationBridge(layout, max_stream_skew_s=0.5)
     image = np.zeros((8, 8, 3), dtype=np.uint8)
     missing = _observation(image)
     missing = Observation(
@@ -157,9 +183,9 @@ def test_observation_bridge_rejects_missing_sensor_and_stream_skew() -> None:
 
 
 def test_action_bridge_emits_one_native_rmi_action_per_profile_resource() -> None:
-    contract = PolicyIOContract.from_profile(_Profile())
+    layout = _layout()
 
-    actions = LeRobotToRmiActionBridge(contract).decode(np.arange(5.0))
+    actions = LeRobotToRmiActionBridge(layout).decode(np.arange(5.0))
 
     assert [(action.part, action.value) for action in actions] == [
         ("left_arm", [0.0, 1.0]),
@@ -169,8 +195,7 @@ def test_action_bridge_emits_one_native_rmi_action_per_profile_resource() -> Non
 
 
 def test_action_bridge_rejects_bad_shape_and_nonfinite_values() -> None:
-    contract = PolicyIOContract.from_profile(_Profile())
-    bridge = LeRobotToRmiActionBridge(contract)
+    bridge = LeRobotToRmiActionBridge(_layout())
 
     with pytest.raises(ValueError, match="action shape"):
         bridge.decode(np.zeros(4))

@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from rmi import PolicyLayout
+
+from .bridge import LeRobotToRmiActionBridge, RmiToLeRobotObservationBridge
+
 
 @dataclass(frozen=True)
 class LeRobotPolicyBundle:
@@ -13,6 +17,82 @@ class LeRobotPolicyBundle:
     postprocessor: Any
     config: Any
 
+
+class LeRobotPolicy:
+    """Local LeRobot policy with the standard ``select_action`` boundary."""
+
+    def __init__(
+        self,
+        layout: PolicyLayout,
+        checkpoint: str,
+        *,
+        task: str,
+        device: str = "cuda",
+        revision: str | None = None,
+        rename_map: dict[str, str] | None = None,
+        expected_policy_type: str | None = None,
+        max_stream_skew_s: float = 0.5,
+    ) -> None:
+        if not task.strip():
+            raise ValueError("task must not be empty")
+
+        from lerobot.rollout.inference.sync import SyncInferenceEngine
+
+        self.layout = layout
+        self.bundle, self.compatibility = load_validated_policy_bundle(
+            layout,
+            checkpoint,
+            device=device,
+            revision=revision,
+            rename_map=rename_map,
+            expected_policy_type=expected_policy_type,
+        )
+        self._observation_bridge = RmiToLeRobotObservationBridge(
+            layout,
+            max_stream_skew_s=max_stream_skew_s,
+        )
+        self._action_bridge = LeRobotToRmiActionBridge(layout)
+
+        from .utils import make_dataset_features
+
+        self._dataset_features = make_dataset_features(layout)
+        self._engine = SyncInferenceEngine(
+            policy=self.bundle.policy,
+            preprocessor=self.bundle.preprocessor,
+            postprocessor=self.bundle.postprocessor,
+            dataset_features=self._dataset_features,
+            ordered_action_keys=list(layout.action_feature_names),
+            task=task,
+            device=device,
+            robot_type="rmi",
+        )
+        self._closed = False
+        self._engine.start()
+
+    def select_action(self, observation: Any) -> Any:
+        """Return native RMI actions for one RMI observation."""
+        if self._closed:
+            raise RuntimeError("policy is closed")
+
+        from lerobot.utils.constants import OBS_STR
+        from lerobot.utils.feature_utils import build_dataset_frame
+
+        raw = self._observation_bridge.encode(observation)
+        frame = build_dataset_frame(self._dataset_features, raw, prefix=OBS_STR)
+        action = self._engine.get_action(frame)
+        return None if action is None else self._action_bridge.decode(action)
+
+    def reset(self) -> None:
+        """Reset policy, processor, and buffered action state."""
+        if self._closed:
+            raise RuntimeError("policy is closed")
+        self._engine.reset()
+
+    def close(self) -> None:
+        """Release inference resources; safe to call more than once."""
+        if not self._closed:
+            self._closed = True
+            self._engine.stop()
 
 def _load_pretrained_config(checkpoint: str, revision: str | None) -> Any:
     # Importing the native policy package registers every config subclass with
@@ -60,7 +140,7 @@ def load_policy_bundle(
 
 
 def load_validated_policy_bundle(
-    contract: Any,
+    layout: PolicyLayout,
     checkpoint: str,
     *,
     device: str,
@@ -79,7 +159,7 @@ def load_validated_policy_bundle(
     resolved = resolve_checkpoint(checkpoint)
     config = _load_pretrained_config(resolved, revision)
     report = validate_policy_compatibility(
-        contract,
+        layout,
         config,
         checkpoint=resolved,
         expected_policy_type=expected_policy_type,
@@ -90,7 +170,7 @@ def load_validated_policy_bundle(
         resolved, device=device, revision=revision, rename_map=rename_map
     )
     resize_step = make_native_resize_step(
-        contract, config.image_features, rename_map=rename_map
+        layout, config.image_features, rename_map=rename_map
     )
     install_native_resize_step(bundle.preprocessor, resize_step)
     return bundle, report

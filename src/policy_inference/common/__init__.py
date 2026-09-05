@@ -1,8 +1,1 @@
-"""Policy-backend-neutral runtime contracts."""
-
-from .contract import ActionGroup, PolicyIOContract
-
-__all__ = [
-    "ActionGroup",
-    "PolicyIOContract",
-]
+"""Fallback runtime utilities for policies without native inference support."""

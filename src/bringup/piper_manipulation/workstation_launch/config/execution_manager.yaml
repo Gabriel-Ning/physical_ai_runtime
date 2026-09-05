@@ -75,14 +75,18 @@ groups:
     type: parallel_gripper
     joint_names: [left_gripper_joint1]
     parent_group: left_arm
+    base_frame: left_flange_link
+    tcp_frame: left_gripper_tcp
     controller_manager: /controller_manager
     default_controller: joint_space_reference
     controllers:
       joint_space_reference:
         name: left_gripper_fwd
+        implementation: forward_command_controller/ForwardCommandController
         ros_topics: {joint_reference: /execution/left_gripper/joint_reference}
       gripper_command:
         name: left_gripper_action
+        implementation: parallel_gripper_action_controller/GripperActionController
         ros_actions: {gripper_command: /execution/left_gripper/gripper_command}
   right_arm:
     type: arm
@@ -107,12 +111,16 @@ groups:
     type: parallel_gripper
     joint_names: [right_gripper_joint1]
     parent_group: right_arm
+    base_frame: right_flange_link
+    tcp_frame: right_gripper_tcp
     controller_manager: /controller_manager
     default_controller: joint_space_reference
     controllers:
       joint_space_reference:
         name: right_gripper_fwd
+        implementation: forward_command_controller/ForwardCommandController
         ros_topics: {joint_reference: /execution/right_gripper/joint_reference}
       gripper_command:
         name: right_gripper_action
+        implementation: parallel_gripper_action_controller/GripperActionController
         ros_actions: {gripper_command: /execution/right_gripper/gripper_command}

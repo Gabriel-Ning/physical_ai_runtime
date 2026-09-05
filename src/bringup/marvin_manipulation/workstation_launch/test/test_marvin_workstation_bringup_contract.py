@@ -194,10 +194,16 @@ def test_marvin_profiles_register_supported_teleop_nodes() -> None:
             for name, node in profile["nodes"].items()
             if node["source_role"] == "TELEOP"
         }
-        assert teleop_nodes == {"Quest3Teleop", "TeleopJoint"}
-        assert profile["nodes"]["Quest3Teleop"]["resources"] == {
+        assert teleop_nodes == {
+            "Quest3TeleopLeft",
+            "Quest3TeleopRight",
+            "TeleopJoint",
+        }
+        assert profile["nodes"]["Quest3TeleopLeft"]["resources"] == {
             "left_arm": "pose_reference",
             "left_gripper": "joint_reference",
+        }
+        assert profile["nodes"]["Quest3TeleopRight"]["resources"] == {
             "right_arm": "pose_reference",
             "right_gripper": "joint_reference",
         }
@@ -227,15 +233,29 @@ def test_quest3_launch_uses_marvin_specific_parameter_overrides() -> None:
     )
     assert params["left_tcp_frame"] == "left_pika_gripper_tcp"
     assert params["right_tcp_frame"] == "right_pika_gripper_tcp"
+    assert params["left_base_frame"] == "Base_L"
+    assert params["right_base_frame"] == "Base_R"
     assert params["left_gripper_joint_name"] == "left_gripper_left_joint"
     assert params["right_gripper_joint_name"] == "right_gripper_left_joint"
 
     launch = (LAUNCH_DIR / "quest3_teleop.launch.py").read_text(encoding="utf-8")
-    assert "quest3_bimanual_relative.yaml" in launch
-    assert "bimanual_target_live.launch.py" in launch
-    assert '"profile_config": LaunchConfiguration("quest3_config")' in launch
-    assert '"left_base_frame": "Base_L"' in launch
-    assert '"right_base_frame": "Base_R"' in launch
+    assert 'f"quest3_bimanual_{teleop_mode}.yaml"' in launch
+    assert "bimanual_target_live.launch.py" not in launch
+    assert "IncludeLaunchDescription" not in launch
+    assert 'package="isaacteleop_toolbox"' in launch
+    assert "quest3_config," in launch
+    assert '"enable_deadman":' not in launch
+    assert '"linear_scale":' not in launch
+
+
+def test_quest3_absolute_config_owns_deadman_and_scale_behavior() -> None:
+    config = _load_yaml(CONFIG_DIR / "teleop" / "quest3_bimanual_absolute.yaml")
+    params = config["quest3_bimanual_absolute_target"]["ros__parameters"]
+    assert params["enable_deadman"] is True
+    assert params["deadman_source"] == "squeeze"
+    assert params["enable_dynamic_scale"] is True
+    assert params["left_base_frame"] == "Base_L"
+    assert params["right_base_frame"] == "Base_R"
 
 
 def test_recorder_launch_uses_package_config() -> None:

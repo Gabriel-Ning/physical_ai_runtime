@@ -36,9 +36,13 @@ nodes:
     source_role: PLANNER
     resources: {left_arm: joint_trajectory, left_gripper: gripper_command, right_arm: joint_trajectory, right_gripper: gripper_command}
     frequency: 30.0
-  Quest3Teleop:
+  Quest3TeleopLeft:
     source_role: TELEOP
-    resources: {left_arm: pose_reference, left_gripper: joint_reference, right_arm: pose_reference, right_gripper: joint_reference}
+    resources: {left_arm: pose_reference, left_gripper: joint_reference}
+    frequency: 30.0
+  Quest3TeleopRight:
+    source_role: TELEOP
+    resources: {right_arm: pose_reference, right_gripper: joint_reference}
     frequency: 30.0
   TeleopJoint:
     source_role: TELEOP

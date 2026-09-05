@@ -1,15 +1,61 @@
 quest3_bimanual_target:
   ros__parameters:
     profile_name: marvin_quest3_bimanual_relative
+    rate_hz: 50.0
 
+    # Action sources / Ingress topics for Marvin Execution Manager
     left_output_topic: /action_sources/quest3/left_arm/pose_reference
     right_output_topic: /action_sources/quest3/right_arm/pose_reference
     left_gripper_output_topic: /action_sources/quest3/left_gripper/joint_reference
     right_gripper_output_topic: /action_sources/quest3/right_gripper/joint_reference
 
+    # Pika gripper joint and stroke configurations
     left_gripper_joint_name: left_gripper_left_joint
     right_gripper_joint_name: right_gripper_left_joint
+    gripper_min_width: 0.000
+    gripper_max_width: 0.045
+    gripper_speed_mps: 0.050
+    require_clutch_for_gripper: false
 
+    # Status & Clutch topics
+    status_topic: ~/status
+    left_clutch_topic: /teleop/quest3_bimanual/left_clutch
+    right_clutch_topic: /teleop/quest3_bimanual/right_clutch
+
+    # Snapshot topics
+    left_snapshot_controller_topic: /teleop/quest3_bimanual/left_snapshot/controller_pose
+    left_snapshot_ee_topic: /teleop/quest3_bimanual/left_snapshot/ee_pose
+    right_snapshot_controller_topic: /teleop/quest3_bimanual/right_snapshot/controller_pose
+    right_snapshot_ee_topic: /teleop/quest3_bimanual/right_snapshot/ee_pose
+
+    # TF Frame configurations
     output_frame: world
+    left_base_frame: Base_L
+    right_base_frame: Base_R
     left_tcp_frame: left_pika_gripper_tcp
     right_tcp_frame: right_pika_gripper_tcp
+    left_target_frame: teleop_left_ee_target
+    right_target_frame: teleop_right_ee_target
+
+    # Quest3 controller mapping & deadman clutch
+    pose_source: grip
+    deadman_source: squeeze
+    deadman_threshold: 0.5
+    require_both_deadman: false
+
+    # Spatial scaling
+    linear_scale: 1.0
+    angular_scale: 1.0
+
+    # SE(3) One Euro Filter
+    filter_type: one_euro
+    one_euro_min_cutoff: 1.0
+    one_euro_beta: 0.007
+    one_euro_d_cutoff: 1.0
+
+    # Safety rate limits
+    max_linear_step_m: 0.05
+    max_angular_step_rad: 0.25
+
+    # Fixed OpenXR -> ROS basis change
+    openxr_to_base_rotation_xyzw: [0.5, -0.5, -0.5, 0.5]

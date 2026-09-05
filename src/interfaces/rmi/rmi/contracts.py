@@ -89,7 +89,7 @@ class Observation:
     ``allocations`` is sampled when this observation is constructed (for
     example on ``robot.state`` / ``get_observation()``), not when the joint
     state message arrived. Lease fencing therefore compares ownership at
-    observation-read time against the current control session lease.
+    observation-read time against the current Node authority lease.
     """
 
     data: Mapping[str, Any]

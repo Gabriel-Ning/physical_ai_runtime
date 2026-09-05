@@ -65,8 +65,8 @@ def test_execution_manager_config_owns_routes():
         "command_contract": "joint_reference",
         "topic": "/action_sources/dummy_policy/arm/joint_reference",
     }
-    assert sources["GamepadTeleop"]["activation_topic"] == ("/teleop/gamepad/clutch")
-    assert sources["GamepadTeleop"]["preempt"] is True
+    assert sources["TeleopTwist"]["activation_topic"] == ("/teleop/gamepad/clutch")
+    assert sources["TeleopTwist"]["preempt"] is True
     assert sources["Planner"]["inputs"]["end_effector"] == {
         "command_contract": "gripper_command",
         "action": "/action_sources/planner/end_effector/gripper_command",
@@ -78,42 +78,50 @@ def test_workstation_stack_launches_gamepad_em_and_recorder():
     assert "execution_manager.launch.py" in launch
     assert "gamepad_teleop.launch.py" in launch
     assert "recorder.launch.py" in launch
+    assert 'with_recorder"' in launch or "with_recorder" in launch
 
 
 def test_recorder_captures_preemption_and_routed_actions():
-    contract = ROOT.parents[3] / "apps" / "recording" / "franka_manipulation.yaml"
-    config = yaml.safe_load(contract.read_text(encoding="utf-8"))
-    topics = {stream["topic"] for stream in config["streams"]}
-    assert {
+    recording_dir = ROOT.parents[3] / "apps" / "recording"
+    expected_common_topics = {
         "/teleop/gamepad/clutch",
         "/execution_manager/authority_status",
         "/execution_manager/authority_events",
         "/action_sources/dummy_policy/arm/joint_reference",
-        "/action_sources/gamepad/arm/twist",
+        "/action_sources/teleop_twist/arm/twist",
         "/execution_trace/policy/arm/joint_reference",
         "/execution_trace/teleop/arm/twist_reference",
         "/execution/arm/joint_reference",
         "/execution/arm/twist_reference",
-    } <= topics
+    }
+    for filename in ("franka_manipulation_real.yaml", "franka_manipulation_mujoco.yaml"):
+        config = yaml.safe_load((recording_dir / filename).read_text(encoding="utf-8"))
+        topics = {stream["topic"] for stream in config["streams"]}
+        assert expected_common_topics <= topics
 
 
-def test_camera_and_no_camera_recording_contracts_share_topics_but_gate_differently():
+def test_real_and_mujoco_recording_contracts_configure_domain_cameras():
     recording_dir = ROOT.parents[3] / "apps" / "recording"
-    camera = yaml.safe_load(
-        (recording_dir / "franka_manipulation.yaml").read_text(encoding="utf-8")
+    real = yaml.safe_load(
+        (recording_dir / "franka_manipulation_real.yaml").read_text(encoding="utf-8")
     )
-    no_camera = yaml.safe_load(
-        (recording_dir / "franka_manipulation_no_cam.yaml").read_text(encoding="utf-8")
+    mujoco = yaml.safe_load(
+        (recording_dir / "franka_manipulation_mujoco.yaml").read_text(encoding="utf-8")
     )
-    camera_by_id = {stream["id"]: stream for stream in camera["streams"]}
-    no_camera_by_id = {stream["id"]: stream for stream in no_camera["streams"]}
-    assert camera_by_id.keys() == no_camera_by_id.keys()
-    camera_ids = {"pika_d405_color", "pika_d405_depth", "pika_fisheye_color"}
-    for stream_id in camera_ids:
-        assert camera_by_id[stream_id]["required"] is True
-        assert camera_by_id[stream_id]["start_gate"] is True
-        assert no_camera_by_id[stream_id]["required"] is False
-        assert no_camera_by_id[stream_id]["start_gate"] is False
+    real_by_id = {stream["id"]: stream for stream in real["streams"]}
+    mujoco_by_id = {stream["id"]: stream for stream in mujoco["streams"]}
+
+    # Real hardware streams (wrist D405 + wrist fisheye)
+    assert {"pika_d405_color", "pika_d405_depth", "pika_fisheye_color"} <= real_by_id.keys()
+    assert "agentview_color" not in real_by_id
+    assert real_by_id["pika_fisheye_color"]["required"] is True
+    assert real_by_id["pika_fisheye_color"]["start_gate"] is True
+
+    # MuJoCo simulation streams (wrist D405 + agentview)
+    assert {"pika_d405_color", "pika_d405_depth", "agentview_color", "agentview_depth"} <= mujoco_by_id.keys()
+    assert "pika_fisheye_color" not in mujoco_by_id
+    assert mujoco_by_id["agentview_color"]["required"] is True
+    assert mujoco_by_id["agentview_color"]["start_gate"] is True
 
 
 def test_application_profile_references_em_config_without_groups():

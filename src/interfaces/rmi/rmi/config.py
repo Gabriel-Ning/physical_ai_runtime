@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,92 @@ class NodeConfig:
     resources: dict[str, str]
     frequency: float | None = None
     inputs: dict[str, NodeInputConfig] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class JointGroup:
+    """One profile Part's contiguous slice in a Node joint vector."""
+
+    part: str
+    command: str
+    joint_names: tuple[str, ...]
+    start: int
+    stop: int
+
+
+@dataclass(frozen=True)
+class JointLayout:
+    """ROS-independent ordered joint layout resolved for one profile Node."""
+
+    groups: tuple[JointGroup, ...]
+    joint_names: tuple[str, ...]
+
+    @property
+    def dimension(self) -> int:
+        return len(self.joint_names)
+
+    def order_values(
+        self, names: Sequence[str], values: Sequence[float]
+    ) -> list[float]:
+        """Reorder named values into the canonical Node joint order."""
+        if len(names) != len(values):
+            raise ValueError(
+                f"joint name count {len(names)} does not match value count {len(values)}"
+            )
+        by_name = dict(zip(names, values, strict=True))
+        if len(by_name) != len(names):
+            raise ValueError("joint names must be unique")
+        missing = [name for name in self.joint_names if name not in by_name]
+        if missing:
+            raise ValueError(f"joint values are missing required names: {missing}")
+        return [float(by_name[name]) for name in self.joint_names]
+
+    def split_values(
+        self, values: Sequence[float]
+    ) -> tuple[tuple[JointGroup, list[float]], ...]:
+        """Split one canonical flat vector into its profile Part groups."""
+        if len(values) != self.dimension:
+            raise ValueError(
+                f"joint vector dimension {len(values)} does not match layout "
+                f"{self.dimension}"
+            )
+        return tuple(
+            (group, [float(value) for value in values[group.start : group.stop]])
+            for group in self.groups
+        )
+
+
+@dataclass(frozen=True)
+class PolicyLayout:
+    """Backend-neutral I/O layout for one Profile policy Node."""
+
+    profile_name: str
+    profile_hash: str
+    joints: JointLayout
+    state_topic: str
+    action_topics: dict[str, str]
+    camera_sources: dict[str, str]
+    camera_topics: dict[str, str]
+    camera_shapes: dict[str, tuple[int, int, int]]
+    frequency: float
+
+    @property
+    def state_feature_names(self) -> tuple[str, ...]:
+        """Canonical scalar state features shared by data and policy runtimes."""
+        return tuple(f"{name}.pos" for name in self.joints.joint_names)
+
+    @property
+    def action_feature_names(self) -> tuple[str, ...]:
+        """Canonical scalar action features in policy output order."""
+        return self.state_feature_names
+
+    @property
+    def topics(self) -> tuple[str, ...]:
+        return (
+            self.state_topic,
+            *self.action_topics.values(),
+            *self.camera_topics.values(),
+        )
 
 
 @dataclass(frozen=True)
@@ -135,6 +222,117 @@ class EmbodimentConfig:
                 parts.extend(self.get_part_names(member))
             return parts
         return []
+
+    def joint_layout(self, node_name: str) -> JointLayout:
+        """Resolve a Node's joint resources in Profile declaration order."""
+        try:
+            node = self.nodes[node_name]
+        except KeyError as exc:
+            raise KeyError(f"profile has no node {node_name!r}") from exc
+
+        groups: list[JointGroup] = []
+        joint_names: list[str] = []
+        offset = 0
+        for part_name, command in node.resources.items():
+            part = self.parts[part_name]
+            if not part.joint_names:
+                raise ValueError(f"part {part_name!r} has no joints")
+            stop = offset + len(part.joint_names)
+            groups.append(
+                JointGroup(part_name, command, part.joint_names, offset, stop)
+            )
+            joint_names.extend(part.joint_names)
+            offset = stop
+        if len(joint_names) != len(set(joint_names)):
+            raise ValueError(f"node {node_name!r} joint names must be unique")
+        return JointLayout(tuple(groups), tuple(joint_names))
+
+    def policy_layout(self, node_name: str = "Policy") -> PolicyLayout:
+        """Resolve the common policy layout consumed offline and at runtime."""
+        joints = self.joint_layout(node_name)
+        unsupported = [
+            f"{group.part}.{group.command}"
+            for group in joints.groups
+            if group.command != "joint_reference"
+        ]
+        if unsupported:
+            raise ValueError(
+                "policy layout requires joint_reference resources; "
+                f"got {unsupported}"
+            )
+        node = self.nodes[node_name]
+        if node.frequency is None or node.frequency <= 0.0:
+            raise ValueError(f"node {node_name!r} must declare a positive frequency")
+
+        state_feature = self.features.get("observation", {}).get(
+            "observation.state", {}
+        )
+        state_topic = str(state_feature.get("source", "/joint_states"))
+        if not state_topic.startswith("/"):
+            raise ValueError("observation.state.source must be an absolute ROS topic")
+
+        action_topics: dict[str, str] = {}
+        for group in joints.groups:
+            matches = [
+                controller.ros_topics[group.command]
+                for controller in self.parts[group.part].controllers.values()
+                if group.command in controller.ros_topics
+            ]
+            if len(matches) != 1:
+                raise KeyError(
+                    f"expected one command topic for {group.part}.{group.command}, "
+                    f"found {len(matches)}"
+                )
+            action_topics[group.part] = matches[0]
+
+        camera_sources: dict[str, str] = {}
+        camera_topics: dict[str, str] = {}
+        camera_shapes: dict[str, tuple[int, int, int]] = {}
+        for feature_name, feature in self.features.get("observation", {}).items():
+            if feature.get("type") != "image":
+                continue
+            source = str(feature.get("source", ""))
+            prefix = "sensors.cameras."
+            if not source.startswith(prefix):
+                raise ValueError(
+                    f"image feature {feature_name!r} has invalid source {source!r}"
+                )
+            camera_name = source.removeprefix(prefix)
+            try:
+                camera = self.cameras[camera_name]
+            except KeyError as exc:
+                raise KeyError(
+                    f"image feature {feature_name!r} references unknown camera "
+                    f"{camera_name!r}"
+                ) from exc
+            shape = feature.get("shape")
+            if not isinstance(shape, list) or len(shape) != 3:
+                raise ValueError(
+                    f"image feature {feature_name!r} must declare [C,H,W] shape"
+                )
+            channels, height, width = (int(value) for value in shape)
+            camera_sources[feature_name] = camera_name
+            camera_topics[feature_name] = camera.ros_topic
+            camera_shapes[feature_name] = (height, width, channels)
+
+        declared_action = self.features.get("action", {}).get("action", {})
+        shape = declared_action.get("shape")
+        if shape is not None and list(shape) != [joints.dimension]:
+            raise ValueError(
+                f"features.action.action.shape {shape!r} does not match resolved "
+                f"action dimension {joints.dimension}"
+            )
+        return PolicyLayout(
+            profile_name=self.name,
+            profile_hash=self.profile_hash(),
+            joints=joints,
+            state_topic=state_topic,
+            action_topics=action_topics,
+            camera_sources=camera_sources,
+            camera_topics=camera_topics,
+            camera_shapes=camera_shapes,
+            frequency=float(node.frequency),
+        )
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> EmbodimentConfig:
@@ -264,6 +462,7 @@ class EmbodimentConfig:
         sensors = _mapping(root.get("sensors", {}), "sensors")
         raw_cameras = _mapping(sensors.get("cameras", {}), "sensors.cameras")
         cameras: dict[str, CameraSensorConfig] = {}
+        camera_topics: dict[str, str] = {}
         for camera_name, value in raw_cameras.items():
             camera = _mapping(value, f"sensors.cameras.{camera_name}")
             resolution = camera.get("resolution", [480, 640])
@@ -275,12 +474,20 @@ class EmbodimentConfig:
                 raise TypeError(
                     f"sensors.cameras.{camera_name}.resolution must contain two positive integers"
                 )
+            ros_topic = _string(
+                camera.get("ros_topic"),
+                f"sensors.cameras.{camera_name}.ros_topic",
+            )
+            existing_camera = camera_topics.get(ros_topic)
+            if existing_camera is not None:
+                raise ValueError(
+                    f"camera topic {ros_topic!r} is assigned to both "
+                    f"{existing_camera!r} and {camera_name!r}"
+                )
+            camera_topics[ros_topic] = camera_name
             cameras[camera_name] = CameraSensorConfig(
                 name=camera_name,
-                ros_topic=_string(
-                    camera.get("ros_topic"),
-                    f"sensors.cameras.{camera_name}.ros_topic",
-                ),
+                ros_topic=ros_topic,
                 encoding=str(camera.get("encoding", "rgb8")),
                 fps=int(camera.get("fps", 30)),
                 resolution=(resolution[0], resolution[1]),

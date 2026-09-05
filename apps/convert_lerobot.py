@@ -6,12 +6,17 @@ import argparse
 
 from rmi.config import EmbodimentConfig
 
-from toolbox.dataset_tools import DatasetContract, convert_episodes
+from toolbox.dataset_tools import convert_episodes
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", required=True)
+    parser.add_argument(
+        "--node-name",
+        default="Policy",
+        help="Profile POLICY node used for joint/action layout (Franka: JointPolicy)",
+    )
     parser.add_argument("--episode", action="append", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--repo-id", required=True)
@@ -20,10 +25,10 @@ def main() -> None:
     args = parser.parse_args()
 
     profile = EmbodimentConfig.from_yaml(args.profile)
-    contract = DatasetContract.from_profile(profile)
+    layout = profile.policy_layout(args.node_name)
     output = convert_episodes(
         args.episode,
-        contract=contract,
+        layout=layout,
         output_dir=args.output,
         repo_id=args.repo_id,
         task=args.task,

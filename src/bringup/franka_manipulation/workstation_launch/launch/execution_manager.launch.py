@@ -28,6 +28,7 @@ def _max_command_age_s(config_path: str) -> str:
 
 def _launch_setup(context, *args, **kwargs):
     config_path = LaunchConfiguration("config").perform(context).strip()
+    use_sim_time = LaunchConfiguration("use_sim_time").perform(context).strip()
     em_share = get_package_share_directory("execution_manager")
     return [
         IncludeLaunchDescription(
@@ -37,6 +38,7 @@ def _launch_setup(context, *args, **kwargs):
             launch_arguments={
                 "profile": config_path,
                 "max_command_age_s": _max_command_age_s(config_path),
+                "use_sim_time": use_sim_time,
             }.items(),
         )
     ]
@@ -52,6 +54,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription(
         [
             DeclareLaunchArgument("config", default_value=default_config),
+            DeclareLaunchArgument("use_sim_time", default_value="false"),
             OpaqueFunction(function=_launch_setup),
         ]
     )

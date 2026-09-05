@@ -18,13 +18,146 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory
 
-from .contracts import Action
-from .provider import (
-    _cartesian_trajectory_from_spec,
-    _joint_trajectory_from_spec,
-    _reject_invalid_result,
-    _twist_stamped_from_spec,
+from .command_messages import (
+    cartesian_trajectory_from_spec,
+    joint_trajectory_from_spec,
+    reject_invalid_result,
+    twist_stamped_from_spec,
 )
+from .contracts import Action
+from .errors import (
+    ActionTimeoutError,
+    ExecutionError,
+    NodeAlreadyActiveError,
+    action_timeout_error,
+    execution_failure_cause_and_details,
+    format_jtc_guard_diagnostic_lines,
+    goal_rejected_error,
+)
+
+
+def _part_jtc_guard_matchers(
+    profile: Any, part_name: str
+) -> tuple[str | None, str | None]:
+    """Return (heartbeat_topic, jtc_action) declared for one part, if any."""
+    parts = getattr(profile, "parts", None) or {}
+    part = parts.get(part_name)
+    if part is None:
+        return None, None
+    heartbeat: str | None = None
+    action: str | None = None
+    for controller in getattr(part, "controllers", {}).values():
+        topics = getattr(controller, "ros_topics", {}) or {}
+        actions = getattr(controller, "ros_actions", {}) or {}
+        topic = topics.get("trajectory_guard_heartbeat")
+        if topic:
+            heartbeat = topic
+        jtc = actions.get("follow_joint_trajectory")
+        if jtc:
+            action = jtc
+    return heartbeat, action
+
+
+def _jtc_guard_status_matches(
+    *,
+    status_name: str,
+    values: Mapping[str, str],
+    part_name: str,
+    heartbeat_topic: str | None,
+    jtc_action: str | None,
+) -> bool:
+    if "jtc_guard" not in status_name:
+        return False
+    topic = values.get("heartbeat_topic", "")
+    action = values.get("jtc_action", "")
+    if heartbeat_topic and topic == heartbeat_topic:
+        return True
+    if jtc_action and action == jtc_action:
+        return True
+    needle = f"/{part_name}/"
+    return needle in topic or needle in action or part_name in status_name
+
+
+class _JtcGuardDiagnosticBuffer:
+    """Capture jtc_guard /diagnostics while a trajectory is in flight.
+
+    Guards clear fault_code back to NONE quickly after canceling; remembering the
+    last non-NONE fault is required to attribute ABORTED_EXTERNALLY.
+    """
+
+    def __init__(self, ros_node: Any, profile: Any, part_names: Sequence[str]) -> None:
+        self._ros_node = ros_node
+        self._part_names = tuple(part_names)
+        self._matchers = {
+            part: _part_jtc_guard_matchers(profile, part) for part in self._part_names
+        }
+        self._latest: dict[str, tuple[str, dict[str, str]]] = {}
+        self._last_fault: dict[str, tuple[str, dict[str, str]]] = {}
+        self._subscription = None
+        create_subscription = getattr(ros_node, "create_subscription", None)
+        if create_subscription is None:
+            return
+        try:
+            from diagnostic_msgs.msg import DiagnosticArray
+        except ImportError:
+            return
+        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
+        try:
+            self._subscription = create_subscription(
+                DiagnosticArray, "/diagnostics", self._on_diagnostics, qos
+            )
+        except Exception:
+            self._subscription = None
+
+    def _on_diagnostics(self, message: Any) -> None:
+        for status in getattr(message, "status", []) or []:
+            name = str(getattr(status, "name", "") or "")
+            values = {
+                str(kv.key): str(kv.value)
+                for kv in getattr(status, "values", []) or []
+            }
+            for part_name, (heartbeat, action) in self._matchers.items():
+                matched = _jtc_guard_status_matches(
+                    status_name=name,
+                    values=values,
+                    part_name=part_name,
+                    heartbeat_topic=heartbeat,
+                    jtc_action=action,
+                )
+                if not matched:
+                    if heartbeat or action or "jtc_guard" not in name:
+                        continue
+                    if len(self._part_names) > 1 and part_name not in name:
+                        continue
+                self._latest[part_name] = (name, values)
+                fault = values.get("fault_code", "NONE")
+                if fault and fault != "NONE":
+                    self._last_fault[part_name] = (name, dict(values))
+
+    def lines_for(self, part_name: str) -> list[str]:
+        latest_entry = self._latest.get(part_name)
+        fault_entry = self._last_fault.get(part_name)
+        return format_jtc_guard_diagnostic_lines(
+            part_name=part_name,
+            latest=latest_entry[1] if latest_entry else None,
+            last_fault=fault_entry[1] if fault_entry else None,
+            status_name=(
+                fault_entry[0]
+                if fault_entry
+                else (latest_entry[0] if latest_entry else "")
+            ),
+        )
+
+    def close(self) -> None:
+        if self._subscription is None:
+            return
+        destroy = getattr(self._ros_node, "destroy_subscription", None)
+        if destroy is not None:
+            try:
+                destroy(self._subscription)
+            except Exception:
+                pass
+        self._subscription = None
 
 
 class NodeStatus(str, Enum):
@@ -62,9 +195,12 @@ class Execution:
 
     def wait(self, timeout: float = 10.0) -> Any:
         wrapped = _wait_future(
-            self._goal_handle.get_result_async(), timeout, "trajectory result"
+            self._goal_handle.get_result_async(),
+            timeout,
+            f"trajectory result for {self.part!r}",
         )
         self.result = wrapped.result
+        self.status = getattr(wrapped, "status", None)
         self.done = True
         if wrapped.status == GoalStatus.STATUS_SUCCEEDED:
             self.state = ExecutionState.SUCCEEDED
@@ -77,7 +213,9 @@ class Execution:
 
     def cancel(self, timeout: float = 5.0) -> None:
         _wait_future(
-            self._goal_handle.cancel_goal_async(), timeout, "trajectory cancel"
+            self._goal_handle.cancel_goal_async(),
+            timeout,
+            f"trajectory cancel for {self.part!r}",
         )
 
 
@@ -124,6 +262,9 @@ class NodeResource:
 
     def submit(self, value: Any) -> None:
         """Split one ordered joint vector and publish one atomic action batch."""
+        if value is None:
+            self.node.submit(None)
+            return
         if isinstance(value, Action):
             self.node.submit(value)
             return
@@ -169,6 +310,9 @@ class NodeResource:
                 f"got {list(by_part)}"
             )
         executions: list[Execution] = []
+        guard_diag = _JtcGuardDiagnosticBuffer(
+            self.node._node, self.node._profile, self.parts
+        )
         try:
             for part_name in self.parts:
                 executions.append(
@@ -178,18 +322,27 @@ class NodeResource:
             for execution in executions:
                 results[execution.part] = execution.wait(timeout=timeout)
                 if execution.state is not ExecutionState.SUCCEEDED:
-                    details = []
-                    if execution.result is not None:
-                        error_code = getattr(execution.result, "error_code", None)
-                        error_string = getattr(execution.result, "error_string", "")
-                        if error_code is not None:
-                            details.append(f"error_code={error_code}")
-                        if error_string:
-                            details.append(f"error_string={error_string!r}")
-                    suffix = f" ({', '.join(details)})" if details else ""
-                    raise RuntimeError(
-                        f"execution failed for {execution.part}: "
-                        f"{execution.state.value}{suffix}"
+                    allocations = {}
+                    if hasattr(self.node, "_authority") and hasattr(
+                        self.node._authority, "get_allocations"
+                    ):
+                        try:
+                            allocations = self.node._authority.get_allocations()
+                        except Exception:
+                            pass
+                    cause, details = execution_failure_cause_and_details(
+                        part=execution.part,
+                        state=execution.state.value,
+                        result=execution.result,
+                        feedback=getattr(execution, "_feedback", []),
+                        guard_lines=guard_diag.lines_for(execution.part),
+                        allocations=allocations,
+                    )
+                    raise ExecutionError(
+                        part=execution.part,
+                        state=execution.state.value,
+                        cause=cause,
+                        details=details,
                     )
             return results
         except BaseException:
@@ -197,6 +350,8 @@ class NodeResource:
                 if not execution.done:
                     execution.cancel()
             raise
+        finally:
+            guard_diag.close()
 
 
 class Node:
@@ -229,7 +384,7 @@ class Node:
     def activate(self, *, preempt: bool = False) -> NodeActivation:
         """Acquire scoped authority without exposing the underlying EM lease."""
         if self._activation_lease_id is not None:
-            raise RuntimeError(f"node {self.name!r} is already active")
+            raise NodeAlreadyActiveError(self.name)
         grant = self._authority.claim(
             self.config.source_role,
             self.name,
@@ -316,13 +471,13 @@ class Node:
                 raise ValueError(
                     f"{action.part!r} requires {command!r}, got {action.command!r}"
                 )
-            _reject_invalid_result(action.value)
+            reject_invalid_result(action.value)
             part = self._profile.parts[action.part]
             if command == "joint_reference":
                 message = (
                     action.value
                     if isinstance(action.value, JointTrajectory)
-                    else _joint_trajectory_from_spec(
+                    else joint_trajectory_from_spec(
                         action.value, list(part.joint_names), False
                     )
                 )
@@ -331,7 +486,7 @@ class Node:
                 message = (
                     action.value
                     if isinstance(action.value, CartesianTrajectory)
-                    else _cartesian_trajectory_from_spec(
+                    else cartesian_trajectory_from_spec(
                         action.value,
                         part.base_frame or "base_link",
                         part.tcp_frame or "",
@@ -342,7 +497,7 @@ class Node:
                 message = (
                     action.value
                     if isinstance(action.value, TwistStamped)
-                    else _twist_stamped_from_spec(
+                    else twist_stamped_from_spec(
                         action.value, part.base_frame or "base_link"
                     )
                 )
@@ -379,12 +534,12 @@ class Node:
             raise ValueError(
                 f"node {self.name!r} resource {part!r} is not an action contract"
             )
-        _reject_invalid_result(plan)
+        reject_invalid_result(plan)
         part_config = self._profile.parts[part]
         if command == "joint_trajectory":
             action_type = FollowJointTrajectory
             goal = FollowJointTrajectory.Goal()
-            goal.trajectory = _joint_trajectory_from_spec(
+            goal.trajectory = joint_trajectory_from_spec(
                 plan, list(part_config.joint_names), True
             )
         else:
@@ -413,17 +568,28 @@ class Node:
             )
             self._action_clients[part] = client
         if not client.wait_for_server(timeout_sec=timeout):
-            raise TimeoutError(
-                f"planner action unavailable at {source_input.endpoint!r}"
+            raise ActionTimeoutError(
+                f"planner action server unavailable: part={part!r} "
+                f"endpoint={source_input.endpoint!r} wait_s={timeout}"
             )
         feedback: list[Any] = []
         future = client.send_goal_async(
             goal,
             feedback_callback=lambda message: feedback.append(message.feedback),
         )
-        goal_handle = _wait_future(future, timeout, "trajectory goal")
+        goal_handle = _wait_future(
+            future,
+            timeout,
+            f"trajectory goal accept for {part!r} at {source_input.endpoint!r}",
+        )
         if goal_handle is None or not goal_handle.accepted:
-            raise RuntimeError("Execution Manager rejected trajectory")
+            raise goal_rejected_error(
+                part=part,
+                endpoint=source_input.endpoint,
+                node_name=self.name,
+                command=command,
+                accepted=getattr(goal_handle, "accepted", None),
+            )
         return Execution(part, goal_handle, feedback)
 
     def close(self) -> None:
@@ -442,7 +608,7 @@ def _wait_future(future: Any, timeout: float, operation: str) -> Any:
     while not future.done():
         if time.monotonic() >= deadline:
             future.cancel()
-            raise TimeoutError(f"{operation} timed out")
+            raise action_timeout_error(operation, timeout)
         time.sleep(0.01)
     exception = future.exception()
     if exception is not None:

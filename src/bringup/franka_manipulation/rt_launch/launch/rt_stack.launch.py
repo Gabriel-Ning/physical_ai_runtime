@@ -3,9 +3,9 @@
 """Unified RT-Host stack bringup for Franka FR3 + Pika setup.
 
 Always launches:
-  - controller_bringup.launch.py (ros2_control, FCI, Pika gripper, safety guard)
+  - controller_bringup.launch.py (ros2_control, FCI / Fake / MuJoCo, Pika gripper, safety guard)
 
-Optionally launches (when ``with_cameras:=true``, default):
+Optionally launches (when ``with_cameras:=true`` and not mujoco):
   - camera_bringup.launch.py     (RealSense D405 + Sunplus Fisheye on RT host)
 """
 
@@ -33,6 +33,11 @@ def generate_launch_description() -> LaunchDescription:
         ),
         launch_arguments={
             "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
+            "backend": LaunchConfiguration("backend"),
+            "use_sim_mujoco": LaunchConfiguration("use_sim_mujoco"),
+            "task": LaunchConfiguration("task"),
+            "headless": LaunchConfiguration("headless"),
+            "mujoco_plugins_yaml": LaunchConfiguration("mujoco_plugins_yaml"),
             "use_rviz": LaunchConfiguration("use_rviz"),
             "cpu_affinity": LaunchConfiguration("cpu_affinity"),
             "robot_ip": LaunchConfiguration("robot_ip"),
@@ -63,13 +68,38 @@ def generate_launch_description() -> LaunchDescription:
         [
             # Controller & Hardware parameters
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
+            DeclareLaunchArgument(
+                "backend",
+                default_value="",
+                description="real, fake, or mujoco. Empty falls back to use_fake_hardware.",
+            ),
+            DeclareLaunchArgument(
+                "use_sim_mujoco",
+                default_value="false",
+                description="Enable MuJoCo simulation backend.",
+            ),
+            DeclareLaunchArgument(
+                "task",
+                default_value="pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate",
+                description="Task name for MuJoCo simulation (LIBERO task name).",
+            ),
+            DeclareLaunchArgument(
+                "mujoco_plugins_yaml",
+                default_value=os.path.join(bringup_share, "config", "mujoco_plugins.yaml"),
+                description="Shared CameraPlugin and SHM bridge configuration.",
+            ),
+            DeclareLaunchArgument(
+                "headless",
+                default_value="false",
+                description="Run MuJoCo simulation headless without rendering window.",
+            ),
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument(
                 "cpu_affinity",
                 default_value="",
                 description=(
                     "Comma-separated CPUs for ros2_control_node. Empty uses "
-                    "RT_CM_CPU_AFFINITY from the cpu RT profile. Pass none to disable."
+                    "RT_CM_CPU_AFFINITY from the RT host profile. Pass none to disable."
                 ),
             ),
             DeclareLaunchArgument("robot_ip", default_value="192.168.2.101"),
@@ -88,7 +118,7 @@ def generate_launch_description() -> LaunchDescription:
             # Pika wrist cameras on RT host (Franka + one Pika cable)
             DeclareLaunchArgument(
                 "with_cameras",
-                default_value="true",
+                default_value="false",
                 description=(
                     "Launch Pika wrist perception cameras (D405 + Fisheye) on RT host."
                 ),

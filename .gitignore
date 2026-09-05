@@ -47,6 +47,7 @@ MUJOCO_LOG.TXT
 !/docs/CPU_HOST_SETUP.md
 !/docs/UDEV_HOST_SETUP.md
 !/docs/FRANKA_RT_COMMUNICATION.md
+!/docs/SIM2REAL_EVALUATION_RUNTIME.md
 
 # Editor and operating-system noise
 .vscode/*
@@ -64,11 +65,21 @@ examples/
 /examples/*
 !/examples/README.md
 !/examples/16_franka_gamepad_teleop.py
+!/examples/17_marvin_quest3_teleop.py
+!/examples/18_marvin_joint_slider.py
+!/examples/19_marvin_homing_replay.py
+!/examples/20_marvin_trajectory_recording.py
+!/examples/21_piper_leader_recording.py
+!/examples/22_piper_joint_slider.py
+!/examples/23_piper_homing_replay.py
+!/examples/24_piper_trajectory_recording.py
 
 # ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
-# Keep structural placeholders so the workspace tree is present in git.
+# Keep the maintained manipulation controller source alongside its published Pixi binary.
 /src/controller/**
 !/src/controller/.gitkeep
+!/src/controller/manipulation_position_controllers/
+!/src/controller/manipulation_position_controllers/**
 
 /src/execution/**
 !/src/execution/.gitkeep
@@ -84,6 +95,12 @@ examples/
 
 /src/teleop/**
 !/src/teleop/.gitkeep
+!/src/teleop/gamepad_teleop/
+!/src/teleop/gamepad_teleop/**
+!/src/teleop/isaacteleop_toolbox/
+!/src/teleop/isaacteleop_toolbox/**
+!/src/teleop/piper_leader_teleop/
+!/src/teleop/piper_leader_teleop/**
 
 /src/toolbox/**
 !/src/toolbox/.gitkeep
@@ -103,8 +120,16 @@ examples/
 !/src/policy_inference/**
 !/src/rt_launch/
 !/src/rt_launch/**
-!/src/teleop/gamepad_teleop/
-!/src/teleop/gamepad_teleop/**
+!/src/mujoco_ros2_control/
+!/src/mujoco_ros2_control/**
+
+# Keep task packages local for now (large assets + WIP); do not snapshot into pai.
+/src/tasks/
+/src/tasks/**
+
+# Nested VCS metadata parked while snapshotting into this monorepo.
+**/.git.pai_aside/
+**/.git.pai_aside/**
 
 # Never track Python bytecode or cache directories under src.
 /src/**/__pycache__/
@@ -112,3 +137,5 @@ examples/
 /src/**/*.py[cod]
 /src/**/*.pyo
 /src/**/*.pyd
+**/.pai_upstream_remotes.txt
+**/.pai_upstream_head.txt

@@ -93,7 +93,7 @@ status() {
 }
 
 ensure_boot() {
-  # Idempotent path used by `pixi run -e cpu setup`.
+  # Idempotent path used by `pixi run setup-rt`.
   apply_now
   if [[ -f "${SERVICE_PATH}" ]] && systemctl is-enabled --quiet "${SERVICE_NAME}" 2>/dev/null; then
     echo "Boot service already enabled: ${SERVICE_NAME}"

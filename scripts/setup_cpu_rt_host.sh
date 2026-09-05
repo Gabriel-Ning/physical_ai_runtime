@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CPU / realtime-kernel host setup for Physical AI Runtime.
 #
-# Called from `pixi run -e cpu setup`. Applies:
+# Called from `pixi run setup-rt`. Applies:
 #   1. CPU frequency governor → performance (now + boot service)
 #   2. PAM realtime limits + `realtime` group (SCHED_FIFO / mlock)
 #   3. Kernel CPU isolation from scripts/rt_cpu_profile.env (GRUB; reboot if needed)
@@ -149,7 +149,7 @@ if ((reboot_needed)); then
   echo "  - isolcpus / nohz_full / rcu_nocbs → need reboot"
   echo "  - realtime group + rtprio PAM limits → need re-login (reboot also works)"
   echo "  sudo reboot"
-  echo "After reboot, re-run: pixi run -e cpu setup"
+  echo "After reboot, re-run: pixi run setup-rt"
   echo "Verify: ulimit -r   # expect 99"
   echo "Then launch controllers without manual taskset (bringup reads RT_CM_CPU_AFFINITY)."
   exit 3

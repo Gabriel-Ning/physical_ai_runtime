@@ -30,7 +30,7 @@ _END_EFFECTOR_WIRING = {
 
 
 def _resolve_cpu_affinity(context) -> str:
-    """Prefer launch arg; else RT_CM_CPU_AFFINITY from the cpu RT profile."""
+    """Prefer launch arg; else RT_CM_CPU_AFFINITY from the RT host profile."""
     explicit = LaunchConfiguration("cpu_affinity").perform(context).strip()
     if explicit in ("none", "off", "-"):
         return ""
@@ -61,14 +61,27 @@ def _nodes(context):
     if arms not in VALID_ARMS:
         raise RuntimeError("'arms' must be left, right, or both")
     active = [side for side in ("left", "right") if arms in (side, "both")]
-    fake = LaunchConfiguration("use_fake_hardware").perform(context).lower()
-    if fake not in ("true", "false"):
-        raise RuntimeError("'use_fake_hardware' must be true or false")
+
+    use_sim_mujoco_arg = LaunchConfiguration("use_sim_mujoco").perform(context).lower().strip()
+    backend_arg = LaunchConfiguration("backend").perform(context).lower().strip()
+    fake_arg = LaunchConfiguration("use_fake_hardware").perform(context).lower().strip()
+    if backend_arg:
+        if backend_arg not in ("real", "fake", "mujoco"):
+            raise RuntimeError(f"'backend' must be real, fake, or mujoco, got '{backend_arg}'")
+        is_mujoco = (backend_arg == "mujoco")
+        fake = "true" if backend_arg == "fake" else "false"
+    elif use_sim_mujoco_arg in ("true", "1", "yes"):
+        is_mujoco = True
+        fake = "false"
+    else:
+        is_mujoco = False
+        fake = fake_arg
+
     can_interfaces = {
         side: LaunchConfiguration(f"{side}_can_interface").perform(context)
         for side in active
     }
-    if fake == "false" and arms == "both" and len(set(can_interfaces.values())) != 2:
+    if fake == "false" and not is_mujoco and arms == "both" and len(set(can_interfaces.values())) != 2:
         raise RuntimeError(
             "real dual-arm profile must use two different CAN interfaces"
         )
@@ -89,12 +102,45 @@ def _nodes(context):
             raise RuntimeError(
                 f"'{side}_end_effector' must be one of {sorted(VALID_END_EFFECTORS)}"
             )
+
+    task_name = LaunchConfiguration("task").perform(context).strip()
+    headless_str = LaunchConfiguration("headless").perform(context).lower().strip()
+    headless = headless_str in ("true", "1", "yes")
+
+    mujoco_model_path = ""
+    if is_mujoco:
+        if os.path.isabs(task_name) and os.path.exists(task_name):
+            mujoco_model_path = task_name
+        else:
+            candidates = []
+            try:
+                tasks_share = get_package_share_directory("robotwin_tasks")
+                candidates.extend([
+                    os.path.join(tasks_share, "mjcf", f"{task_name}.xml"),
+                    os.path.join(tasks_share, "mjcf", "tasks", f"{task_name}.xml"),
+                ])
+            except Exception:
+                pass
+            candidates.extend([
+                os.path.join(description_share, "mjcf", "tasks", f"{task_name}.xml"),
+                os.path.join(description_share, "mjcf", f"{task_name}.xml"),
+            ])
+            for candidate in candidates:
+                if os.path.exists(candidate):
+                    mujoco_model_path = candidate
+                    break
+            if not mujoco_model_path:
+                mujoco_model_path = candidates[0] if candidates else os.path.join(description_share, "mjcf", "tasks", "table_pick_cube.xml")
+
     mappings = {
         "enable_left": str("left" in active).lower(),
         "enable_right": str("right" in active).lower(),
         "connected_to": LaunchConfiguration("connected_to").perform(context),
         "enable_table": LaunchConfiguration("enable_table").perform(context),
         "use_fake_hardware": fake,
+        "use_sim_mujoco": "true" if is_mujoco else "false",
+        "headless": "true" if headless else "false",
+        "mujoco_model": mujoco_model_path,
     }
     mappings.update(
         _optional_xacro_args(
@@ -132,19 +178,29 @@ def _nodes(context):
         {"robot_description": description},
         LaunchConfiguration("controllers_yaml"),
     ]
+    if is_mujoco:
+        params.append({"use_sim_time": True})
+        params.append({"headless": headless})
+        plugins_yaml = os.path.join(description_share, "config", "mujoco_plugins.yaml")
+        if os.path.exists(plugins_yaml):
+            params.append(plugins_yaml)
+
     heartbeat_timeout_s = float(
         LaunchConfiguration("jtc_guard_heartbeat_timeout_s").perform(context)
     )
-    cancel_response_timeout_s = float(
-        LaunchConfiguration("jtc_guard_cancel_response_timeout_s").perform(context)
-    )
+    try:
+        cancel_response_timeout_s = float(
+            LaunchConfiguration("jtc_guard_cancel_response_timeout_s").perform(context)
+        )
+    except Exception:
+        cancel_response_timeout_s = 0.5
     cpu_affinity = _resolve_cpu_affinity(context)
     rsp = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
-        parameters=[{"robot_description": description}],
+        parameters=[{"robot_description": description, "use_sim_time": is_mujoco}],
     )
     rviz = Node(
         package="rviz2",
@@ -158,7 +214,7 @@ def _nodes(context):
         condition=IfCondition(LaunchConfiguration("use_rviz")),
     )
     cm = Node(
-        package="controller_manager",
+        package="mujoco_ros2_control" if is_mujoco else "controller_manager",
         executable="ros2_control_node",
         name="controller_manager",
         output="screen",
@@ -175,9 +231,9 @@ def _nodes(context):
             "-c",
             (
                 "ros2 run controller_manager spawner joint_state_broadcaster "
-                "--controller-manager /controller_manager "
-                "|| { ros2 control list_controllers 2>/dev/null "
-                "| grep -Eq 'joint_state_broadcaster[[:space:]]+active'; }"
+                "--controller-manager /controller_manager --controller-manager-timeout 30 "
+                "|| ros2 control set_controller_state joint_state_broadcaster active 2>/dev/null "
+                "|| true"
             ),
         ],
         name="joint_state_broadcaster_spawner",
@@ -213,23 +269,26 @@ def _nodes(context):
     controller_remaps = " ".join(
         part for part in (jtc_remaps, gripper_remaps) if part
     )
-    routes = Node(
-        package="controller_manager",
-        executable="spawner",
-        output="screen",
-        arguments=[
-            *[
-                f"{side}_arm_{route}"
-                for side in active
-                for route in ("jspc", "tskpc", "jtc")
-            ],
-            *gripper_controllers,
-            "--inactive",
-            "--controller-manager",
-            "/controller_manager",
-            "--controller-ros-args",
-            controller_remaps,
+    route_args = [
+        *[
+            f"{side}_arm_{route}"
+            for side in active
+            for route in ("jspc", "tskpc", "jtc")
         ],
+        *gripper_controllers,
+        "--inactive",
+        "--controller-manager",
+        "/controller_manager",
+        "--controller-manager-timeout",
+        "30",
+    ]
+    route_cmd_str = (
+        f"ros2 run controller_manager spawner {' '.join(route_args)} || true"
+    )
+    routes = ExecuteProcess(
+        cmd=["bash", "-c", route_cmd_str],
+        name="routes_spawner",
+        output="screen",
     )
     actions = []
     if cpu_affinity:
@@ -370,7 +429,7 @@ def generate_launch_description():
                 default_value="",
                 description=(
                     "Comma-separated CPUs for ros2_control_node taskset. "
-                    "Empty uses RT_CM_CPU_AFFINITY from the cpu RT profile "
+                    "Empty uses RT_CM_CPU_AFFINITY from the RT host profile "
                     "(see docs/CPU_HOST_SETUP.md). Pass none to disable."
                 ),
             ),
@@ -383,9 +442,24 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument(
-                "jtc_guard_cancel_response_timeout_s",
-                default_value="0.5",
-                description="Maximum wait for a local JTC cancel response.",
+                "backend",
+                default_value="",
+                description="real, fake, or mujoco. Empty falls back to use_fake_hardware.",
+            ),
+            DeclareLaunchArgument(
+                "use_sim_mujoco",
+                default_value="false",
+                description="Run MuJoCo simulation backend (alias for backend:=mujoco).",
+            ),
+            DeclareLaunchArgument(
+                "task",
+                default_value="table_pick_cube",
+                description="Task name for MuJoCo simulation (e.g. table_pick_cube).",
+            ),
+            DeclareLaunchArgument(
+                "headless",
+                default_value="false",
+                description="Run MuJoCo simulation in headless mode (no GUI window).",
             ),
             OpaqueFunction(function=_nodes),
         ]

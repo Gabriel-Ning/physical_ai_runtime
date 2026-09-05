@@ -1,71 +1,72 @@
-#!/usr/bin/env python3
-"""Read-only runtime evaluation for one embodiment profile.
-
-This application never acquires a provider and never publishes a robot command.
-It measures observation availability, age, rate, hardware diagnostics, and the
-current provider-selection snapshot so deployments can be checked before motion.
-"""
+"""Evaluate a LeRobot policy through the standard RMI application loop."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import time
-from statistics import mean
 
 import rmi
 
+from policy_inference.lerobot import LeRobotPolicy, ros_image_to_numpy
+
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Read-only RMI runtime evaluation")
-    parser.add_argument("--profile", default="piper_bimanual.yaml")
-    parser.add_argument("--duration", type=float, default=5.0)
-    parser.add_argument("--rate", type=float, default=20.0)
-    parser.add_argument("--max-state-age", type=float, default=0.25)
-    parser.add_argument("--check-cameras", action="store_true")
+    parser = argparse.ArgumentParser(description="RMI LeRobot policy evaluation")
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--task", required=True)
+    parser.add_argument("--resource", required=True)
+    parser.add_argument("--node-name", default="Policy")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--policy-type", default=None)
+    parser.add_argument("--max-stream-skew", type=float, default=0.5)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.duration <= 0.0 or args.rate <= 0.0 or args.max_state_age <= 0.0:
-        raise SystemExit("duration, rate, and max-state-age must be positive")
-
     with rmi.Context.from_profile(args.profile) as context:
-        context.wait_until_ready(
-            timeout=max(6.0, args.duration),
-            check_cameras=args.check_cameras,
-        )
-        ages: list[float] = []
-        samples = 0
-        deadline = time.monotonic() + args.duration
-        period = 1.0 / args.rate
-        while time.monotonic() < deadline:
-            observation = context.robot.get_observation()
-            now_s = context.node.get_clock().now().nanoseconds / 1e9
-            ages.append(max(0.0, now_s - observation.receive_time_s))
-            samples += 1
-            time.sleep(period)
+        layout = context.profile.policy_layout(args.node_name)
+        for camera_name in dict.fromkeys(layout.camera_sources.values()):
+            context.make_camera(
+                camera_name,
+                converter=ros_image_to_numpy,
+                history_size=1,
+            )
 
-        get_diagnostics = getattr(
-            context.provider_selector, "get_hardware_diagnostics", None
+        policy = LeRobotPolicy(
+            layout,
+            args.checkpoint,
+            task=args.task,
+            device=args.device,
+            expected_policy_type=args.policy_type,
+            max_stream_skew_s=args.max_stream_skew,
         )
-        diagnostics = list(get_diagnostics()) if callable(get_diagnostics) else []
-        result = {
-            "profile": context.profile.name,
-            "passed": bool(samples)
-            and max(ages, default=float("inf")) <= args.max_state_age
-            and not diagnostics,
-            "samples": samples,
-            "mean_state_age_s": mean(ages) if ages else None,
-            "max_state_age_s": max(ages) if ages else None,
-            "state_age_limit_s": args.max_state_age,
-            "hardware_diagnostics": diagnostics,
-            "allocations": context.provider_selector.get_allocations(),
-        }
-        print(json.dumps(result, indent=2, sort_keys=True))
-        if not result["passed"]:
-            raise SystemExit(1)
+        policy_node = context.make_node(args.node_name, policy)
+        period_s = 1.0 / layout.frequency
+        next_tick = time.monotonic()
+        try:
+            context.wait_until_ready(
+                timeout=30.0,
+                check_cameras=bool(layout.camera_sources),
+                require_execution_manager=True,
+            )
+            with policy_node.activate():
+                while True:
+                    next_tick += period_s
+                    observation = context.robot[args.resource].get_observation()
+                    actions = policy.select_action(observation)
+                    policy_node[args.resource].submit(actions)
+
+                    sleep_s = next_tick - time.monotonic()
+                    if sleep_s > 0.0:
+                        time.sleep(sleep_s)
+                    else:
+                        next_tick = time.monotonic()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            policy.close()
 
 
 if __name__ == "__main__":

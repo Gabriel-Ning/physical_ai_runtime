@@ -1,8 +1,58 @@
 gamepad_teleop:
   ros__parameters:
+    # 基础与时钟
     frame_id: fr3_link0
-    gripper_open_button: 1
-    gripper_close_button: 3
-    gripper_close_axis: -1
-    gripper_joint_name: gripper_left_joint
+    publish_rate_hz: 100.0
+    autostart: true
+    deadzone: 0.05
+
+    # 门禁与离合（L1 键为物理安全离合）
+    require_clutch: true
+    clutch_button: 9  # DualSense L1
+    clutch_axis: -1
     require_clutch_for_gripper: true
+
+    # 加速与微调（L2 扳机键加倍）
+    turbo_button: -1
+    turbo_axis: 4  # DualSense L2
+    turbo_multiplier: 2.0
+    trigger_threshold: 0.2
+
+    # 轴映射 (左摇杆: X/Y, 右摇杆: Z/Yaw)
+    axis_linear:
+      x: 1  # 左摇杆前/后
+      y: 0  # 左摇杆左/右
+      z: 3  # 右摇杆上/下
+    axis_angular:
+      yaw: 2    # 右摇杆左/右
+      pitch: -1
+      roll: -1
+    axis_dpad_x: 6
+    axis_dpad_y: 7
+
+    # 运动速度缩放系数
+    scale_linear:
+      x: 0.15   # m/s
+      y: 0.15   # m/s
+      z: 0.10   # m/s
+    scale_angular:
+      yaw: 0.35    # rad/s
+      pitch: 0.35  # rad/s
+      roll: 0.35   # rad/s
+
+    # Pika 夹爪控制契约 (Circle=开, Triangle=关)
+    gripper_joint_name: gripper_left_joint
+    gripper_open_button: 1   # DualSense Circle (张开)
+    gripper_close_button: 3  # DualSense Triangle (闭合)
+    gripper_close_axis: -1
+    gripper_min_width: 0.000
+    gripper_max_width: 0.045  # Pika 单指行程 [0, 0.045] m
+    gripper_speed_m_per_s: 0.025
+    gripper_initial_width: 0.000
+
+    # 话题与端点绑定 (标准 Ingress 通道)
+    twist_topic: /action_sources/teleop_twist/arm/twist
+    gripper_topic: /action_sources/teleop_twist/end_effector/joint_reference
+    clutch_topic: /teleop/gamepad/clutch
+    status_topic: /teleop/gamepad/status
+    joy_topic: /joy

@@ -86,3 +86,10 @@ ros2 topic echo /joint_states --once
 
 `franka_arm_*` 和 `pika_gripper_fwd` 必须是 `inactive`。
 `/execution_manager/authority_status` 只在 workstation 起 EM 之后出现。
+
+## MuJoCo 仿真相机
+
+默认 CameraPlugin `output: shm`，由独立 `mujoco_image_bridge` 发布公开相机话题。
+相机列表与 SHM prefix 统一来自 `mujoco_plugins.yaml`，无需修改业务订阅端。
+真机仍启动 RealSense；IMU / FT 的 ros2_control 路径不变。
+架构、QoS、重启行为和单订户 / 多订户验收见 [README](../README.md)。

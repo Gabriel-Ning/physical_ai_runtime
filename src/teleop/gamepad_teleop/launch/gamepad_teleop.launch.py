@@ -67,52 +67,49 @@ def _launch_nodes(context, *args, **kwargs):
     deadzone_val = float(deadzone) if deadzone else 0.05
     autorepeat_rate_val = float(autorepeat_rate) if autorepeat_rate else 50.0
 
-    # 1. Joy Hardware Node
+    use_sim_time = _optional_bool(
+        "use_sim_time", LaunchConfiguration("use_sim_time").perform(context)
+    )
+    if use_sim_time is not None:
+        node_params["use_sim_time"] = use_sim_time
+
+    # 1. Joy Node (device driver)
+    joy_params: dict[str, Any] = {
+        "deadzone": deadzone_val,
+        "autorepeat_rate": autorepeat_rate_val,
+    }
+    if use_sim_time is not None:
+        joy_params["use_sim_time"] = use_sim_time
+
+    dev_id_int = int(device_id) if device_id.isdigit() else 0
     if joy_driver == "game_controller":
-        dev_id_int = int(device_id) if device_id.isdigit() else 0
+        joy_params["device_id"] = dev_id_int
         joy_node = Node(
             package="joy",
             executable="game_controller_node",
             name="game_controller_node",
             output="screen",
-            parameters=[
-                {
-                    "device_id": dev_id_int,
-                    "deadzone": deadzone_val,
-                    "autorepeat_rate": autorepeat_rate_val,
-                }
-            ],
+            parameters=[joy_params],
             remappings=[("/joy", joy_topic)] if joy_topic != "/joy" else [],
         )
     elif joy_driver == "joy_linux":
+        joy_params["dev"] = joy_dev or "/dev/input/js0"
         joy_node = Node(
             package="joy_linux",
             executable="joy_linux_node",
             name="joy_node",
             output="screen",
-            parameters=[
-                {
-                    "dev": joy_dev or "/dev/input/js0",
-                    "deadzone": deadzone_val,
-                    "autorepeat_rate": autorepeat_rate_val,
-                }
-            ],
+            parameters=[joy_params],
             remappings=[("/joy", joy_topic)] if joy_topic != "/joy" else [],
         )
     else:  # joy
-        dev_id_int = int(device_id) if device_id.isdigit() else 0
+        joy_params["device_id"] = dev_id_int
         joy_node = Node(
             package="joy",
             executable="joy_node",
             name="joy_node",
             output="screen",
-            parameters=[
-                {
-                    "device_id": dev_id_int,
-                    "deadzone": deadzone_val,
-                    "autorepeat_rate": autorepeat_rate_val,
-                }
-            ],
+            parameters=[joy_params],
             remappings=[("/joy", joy_topic)] if joy_topic != "/joy" else [],
         )
 
@@ -134,6 +131,11 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "use_sim_time",
+                default_value="false",
+                description="Use simulation clock (/clock).",
+            ),
             DeclareLaunchArgument(
                 "config",
                 default_value=default_config,

@@ -99,7 +99,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="",
                 description=(
                     "Comma-separated CPUs for ros2_control_node. Empty uses "
-                    "RT_CM_CPU_AFFINITY from the cpu RT profile. Pass none to disable."
+                    "RT_CM_CPU_AFFINITY from the RT host profile. Pass none to disable."
                 ),
             ),
             DeclareLaunchArgument(

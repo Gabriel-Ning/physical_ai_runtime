@@ -18,11 +18,11 @@ refreshes PAM limits and `realtime` group membership.
 ## Install and setup
 
 ```bash
-pixi install --locked -e cpu
-pixi run -e cpu setup
+pixi install --locked
+pixi run setup-rt
 ```
 
-`setup` (cpu env only) runs [`scripts/setup_cpu_rt_host.sh`](../scripts/setup_cpu_rt_host.sh):
+`setup-rt` runs [`scripts/setup_cpu_rt_host.sh`](../scripts/setup_cpu_rt_host.sh):
 
 1. **Performance** — [`scripts/enable_cpu_performance_governor.sh`](../scripts/enable_cpu_performance_governor.sh)
    (`--ensure-boot`: apply now + systemd unit).
@@ -45,7 +45,7 @@ yet active in this boot), `setup` exits **3**:
 ```bash
 sudo reboot
 # after reboot:
-pixi run -e cpu setup
+pixi run setup-rt
 ulimit -r   # expect 99
 ```
 
@@ -53,15 +53,17 @@ Sudo is required the first time for governor install, PAM limits, and GRUB
 writes. Limits alone would only need a re-login; when `isolcpus` also changes,
 one reboot covers both.
 
-## Activate the cpu env
+## Activate the RT profile
 
-Prefer Direnv (see root [README](../README.md)). After `pixi run -e cpu setup`,
-`.pixi/environment` is `cpu`, and [`.envrc`](../.envrc) sources
+Prefer Direnv (see root [README](../README.md)). `pixi run setup-rt` creates
+`.pixi/rt-profile-enabled`; [`.envrc`](../.envrc) then sources
 `scripts/rt_cpu_profile.env` so `RT_CM_CPU_AFFINITY` is exported in the shell.
+Set `PIXI_RT_PROFILE=0` to disable it temporarily, or `PIXI_RT_PROFILE=1` to
+enable it explicitly without the marker.
 
 ```bash
 direnv allow
-# or: eval "$(pixi shell-hook --frozen -e cpu)"
+# or: PIXI_RT_PROFILE=1 source .envrc
 #     set -a && source scripts/rt_cpu_profile.env && set +a
 ```
 
@@ -104,7 +106,7 @@ ros2 launch piper_manipulation_rt_launch \
 Affinity resolution order (same in each bringup):
 
 1. Launch arg `cpu_affinity:=14,15` (explicit override)
-2. Else env `RT_CM_CPU_AFFINITY` (from the cpu RT profile / `.envrc`)
+2. Else env `RT_CM_CPU_AFFINITY` (from the RT host profile / `.envrc`)
 3. `cpu_affinity:=none` disables pinning
 
 Implementation note: launch performs prefix substitutions by concatenation
@@ -145,9 +147,9 @@ RT_CM_CPU_AFFINITY=12,13,14,15
 Then:
 
 ```bash
-pixi run -e cpu setup   # may rewrite GRUB + re-check limits
+pixi run setup-rt       # may rewrite GRUB + re-check limits
 sudo reboot
-pixi run -e cpu setup
+pixi run setup-rt
 ulimit -r               # expect 99
 ```
 
@@ -171,7 +173,7 @@ git submodule update --init --recursive -- src/embodiments
 bash scripts/franka_colcon_ignore.sh
 # skip: vcs import repos/necessary.repos
 # skip: vcs import repos/embodiment.repos   # Hikvision
-pixi run -e cpu build
+pixi run build
 ```
 
 Launch from the matching bringup README. Examples (`04`, `08`–`11`) run on

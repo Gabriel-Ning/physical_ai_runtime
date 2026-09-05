@@ -11,10 +11,11 @@ RT Host stack: sibling package `piper_manipulation_rt_launch`.
 ## Config
 
 - `apps/recording/piper_bimanual.yaml` — application-selected MCAP stream contract
+- `apps/recording/piper_bimanual_no_cam.yaml` — fake/no-camera MCAP stream contract
 - `config/execution_manager.yaml` — controller routing and source admission
 - `config/camera/femto_bolt.yaml` — static Orbbec cell camera
 - `config/camera/d435i_dual.yaml` — left/right wrist RealSense streams
-- `config/teleop/piper_leaders.yaml` — leader CAN defaults
+- `config/teleop/piper_leaders.yaml` — dual-leader configuration
 
 Defaults for launch args come from `apps/profiles/piper_bimanual.yaml`.
 
@@ -23,7 +24,7 @@ Defaults for launch args come from `apps/profiles/piper_bimanual.yaml`.
 Full workstation stack:
 
 ```bash
-ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py
+ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py
 ```
 
 Fake hardware、无相机验证（两个终端；默认加载双臂和双夹爪）：
@@ -39,8 +40,9 @@ ros2 launch piper_manipulation_rt_launch rt_stack.launch.py \
 ```bash
 # Terminal 2: workstation（无 Orbbec、无 RealSense、无真实 leader）
 source install/setup.bash
-ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py \
-  with_orbbec:=false with_realsense:=false with_leaders:=false
+ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py \
+  with_orbbec:=false with_realsense:=false \
+  with_leaders:=false
 ```
 
 随后运行 leader relay API 示例时，需要另外启动真实 leader；纯 fake hardware
@@ -63,6 +65,8 @@ Peripheral entrypoints:
 ros2 launch piper_manipulation_workstation_launch piper_orbbec.launch.py
 ros2 launch piper_manipulation_workstation_launch piper_realsense.launch.py
 ros2 launch piper_manipulation_workstation_launch piper_leaders.launch.py
+ros2 launch piper_manipulation_workstation_launch execution_manager.launch.py
+ros2 launch piper_manipulation_workstation_launch recorder.launch.py
 ```
 
 ## Camera validation (key test)
@@ -87,7 +91,7 @@ ros2 topic hz /observation/right_hand_realsense/color/image_raw
 Record with cameras enabled:
 
 ```bash
-ros2 launch piper_manipulation_workstation_launch piper_workstation.launch.py \
+ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py \
   with_orbbec:=true with_realsense:=true with_recorder:=true
 ```
 

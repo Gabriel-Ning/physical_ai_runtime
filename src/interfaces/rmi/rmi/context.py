@@ -29,22 +29,22 @@ class Context:
         spin_node: bool = False,
         timeout_sec: float = 5.0,
         state_topic: str = "/joint_states",
-        provider_selector: Any | None = None,
+        authority_client: Any | None = None,
         recorder_client_factory: Any | None = None,
         owns_node: bool = False,
     ) -> None:
         self.profile = profile
         self.node = node
-        self.provider_selector: AuthorityClient = (
-            provider_selector
-            if provider_selector is not None
+        self.authority_client: AuthorityClient = (
+            authority_client
+            if authority_client is not None
             else ExecutionManagerClient(profile, node, timeout_sec=timeout_sec)
         )
         # Node clock keeps robot-state receive times comparable with sensor
         # facades (and correct under use_sim_time).
         self.robot = Robot(
             profile,
-            self.provider_selector,
+            self.authority_client,
             clock=lambda: _node_now_s(node),
         )
         self._timeout_sec = timeout_sec
@@ -102,7 +102,7 @@ class Context:
             spin_node=spin_node,
             timeout_sec=timeout_sec,
             state_topic=state_topic,
-            provider_selector=ExecutionManagerClient(
+            authority_client=ExecutionManagerClient(
                 config, node, timeout_sec=timeout_sec
             ),
             recorder_client_factory=recorder_client_factory,
@@ -128,12 +128,13 @@ class Context:
         check_cameras: bool = False,
         require_execution_manager: bool = False,
         prepare_execution: bool = True,
+        recover_faults: bool = False,
     ) -> None:
         """Wait for RT state/health and optional sensors, without acquiring control.
 
-        When ``prepare_execution`` is true (default), also runs one-shot application
-        startup authority recovery: clear leftover EM FAULT after RT faults/restarts.
-        Live transition failures are not auto-recovered during the run.
+        When ``prepare_execution`` is true (default), also verifies the initial
+        Execution Manager authority state. FAULT is fail-closed unless the caller
+        explicitly opts into startup recovery with ``recover_faults=True``.
         """
         # 1. Wait for robot body and hardware readiness
         self.robot.wait_until_ready(
@@ -143,9 +144,12 @@ class Context:
         )
 
         if require_execution_manager or prepare_execution:
-            self.provider_selector.require_execution_manager(timeout_sec=timeout)
+            self.authority_client.require_execution_manager(timeout_sec=timeout)
         if prepare_execution:
-            self.prepare_execution(timeout_sec=timeout)
+            self.prepare_execution(
+                timeout_sec=timeout,
+                recover_faults=recover_faults,
+            )
 
         # 2. If check_cameras is requested, instantiate declared cameras and wait for them
         if check_cameras and hasattr(self.profile, "cameras") and self.profile.cameras:
@@ -155,12 +159,16 @@ class Context:
             for cam in self._cameras.values():
                 cam.wait_until_ready(timeout=timeout)
 
-    def prepare_execution(self, *, timeout_sec: float | None = None) -> Any:
-        """One-shot app-start authority check: clear FAULT, leave OWNED alone.
+    def prepare_execution(
+        self,
+        *,
+        timeout_sec: float | None = None,
+        recover_faults: bool = False,
+    ) -> Any:
+        """One-shot app-start authority check; fail closed on EM FAULT.
 
-        Call at application startup (``wait_until_ready`` does this by default).
-        Do not call mid-run to paper over live switch failures — those stay FAULT
-        until the operator restarts the app or explicitly preempts.
+        ``recover_faults=True`` is an explicit operator/application recovery action.
+        It preempt-claims and releases faulted resources; it is never the default.
         """
         import time
 
@@ -172,14 +180,14 @@ class Context:
         if timeout <= 0.0:
             raise ValueError("timeout_sec must be positive")
         if self._execution_prepared:
-            describe = getattr(self.provider_selector, "describe_authority", None)
+            describe = getattr(self.authority_client, "describe_authority", None)
             if describe is not None:
                 return describe()
             return AuthoritySnapshot({})
 
-        self.provider_selector.require_execution_manager(timeout_sec=timeout)
-        describe = getattr(self.provider_selector, "describe_authority", None)
-        clear_fault = getattr(self.provider_selector, "clear_fault", None)
+        self.authority_client.require_execution_manager(timeout_sec=timeout)
+        describe = getattr(self.authority_client, "describe_authority", None)
+        clear_fault = getattr(self.authority_client, "clear_fault", None)
         if describe is None or clear_fault is None:
             self._execution_prepared = True
             return AuthoritySnapshot({})
@@ -202,7 +210,26 @@ class Context:
             == int(ResourceAuthority.FAULT)
         }
         if faulted:
+            diagnostic = _execution_fault_diagnostic(
+                snapshot,
+                faulted,
+                getattr(self.authority_client, "get_events", list)(),
+            )
+            _log_execution_fault(self.node, diagnostic)
+            if not recover_faults:
+                raise RuntimeError(diagnostic + "; explicit recovery is required")
             snapshot = clear_fault(faulted)
+            remaining = sorted(set(faulted).intersection(snapshot.faults))
+            if remaining:
+                recovery_diagnostic = _execution_fault_diagnostic(
+                    snapshot,
+                    {name: faulted[name] for name in remaining},
+                    getattr(self.authority_client, "get_events", list)(),
+                )
+                _log_execution_fault(self.node, recovery_diagnostic)
+                raise RuntimeError(
+                    recovery_diagnostic + "; explicit recovery did not complete"
+                )
         self._execution_prepared = True
         return snapshot
 
@@ -222,7 +249,7 @@ class Context:
             name,
             self.node,
             self.profile,
-            self.provider_selector,
+            self.authority_client,
             producer,
         )
         self._nodes[name] = result
@@ -374,7 +401,7 @@ class Context:
             except Exception:
                 pass
         try:
-            self.provider_selector.close()
+            self.authority_client.close()
         except Exception:
             pass
         if hasattr(self.node, "destroy_subscription"):
@@ -481,36 +508,157 @@ def _make_episode_recorder_client(
     profile_values: dict[str, Any],
 ) -> Any:
     """Build the installed episode_recorder SDK client for an existing server."""
-    import inspect
-
     from episode_recorder import (
         Recorder as EpisodeRecorderClient,
     )
     from episode_recorder import (
-        RecorderConfig,
         RosRecorderBackend,
     )
 
-    recorder_config = config
-    if recorder_config is None:
-        valid_keys = inspect.signature(RecorderConfig.__init__).parameters
-        values = {
-            key: value
-            for key, value in profile_values.items()
-            if key != "self" and key in valid_keys
-        }
-        # ``profile`` is not a RecorderConfig field (launch uses it); resolve
-        # before filtering so older profiles without ``config`` still work.
+    return EpisodeRecorderClient(
+        _coerce_recorder_config(config, profile_values),
+        RosRecorderBackend(node, node_name),
+    )
+
+
+def _execution_fault_diagnostic(
+    snapshot: Any,
+    faulted: Mapping[str, str],
+    events: list[Any],
+) -> str:
+    """Format current EM FAULT state and its latest retained failure event."""
+    from execution_manager_interfaces.msg import AuthorityEvent
+
+    lines = ["Execution Manager reports FAULT:"]
+    for resource in sorted(faulted):
+        item = snapshot.resources.get(resource, {})
+        observed = ",".join(
+            str(value) for value in item.get("observed_controllers", ())
+        )
+        lines.append(
+            "  resource={resource} contract={contract} requested_controller={requested} "
+            "observed_controllers=[{observed}] source={source} lease_id={lease}".format(
+                resource=resource,
+                contract=item.get("command_contract")
+                or faulted[resource]
+                or "<unknown>",
+                requested=item.get("requested_controller") or "<unknown>",
+                observed=observed,
+                source=item.get("source_instance") or "<unknown>",
+                lease=item.get("lease_id") or "<none>",
+            )
+        )
+
+    relevant_event = next(
+        (
+            event
+            for event in reversed(events)
+            if int(getattr(event, "type", -1))
+            == int(AuthorityEvent.TRANSITION_FAILED)
+            and set(getattr(event, "resources", ())).intersection(faulted)
+        ),
+        None,
+    )
+    if relevant_event is None:
+        lines.append(
+            "  last_transition_failure=<unavailable; check the Execution Manager log>"
+        )
+    else:
+        metadata = ",".join(
+            f"{item.key}={item.value}"
+            for item in getattr(relevant_event, "metadata", ())
+        )
+        lines.append(
+            "  last_transition_failure: reason={reason} event_id={event_id} "
+            "lease_id={lease} source_role={role} source={source} metadata=[{metadata}]".format(
+                reason=getattr(relevant_event, "reason", "") or "<empty>",
+                event_id=getattr(relevant_event, "event_id", "") or "<unknown>",
+                lease=getattr(relevant_event, "lease_id", "") or "<none>",
+                role=getattr(relevant_event, "source_role", 0),
+                source=getattr(relevant_event, "source_instance", "") or "<unknown>",
+                metadata=metadata,
+            )
+        )
+    return "\n".join(lines)
+
+
+def _log_execution_fault(node: Any, message: str) -> None:
+    """Always surface an EM fault in the application's terminal."""
+    import sys
+
+    get_logger = getattr(node, "get_logger", None)
+    if get_logger is not None:
+        get_logger().error(message)
+        return
+    print(message, file=sys.stderr, flush=True)
+
+
+def _coerce_recorder_config(
+    config: Any | None, profile_values: Mapping[str, Any]
+) -> Any:
+    """Normalize make_recorder(config=...) into an episode_recorder.RecorderConfig."""
+    import inspect
+
+    from episode_recorder import RecorderConfig
+
+    if isinstance(config, RecorderConfig):
+        return config
+
+    valid_keys = inspect.signature(RecorderConfig.__init__).parameters
+    values = {
+        key: value
+        for key, value in profile_values.items()
+        if key != "self" and key in valid_keys
+    }
+
+    if config is None:
         if not (values.get("profile_dir") or values.get("contract_path")):
             legacy_profile = profile_values.get("profile")
             if legacy_profile:
                 values["contract_path"] = str(
                     _resolve_recording_profile(str(legacy_profile))
                 )
-        recorder_config = RecorderConfig(**values)
-    return EpisodeRecorderClient(
-        recorder_config,
-        RosRecorderBackend(node, node_name),
+        return RecorderConfig(**values)
+
+    if isinstance(config, Mapping):
+        values.update(
+            {
+                key: value
+                for key, value in config.items()
+                if key != "self" and key in valid_keys
+            }
+        )
+        contract = values.get("contract_path")
+        if contract and not Path(str(contract)).is_absolute():
+            values["contract_path"] = str(_resolve_contract_path(str(contract)))
+        return RecorderConfig(**values)
+
+    if isinstance(config, (str, Path)):
+        values["contract_path"] = str(_resolve_contract_path(config))
+        return RecorderConfig(**values)
+
+    raise TypeError(
+        "make_recorder(config=...) expects RecorderConfig, mapping, contract path, "
+        f"or None; got {type(config).__name__}"
+    )
+
+
+def _resolve_contract_path(reference: str | Path) -> Path:
+    """Resolve a recording contract YAML to an absolute existing file."""
+    path = Path(reference).expanduser()
+    candidates = [path]
+    if not path.is_absolute():
+        candidates.append(Path.cwd() / path)
+        workspace_root = Path(__file__).resolve().parents[4]
+        candidates.append(workspace_root / path)
+        if path.parent == Path("."):
+            candidates.append(workspace_root / "apps" / "recording" / path.name)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    raise FileNotFoundError(
+        f"recording contract {reference!r} was not found "
+        f"(tried: {', '.join(str(item) for item in candidates)})"
     )
 
 
