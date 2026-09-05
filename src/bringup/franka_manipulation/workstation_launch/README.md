@@ -24,25 +24,30 @@ EM 是唯一命令权威。Policy、Teleop、Planner 和 RMI 应用只写 profil
 
 ## 启动
 
-RT 先起来之后，完整 workstation stack 一起启动 EM、gamepad teleop 和 recorder：
+RT 先起来之后再启本包。
+
+真机 / Fake（墙钟，默认）：
 
 ```bash
 ros2 launch franka_manipulation_workstation_launch workstation_stack.launch.py
 ```
 
-当前 FakeHardware + gamepad + 无相机 Gate 使用同一个 workstation stack；是否等待
-相机由 RMI profile 选择的 recorder 契约决定。运行 Example 16 时使用：
-
-Example 16 启动 policy 前会通过 Planner/JTC 用 8 s 回到 profile 的 homing 姿态。
-该姿态按 `/joint_states` 的 joint name 从当前 Franka fake-hardware 初始状态记录：
-`[0, -π/4, 0, -3π/4, 0, π/2, π/4]`。
+MuJoCo 仿真（必须跟 RT 的 `/clock` 对齐）：
 
 ```bash
-python examples/16_franka_gamepad_teleop.py \
-  --profile fr3_pika_single_arm.yaml
+ros2 launch franka_manipulation_workstation_launch workstation_stack.launch.py \
+  use_sim_time:=true
 ```
 
-也可以分别启动：
+| 场景 | `use_sim_time` | EM 日志应出现 |
+|------|----------------|---------------|
+| 真机 / Fake | `false`（默认） | `Time source: system wall clock` |
+| MuJoCo | `true` | `Time source: ROS simulation clock (/clock)` |
+
+仿真若漏开 `use_sim_time:=true`，EM 用墙钟做 `max_command_age_s`，会把带仿真时间戳的命令判成
+`stale_command`，策略 / teleop 看起来「没效果」。
+
+也可以分别启动（同样按上表设 `use_sim_time`）：
 
 ```bash
 ros2 launch franka_manipulation_workstation_launch execution_manager.launch.py

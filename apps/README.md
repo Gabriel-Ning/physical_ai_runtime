@@ -8,30 +8,30 @@ All applications can be invoked directly with `pixi run <app>` or `python apps/<
 
 ## 1. `pixi run teleop` — Interactive Robot Teleoperation
 
-One-command startup for real-time Master-Slave teleoperation (Piper Leader Dual-Arm, Keyboard, SpaceMouse):
+Thin profile-driven client. **Does not** start RT or teleoperators.
+
+Startup order:
+
+1. RT launch
+2. Workstation launch (teleoperators already running; `use_sim_time` is decided here)
+3. `pixi run teleop --profile <profile.yaml>`
 
 ```bash
-# Piper Bimanual Master-Slave Teleoperation (200 Hz default):
-pixi run teleop
+# Franka gamepad / Quest (device clutch on workstation):
+pixi run teleop --profile fr3_pika_single_arm.yaml
 
-# Teleoperate single arm via keyboard or custom side:
-pixi run teleop --side left --left-can can0
+# Piper leaders (no hardware clutch — keyboard Enter toggles preempt + relay):
+pixi run teleop --profile piper_bimanual.yaml
 ```
 
-### Teleoperation Mode Flow
+### Behavior by profile
 
-```
-[启动 / 启动主手驱动]
-       │
-       ▼
-  Shadow Tracking Mode (主手伺服跟随从手位姿)
-       │
-       ▼
-  Active Preempt Mode (Admit TeleopJoint，主手 500Hz 0-G 浮动，100~200Hz 高频中继至从手)
-       │
-       ▼
-[按 Ctrl+C 退出] -> 自动释放 Preempt 回到 Shadow/下电，安全清理退出
-```
+| Profile style | Who streams / preempts | This app |
+|---------------|------------------------|----------|
+| No `teleoperators` / no `preempt_service` (Franka gamepad, Marvin Quest) | Workstation + device clutch | Ready check + clutch tip; optional `is_active` status |
+| `teleoperators` with `preempt_service` (Piper leaders) | App relays leader topics after Enter | Keyboard preempt + JointTrajectory relay |
+
+Clock (`use_sim_time`) is owned by workstation launch; this app has no `--use-sim-time` flag.
 
 ---
 
