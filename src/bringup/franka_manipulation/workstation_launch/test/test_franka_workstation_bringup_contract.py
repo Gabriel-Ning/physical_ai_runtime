@@ -67,9 +67,9 @@ def test_execution_manager_config_owns_routes():
     }
     assert sources["TeleopTwist"]["activation_topic"] == ("/teleop/gamepad/clutch")
     assert sources["TeleopTwist"]["preempt"] is True
-    assert sources["Planner"]["inputs"]["end_effector"] == {
+    assert sources["TrajectoryPlanner"]["inputs"]["end_effector"] == {
         "command_contract": "gripper_command",
-        "action": "/action_sources/planner/end_effector/gripper_command",
+        "action": "/action_sources/trajectory_planner/end_effector/gripper_command",
     }
 
 
@@ -162,7 +162,6 @@ def test_examples_16_and_17_share_homing_preemption_recording_lifecycle():
     for contract in (
         "SmoothHomingPlanner",
         'context.make_node("DummyPolicy", policy)',
-        'context.make_node("Planner", homing_planner)',
         "context.wait_until_ready(",
         "planner_node.activate()",
         "policy_node.activate()",
@@ -173,3 +172,5 @@ def test_examples_16_and_17_share_homing_preemption_recording_lifecycle():
     ):
         assert contract in franka
         assert contract in marvin
+    assert 'context.make_node("TrajectoryPlanner", homing_planner)' in franka
+    assert 'context.make_node("Planner", homing_planner)' in marvin

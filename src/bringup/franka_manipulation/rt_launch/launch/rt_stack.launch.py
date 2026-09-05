@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unified RT-Host stack bringup for Franka FR3 + Pika setup.
 
-Always launches:
-  - controller_bringup.launch.py (ros2_control, FCI / Fake / MuJoCo, Pika gripper, safety guard)
+Dispatches by ``backend`` to a sub-launch module via IncludeLaunchDescription:
+  - real / fake → ``controller_bringup.launch.py``
+  - mujoco → ``mujoco_bringup.launch.py``
 
-Optionally launches (when ``with_cameras:=true`` and not mujoco):
-  - camera_bringup.launch.py     (RealSense D405 + Sunplus Fisheye on RT host)
+Optionally includes ``camera_bringup.launch.py`` when ``with_cameras:=true``.
 """
 
 from __future__ import annotations
@@ -15,44 +15,93 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
+# Sub-launch modules under share/.../launch/, selected by backend.
+_CONTROL_MODULES = {
+    "mujoco": "mujoco_bringup.launch.py",
+    "real": "controller_bringup.launch.py",
+    "fake": "controller_bringup.launch.py",
+}
+
+
+def _include_launch(launch_dir: str, module: str, arguments: dict):
+    return IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, module)),
+        launch_arguments=arguments.items(),
+    )
+
+
+def _include_control_stack(context, *args, **kwargs):
+    backend = LaunchConfiguration("backend").perform(context).lower().strip()
+    use_sim_mujoco = (
+        LaunchConfiguration("use_sim_mujoco").perform(context).lower().strip()
+    )
+    if backend == "mujoco" or use_sim_mujoco in ("true", "1", "yes"):
+        module_key = "mujoco"
+    elif backend in ("real", "fake"):
+        module_key = backend
+    elif backend:
+        raise RuntimeError(
+            f"'backend' must be real, fake, or mujoco, got '{backend}'"
+        )
+    else:
+        fake = LaunchConfiguration("use_fake_hardware").perform(context).lower().strip()
+        module_key = "fake" if fake in ("true", "1", "yes") else "real"
+
+    launch_dir = os.path.join(
+        get_package_share_directory("franka_manipulation_rt_launch"), "launch"
+    )
+    module = _CONTROL_MODULES[module_key]
+
+    if module_key == "mujoco":
+        return [
+            _include_launch(
+                launch_dir,
+                module,
+                {
+                    "task": LaunchConfiguration("task"),
+                    "headless": LaunchConfiguration("headless"),
+                    "mujoco_plugins_yaml": LaunchConfiguration("mujoco_plugins_yaml"),
+                    "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
+                    "gripper_serial_port": LaunchConfiguration("gripper_serial_port"),
+                    "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
+                        "jtc_guard_heartbeat_timeout_s"
+                    ),
+                },
+            )
+        ]
+
+    return [
+        _include_launch(
+            launch_dir,
+            module,
+            {
+                "use_fake_hardware": "true" if module_key == "fake" else "false",
+                "backend": module_key,
+                "use_rviz": LaunchConfiguration("use_rviz"),
+                "cpu_affinity": LaunchConfiguration("cpu_affinity"),
+                "robot_ip": LaunchConfiguration("robot_ip"),
+                "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
+                "gripper_serial_port": LaunchConfiguration("gripper_serial_port"),
+                "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
+                    "jtc_guard_heartbeat_timeout_s"
+                ),
+            },
+        )
+    ]
+
 
 def generate_launch_description() -> LaunchDescription:
-    bringup_share = get_package_share_directory(
-        "franka_manipulation_rt_launch"
-    )
+    bringup_share = get_package_share_directory("franka_manipulation_rt_launch")
+    launch_dir = os.path.join(bringup_share, "launch")
 
-    # 1. Real-time Controller & Hardware Stack (Always launched)
-    controller = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "controller_bringup.launch.py")
-        ),
-        launch_arguments={
-            "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
-            "backend": LaunchConfiguration("backend"),
-            "use_sim_mujoco": LaunchConfiguration("use_sim_mujoco"),
-            "task": LaunchConfiguration("task"),
-            "headless": LaunchConfiguration("headless"),
-            "mujoco_plugins_yaml": LaunchConfiguration("mujoco_plugins_yaml"),
-            "use_rviz": LaunchConfiguration("use_rviz"),
-            "cpu_affinity": LaunchConfiguration("cpu_affinity"),
-            "robot_ip": LaunchConfiguration("robot_ip"),
-            "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
-            "gripper_serial_port": LaunchConfiguration("gripper_serial_port"),
-            "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
-                "jtc_guard_heartbeat_timeout_s"
-            ),
-        }.items(),
-    )
-
-    # 2. Camera Perception Stack (Pika wrist D405 + fisheye on RT host)
     cameras = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "camera_bringup.launch.py")
+            os.path.join(launch_dir, "camera_bringup.launch.py")
         ),
         condition=IfCondition(LaunchConfiguration("with_cameras")),
         launch_arguments={
@@ -66,7 +115,6 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
-            # Controller & Hardware parameters
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument(
                 "backend",
@@ -76,12 +124,15 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "use_sim_mujoco",
                 default_value="false",
-                description="Enable MuJoCo simulation backend.",
+                description="Compat alias for backend:=mujoco.",
             ),
             DeclareLaunchArgument(
                 "task",
-                default_value="pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate",
-                description="Task name for MuJoCo simulation (LIBERO task name).",
+                default_value="",
+                description=(
+                    "LIBERO task name or absolute MJCF path (MuJoCo only). "
+                    "Empty uses mujoco_bringup's default LIBERO task."
+                ),
             ),
             DeclareLaunchArgument(
                 "mujoco_plugins_yaml",
@@ -114,8 +165,6 @@ def generate_launch_description() -> LaunchDescription:
                 description="Serial device for the attached Pika gripper.",
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
-
-            # Pika wrist cameras on RT host (Franka + one Pika cable)
             DeclareLaunchArgument(
                 "with_cameras",
                 default_value="false",
@@ -150,8 +199,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="",
                 description="Optional Fisheye device override.",
             ),
-
-            controller,
+            OpaqueFunction(function=_include_control_stack),
             cameras,
         ]
     )

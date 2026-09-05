@@ -242,9 +242,47 @@ def test_rt_stack_contains_only_rt_runtime_components() -> None:
         encoding="utf-8"
     )
     assert "controller_bringup.launch.py" in source
+    assert "mujoco_bringup.launch.py" in source
     assert "execution_manager.launch.py" not in source
     assert 'get_package_share_directory("rmi")' not in source
     assert '"load_pika_hardware"' in source
+
+
+def test_mujoco_task_resolves_absolute_path(tmp_path) -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "mujoco_bringup",
+        PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    model = tmp_path / "scene.xml"
+    model.write_text("<mujoco/>")
+    assert module._resolve_mujoco_model(str(model)) == str(model)
+
+
+def test_controller_bringup_has_no_mujoco_path() -> None:
+    source = (PACKAGE_ROOT / "launch" / "controller_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "mujoco_model" not in source
+    assert "libero_tasks" not in source
+    assert "mujoco_image_bridge" not in source
+    assert "use_sim_mujoco" in source  # xacro mapping forced false
+    assert "mujoco_bringup.launch.py" in source
+
+
+def test_mujoco_bringup_owns_task_and_bridge() -> None:
+    source = (PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_resolve_mujoco_model" in source
+    assert 'executable="mujoco_image_bridge"' in source
+    assert "_camera_bridge_parameters" in source
+    assert "mujoco_task" not in source
 
 
 def test_fisheye_launch_uses_mjpeg_cam_original_jpeg() -> None:
@@ -278,71 +316,86 @@ def test_readme_matches_launch_files_and_udev_names() -> None:
     bringup = (PACKAGE_ROOT / "docs" / "BRINGUP.md").read_text(encoding="utf-8")
     stack = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
     launch_names = {path.name for path in (PACKAGE_ROOT / "launch").glob("*.py")}
+    assert "/dev/pika_left_gripper" in bringup
+    assert "/dev/pika_left_fisheye" in bringup
+    assert ":=/dev/ttyUSB" not in bringup
     for text in (readme, bringup):
-        assert "/dev/pika_left_gripper" in text
-        assert "/dev/pika_left_fisheye" in text
-        assert ":=/dev/ttyUSB" not in text
         assert "pixi run" not in text.lower()
     assert "rt_stack.launch.py" in readme
     assert "controller_bringup.launch.py" in readme
+    assert "mujoco_bringup.launch.py" in readme
     assert "camera_bringup.launch.py" in readme
     assert "controller_bringup.launch.py" in launch_names
+    assert "mujoco_bringup.launch.py" in launch_names
     assert "camera_bringup.launch.py" in launch_names
+    assert "mujoco_task.py" not in launch_names
+    assert "mujoco_camera_bridge.py" not in launch_names
+    assert "_CONTROL_MODULES" in stack
     assert "use_fake_hardware:=false" in readme
     assert '"use_fake_hardware"' in stack
     assert 'DeclareLaunchArgument("use_fake_hardware"' in stack
 
 
 def test_camera_bridge_uses_plugin_configuration(tmp_path) -> None:
-    import ast
+    import importlib.util
 
-    source = (PACKAGE_ROOT / 'launch/controller_bringup.launch.py').read_text()
-    function = next(node for node in ast.parse(source).body
-                    if isinstance(node, ast.FunctionDef)
-                    and node.name == '_camera_bridge_parameters')
-    namespace = {'yaml': yaml}
-    exec(compile(ast.Module(body=[function], type_ignores=[]), '<bridge-config>', 'exec'), namespace)
-    parameters = namespace['_camera_bridge_parameters']
-    config = _load_config('mujoco_plugins.yaml')
-    camera = config['/**']['ros__parameters']['mujoco_plugins']['mujoco_camera_plugin']
-    assert camera['output'] == 'shm'
-    assert camera['default_policy'] == 'disabled'
-    result = parameters(str(CONFIG_DIR / 'mujoco_plugins.yaml'))
-    assert set(result['camera_names']) == {'agentview', 'pika_d405'}
-    assert result['use_sim_time'] is False
-    assert result['shm_prefix'] == '/pai_mj_cam_'
-    camera['new_camera'] = {'policy': 'streaming'}
-    camera['pika_d405']['policy'] = 'disabled'
-    camera['shm_prefix'] = '/custom_'
-    path = tmp_path / 'plugins.yaml'
+    spec = importlib.util.spec_from_file_location(
+        "mujoco_bringup",
+        PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    parameters = module._camera_bridge_parameters
+
+    config = _load_config("mujoco_plugins.yaml")
+    camera = config["/**"]["ros__parameters"]["mujoco_plugins"]["mujoco_camera_plugin"]
+    assert camera["output"] == "shm"
+    assert camera["default_policy"] == "disabled"
+    result = parameters(str(CONFIG_DIR / "mujoco_plugins.yaml"))
+    assert set(result["camera_names"]) == {"agentview", "pika_d405"}
+    assert result["use_sim_time"] is False
+    assert result["shm_prefix"] == "/pai_mj_cam_"
+    camera["new_camera"] = {"policy": "streaming"}
+    camera["pika_d405"]["policy"] = "disabled"
+    camera["shm_prefix"] = "/custom_"
+    path = tmp_path / "plugins.yaml"
     path.write_text(yaml.safe_dump(config))
     result = parameters(str(path))
-    assert set(result['camera_names']) == {'agentview', 'new_camera'}
-    assert result['shm_prefix'] == '/custom_'
-    camera['output'] = 'ros'
+    assert set(result["camera_names"]) == {"agentview", "new_camera"}
+    assert result["shm_prefix"] == "/custom_"
+    camera["output"] = "ros"
     path.write_text(yaml.safe_dump(config))
     assert parameters(str(path)) is None
-    assert 'mujoco_image_relay' not in source
-    assert '/mujoco/raw' not in source
-    assert 'executable="mujoco_image_bridge"' in source
-    assert 'if is_mujoco and bridge_parameters is not None:' in source
+
+    bringup = (PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "mujoco_image_relay" not in bringup
+    assert "/mujoco/raw" not in bringup
+    assert 'executable="mujoco_image_bridge"' in bringup
+    assert "if bridge_parameters is not None:" in bringup
 
 
 def test_bridge_dds_override_preserves_parent_configuration(monkeypatch) -> None:
-    import ast
+    import importlib.util
     import os
 
-    source = (PACKAGE_ROOT / 'launch/controller_bringup.launch.py').read_text()
-    function = next(node for node in ast.parse(source).body
-                    if isinstance(node, ast.FunctionDef)
-                    and node.name == '_camera_bridge_environment')
-    namespace = {'os': os}
-    exec(compile(ast.Module(body=[function], type_ignores=[]), '<bridge-env>', 'exec'), namespace)
-    monkeypatch.setenv('CYCLONEDDS_URI', 'file:///custom/nic-and-peers.xml')
-    monkeypatch.delenv('MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI', raising=False)
-    result = namespace['_camera_bridge_environment']()['CYCLONEDDS_URI']
-    assert result.startswith('file:///custom/nic-and-peers.xml,')
-    assert '<AllowMulticast>spdp</AllowMulticast>' in result
-    assert os.environ['CYCLONEDDS_URI'] == 'file:///custom/nic-and-peers.xml'
-    monkeypatch.setenv('MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI', 'file:///explicit.xml')
-    assert namespace['_camera_bridge_environment']() == {'CYCLONEDDS_URI': 'file:///explicit.xml'}
+    spec = importlib.util.spec_from_file_location(
+        "mujoco_bringup",
+        PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+
+    monkeypatch.setenv("CYCLONEDDS_URI", "file:///custom/nic-and-peers.xml")
+    monkeypatch.delenv("MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI", raising=False)
+    result = module._camera_bridge_environment()["CYCLONEDDS_URI"]
+    assert result.startswith("file:///custom/nic-and-peers.xml,")
+    assert "<AllowMulticast>spdp</AllowMulticast>" in result
+    assert os.environ["CYCLONEDDS_URI"] == "file:///custom/nic-and-peers.xml"
+    monkeypatch.setenv("MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI", "file:///explicit.xml")
+    assert module._camera_bridge_environment() == {
+        "CYCLONEDDS_URI": "file:///explicit.xml"
+    }

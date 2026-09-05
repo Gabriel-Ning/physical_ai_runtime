@@ -44,8 +44,9 @@
     </default>
     <default class="pika_gripper">
       <joint frictionloss="0.01" damping="0.1" type="slide"/>
-      <geom type="mesh" material="pika_finray_blue" contype="1" conaffinity="1" condim="4" friction="3.0 0.05 0.005"/>
-      <position forcerange="-50 50" kp="400" kv="25"/>
+      <geom type="mesh" material="pika_finray_blue" contype="1" conaffinity="1" condim="4"
+            friction="4.0 0.1 0.01" solref="0.004 1" solimp="0.95 0.99 0.001"/>
+      <position forcerange="-200 200" kp="2000" kv="80"/>
     </default>
   </default>
 
@@ -111,7 +112,7 @@
                           <site name="pika_wrist_color_optical_frame" pos="0.04 0.03 0.08" quat="0.5 -0.5 0.5 -0.5"/>
 
                           <!-- Pika Wrist Camera (D405 / eye-in-hand) -->
-                          <camera name="pika_d405" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
+                          <camera name="pika_d405" pos="0.02 0.05 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
                           <camera name="wrist_camera" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
                           <camera name="robot0_eye_in_hand" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
 

@@ -94,9 +94,9 @@ def main():
 
     with (directory / 'launch.log').open('w') as log:
         launch = subprocess.Popen([
-            'ros2', 'launch', 'franka_manipulation_rt_launch', 'controller_bringup.launch.py',
-            'backend:=mujoco', f'headless:={str(not args.gui).lower()}',
-            'cpu_affinity:=none', f'mujoco_plugins_yaml:={config_path}',
+            'ros2', 'launch', 'franka_manipulation_rt_launch', 'mujoco_bringup.launch.py',
+            f'headless:={str(not args.gui).lower()}',
+            f'mujoco_plugins_yaml:={config_path}',
         ], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         clients = []
         try:

@@ -15,7 +15,8 @@
     <position name="fr3_joint6" joint="fr3_joint6" ctrlrange="0.4398 4.6216" class="fr3_wrist"/>
     <position name="fr3_joint7" joint="fr3_joint7" ctrlrange="-3.0508 3.0508" class="fr3_wrist"/>
 
-    <!-- Pika Gripper Actuator (Master finger) -->
-    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+    <!-- Pika Gripper Actuator (Master finger); match torque-sim grip strength. -->
+    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper"
+              ctrlrange="0.0 0.045" kp="2000" kv="80" forcerange="-200 200"/>
   </actuator>
 </mujoco>

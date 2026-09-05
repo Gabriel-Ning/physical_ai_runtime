@@ -75,17 +75,6 @@ sources:
         command_contract: joint_reference
         topic: /action_sources/streaming_planner/end_effector/joint_reference
 
-  Planner:
-    source_role: PLANNER
-    preempt: true
-    inputs:
-      arm:
-        command_contract: joint_trajectory
-        action: /action_sources/planner/arm/follow_joint_trajectory
-      end_effector:
-        command_contract: gripper_command
-        action: /action_sources/planner/end_effector/gripper_command
-
   # 5. 人类遥操作通道 (Human Teleop - 具最高抢占特权 preempt: true)
   # 空间 6-DoF 速度遥操作（当前主要承接 Gamepad 手柄遥操作）
   TeleopTwist:

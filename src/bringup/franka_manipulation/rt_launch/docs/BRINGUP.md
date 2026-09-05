@@ -17,6 +17,22 @@ Policy / Teleop / Planner  (workstation, RMI)
 
 Launch 命令见 [../README.md](../README.md)。RT 主机用 Pixi **`cpu`** 环境；workstation 用 `default` / `runtime`。
 
+MuJoCo 时 `rt_stack` 按 `backend` 用 `IncludeLaunchDescription` 加载 `mujoco_bringup.launch.py`（内部解析 `task:=`）；真机 / fake 加载 `controller_bringup.launch.py`。
+
+## 配置
+
+- `config/controller/controllers.yaml` — 1000 Hz TSJIC (TSKPC) / JSIC (JSPC) / JTC + Pika forward（力矩接口，`with_gravity_compensation` 开关：MuJoCo 设为 true，真机 FCI 自动补偿设为 false）
+- `config/controller/controllers_fake.yaml` — 仅在 fake hardware (Mock) 模式下使用的位置控制器
+- `config/camera/pika_cameras.yaml` — 真机腕部 D405（序列号 `_323622270897`）+ 鱼眼
+- `config/mujoco_plugins.yaml` — MuJoCo 仿真底座插件配置，腕部相机话题与真机 D405 物理命名空间（`/pika_d405/...`）保持一致
+- `config/model/gripper_tcp.yaml`、`config/model/joint_limits.yaml`（单指行程 `[0.0, 0.045]`，契约 `0 = closed pose`，模型已修正原点确保零位闭合接触）
+
+夹爪 / 鱼眼默认走 udev 稳定名（`scripts/udev/rules.d/99-pika.rules`，beta `usb-0:6.*`）：
+
+`/dev/pika_left_gripper`、`/dev/pika_left_fisheye`
+
+不要用 `/dev/ttyUSB*` / `/dev/video*`。D405 按 YAML 里的 `serial_no` 识别。
+
 ## Controllers that are spawned
 
 Serialized: `joint_state_broadcaster` → inactive `franka_arm_tskpc` /
@@ -44,6 +60,8 @@ joint_state_publisher    source_list:
 | Planner | `franka_arm_jtc` effort | 同名，位置 |
 
 `use_fake_hardware:=true` 加载 `config/controller/controllers_fake.yaml`。名字和 `/execution/...` endpoint 不变。
+
+真机默认 `with_cameras:=true`（腕部 D405 + 鱼眼）。路由控制器和 `pika_gripper_fwd` 默认 **inactive**，由工作站端 Execution Manager 动态激活切换。
 
 ## Perception cameras
 
@@ -89,7 +107,17 @@ ros2 topic echo /joint_states --once
 
 ## MuJoCo 仿真相机
 
-默认 CameraPlugin `output: shm`，由独立 `mujoco_image_bridge` 发布公开相机话题。
-相机列表与 SHM prefix 统一来自 `mujoco_plugins.yaml`，无需修改业务订阅端。
-真机仍启动 RealSense；IMU / FT 的 ros2_control 路径不变。
-架构、QoS、重启行为和单订户 / 多订户验收见 [README](../README.md)。
+架构、QoS、验收与验证记录见 [MUJOCO_CAMERA.md](MUJOCO_CAMERA.md)。
+
+## Realtime / FCI 通信
+
+Franka FCI 对主机抖动很敏感，常见报错是 `communication_constraints_violation`。
+beta 上要把 **Franka 网卡（`192.168.2.x` / `enp2s0`）IRQ** 与 **`ros2_control`**
+和 DDS/相机负载拆开。完整说明与脚本：
+
+[`docs/FRANKA_RT_COMMUNICATION.md`](../../../../docs/FRANKA_RT_COMMUNICATION.md)
+
+```bash
+# 在 beta（Franka RT 主机）上一次性配置 + 重启
+sudo bash scripts/apply_franka_rt_host.sh && sudo reboot
+```

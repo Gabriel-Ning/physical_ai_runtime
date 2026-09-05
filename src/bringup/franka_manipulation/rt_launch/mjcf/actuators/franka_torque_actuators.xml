@@ -16,7 +16,10 @@
     <motor name="fr3_joint6" joint="fr3_joint6" ctrlrange="-12 12"/>
     <motor name="fr3_joint7" joint="fr3_joint7" ctrlrange="-12 12"/>
 
-    <!-- Pika Gripper Position Actuator (Prismatic travel [0, 0.045]m) -->
-    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+    <!-- Pika Gripper Position Actuator (Prismatic travel [0, 0.045]m).
+         Raise kp / forcerange so commanded close can hold LIBERO objects;
+         friction on finger geoms is set in class pika_gripper. -->
+    <position name="gripper_left_joint" joint="gripper_left_joint" class="pika_gripper"
+              ctrlrange="0.0 0.045" kp="2000" kv="80" forcerange="-200 200"/>
   </actuator>
 </mujoco>
