@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>execution_manager</name>
+  <version>0.2.1</version>
+  <description>Graph-wide dynamic authority execution manager, command router, and JTC proxy.</description>
+  <maintainer email="guomning@gmail.com">Gabriel-Ning</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>action_msgs</depend>
+  <depend>control_msgs</depend>
+  <depend>controller_manager_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend version_gte="0.2.0">execution_manager_interfaces</depend>
+  <depend>geometry_msgs</depend>
+  <depend>moveit_msgs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>std_msgs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>yaml_cpp_vendor</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

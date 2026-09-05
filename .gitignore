@@ -83,6 +83,15 @@ examples/
 
 /src/execution/**
 !/src/execution/.gitkeep
+!/src/execution/execution_manager/
+!/src/execution/execution_manager/**
+!/src/execution/execution_manager_interfaces/
+!/src/execution/execution_manager_interfaces/**
+!/src/execution/orchestrator/
+!/src/execution/orchestrator/**
+# Keep local conda/rattler build products out of the monorepo snapshot.
+/src/execution/**/output/
+/src/execution/**/output/**
 
 /src/interfaces/**
 !/src/interfaces/.gitkeep

@@ -1,0 +1,15 @@
+uint8 POLICY=1
+uint8 TELEOP=2
+uint8 PLANNER=3
+uint8 MEMORY=4
+
+uint8 source_role
+string source_instance
+execution_manager_interfaces/ResourceClaim[] resources
+bool preempt
+diagnostic_msgs/KeyValue[] metadata
+---
+bool success
+string lease_id
+execution_manager_interfaces/CommandEndpoint[] endpoints
+string message

@@ -1,0 +1,3 @@
+std_msgs/Header header
+string lease_id
+trajectory_msgs/JointTrajectory command

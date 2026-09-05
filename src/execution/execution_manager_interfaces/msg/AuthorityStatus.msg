@@ -1,0 +1,2 @@
+std_msgs/Header header
+execution_manager_interfaces/ResourceAuthority[] resources

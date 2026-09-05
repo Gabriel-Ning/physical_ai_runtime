@@ -1,0 +1,68 @@
+schema_version: 1
+
+context:
+  version: "0.2.0"
+
+package:
+  name: ros-jazzy-execution-manager-interfaces
+  version: ${{ version }}
+
+source:
+  path: ../..
+
+build:
+  number: 0
+  script: build.sh
+
+requirements:
+  build:
+    - ${{ compiler('cxx') }}
+    - ${{ compiler('c') }}
+    - cmake
+    - ninja
+    - pkg-config
+  host:
+    - python
+    - ros-jazzy-ament-cmake
+    - ros-jazzy-ament-cmake-core
+    - ros-jazzy-rosidl-default-generators
+    - ros-jazzy-rosidl-default-runtime
+    - ros-jazzy-builtin-interfaces
+    - ros-jazzy-control-msgs
+    - ros-jazzy-diagnostic-msgs
+    - ros-jazzy-geometry-msgs
+    - ros-jazzy-moveit-msgs
+    - ros-jazzy-sensor-msgs
+    - ros-jazzy-std-msgs
+    - ros-jazzy-trajectory-msgs
+  run:
+    - python
+    - ros-jazzy-rosidl-default-runtime
+    - ros-jazzy-builtin-interfaces
+    - ros-jazzy-control-msgs
+    - ros-jazzy-diagnostic-msgs
+    - ros-jazzy-geometry-msgs
+    - ros-jazzy-moveit-msgs
+    - ros-jazzy-sensor-msgs
+    - ros-jazzy-std-msgs
+    - ros-jazzy-trajectory-msgs
+
+tests:
+  - script:
+      - test -f "$PREFIX/share/execution_manager_interfaces/package.xml"
+      - python -c "from execution_manager_interfaces.action import LeasedFollowJointTrajectory, LeasedParallelGripperCommand"
+      - python -c "from execution_manager_interfaces.msg import AuthorityEvent, AuthorityStatus, Candidate, CandidateBundle, CommandEndpoint, GripperExecutionEvent, GripperExecutionFeedback, LeasedJointReference, LeasedPoseReference, LeasedTwistReference, ResourceAuthority, ResourceClaim, SourceDescriptor, SourceRegistry, TrajectoryExecutionEvent, TrajectoryExecutionFeedback"
+      - python -c "from execution_manager_interfaces.srv import ClaimControl, ReleaseControl"
+
+about:
+  homepage: https://github.com/Gabriel-Ning/physical_ai_runtime
+  repository: https://github.com/Gabriel-Ning/physical_ai_runtime
+  license: Apache-2.0
+  summary: Typed authority, command routing, and execution trace interfaces for ROS 2 Jazzy
+  description: |
+    ROS 2 Jazzy message, service, and action definitions for execution authority,
+    fenced commands, action proxies, and replayable execution traces.
+
+extra:
+  maintainers:
+    - Gabriel-Ning

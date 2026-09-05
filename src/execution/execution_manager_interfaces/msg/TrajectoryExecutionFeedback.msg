@@ -1,0 +1,10 @@
+std_msgs/Header header
+string execution_id
+string lease_id
+uint8 source_role
+string source_instance
+string resource
+string[] joint_names
+trajectory_msgs/JointTrajectoryPoint desired
+trajectory_msgs/JointTrajectoryPoint actual
+trajectory_msgs/JointTrajectoryPoint error

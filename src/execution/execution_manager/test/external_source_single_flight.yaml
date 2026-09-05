@@ -1,0 +1,54 @@
+metadata: {name: external_source_single_flight, version: "2.0"}
+max_command_age_s: 0.25
+
+sources:
+  DummyPolicy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      arm:
+        command_contract: joint_reference
+        topic: /test_sources/dummy/arm
+      gripper:
+        command_contract: joint_reference
+        topic: /test_sources/dummy/gripper
+  Quest3Teleop:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /test_sources/quest/clutch
+    inputs:
+      arm:
+        command_contract: pose_reference
+        topic: /test_sources/quest/arm
+      gripper:
+        command_contract: joint_reference
+        topic: /test_sources/quest/gripper
+
+groups:
+  arm:
+    type: arm
+    joint_names: [joint1, joint2]
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: arm_jspc
+        implementation: test/JointReferenceController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/arm/joint_reference}
+      task_space_reference:
+        name: arm_tskpc
+        implementation: test/TaskSpaceController
+        command_interface: position
+        ros_topics: {pose_reference: /execution/arm/pose_reference}
+  gripper:
+    type: parallel_gripper
+    joint_names: [gripper_joint]
+    controller_manager: /controller_manager
+    default_controller: joint_space_reference
+    controllers:
+      joint_space_reference:
+        name: gripper_fwd
+        implementation: test/ForwardController
+        command_interface: position
+        ros_topics: {joint_reference: /execution/gripper/joint_reference}

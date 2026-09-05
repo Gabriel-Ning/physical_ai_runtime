@@ -1,0 +1,2 @@
+string resource
+string command_contract

@@ -1,0 +1,10 @@
+build/
+build-*/
+install/
+log/
+output/
+*.conda
+*.tar.bz2
+.pytest_cache/
+__pycache__/
+*.pyc
