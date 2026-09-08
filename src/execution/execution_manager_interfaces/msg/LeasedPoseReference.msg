@@ -1,3 +1,0 @@
-std_msgs/Header header
-string lease_id
-moveit_msgs/CartesianTrajectory command

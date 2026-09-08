@@ -29,6 +29,7 @@
     <mesh name="pika_franka_adaptor" file="../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_adaptor/pika_franka_adaptor.STL"/>
     <mesh name="pika_gripper_base" file="../../../../pika_gripper_description/share/pika_gripper_description/meshes/gripper_base_link.STL"/>
     <mesh name="pika_finray_finger" file="../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_finray_link.STL"/>
+    <mesh name="rethink_pedestal" file="../meshes/rethink_mount/pedestal.stl"/>
   </asset>
 
   <default>
@@ -51,8 +52,22 @@
   </default>
 
   <worldbody>
-    <!-- Franka FR3 7-DOF Robotic Arm (Mounted on Tabletop at Z=0.72) -->
-    <body name="fr3_link0" pos="0.0 -0.20 0.72">
+    <!-- Official RethinkMount after add_mount + set_base_xpos: mesh z is already [-0.93, 0], root at z≈0.922. -->
+    <body name="rethink_mount" pos="-0.66 0 0.922">
+      <body name="rethink_controller_box" pos="0 0 0">
+        <geom pos="-0.325 0 -0.38" size="0.11 0.2 0.265" type="box" name="rethink_controller_box_col" group="0" rgba="0 0 0 0"/>
+      </body>
+      <body name="rethink_pedestal_feet" pos="0 0 0">
+        <geom pos="-0.1225 0 -0.758" size="0.385 0.35 0.155" type="box" name="rethink_pedestal_feet_col" group="0" rgba="0 0 0 0"/>
+      </body>
+      <body name="rethink_pedestal" pos="0 0 0">
+        <geom conaffinity="0" contype="0" group="1" mesh="rethink_pedestal" type="mesh" name="rethink_pedestal_vis" rgba="0.2 0.2 0.2 1"/>
+        <geom pos="-0.02 0 -0.29" size="0.18 0.31" type="cylinder" name="rethink_pedestal_col" group="0" rgba="0 0 0 0"/>
+      </body>
+    </body>
+
+    <!-- Official MountedPanda table offset: (-0.16 - L/2, 0, 0) with L=1.0 → x=-0.66, facing +X. -->
+    <body name="fr3_link0" pos="-0.66 0 0.90">
       <inertial pos="-0.0172 0.0004 0.0745" mass="2.3966" fullinertia="0.009000 0.011500 0.008500 0.000000 0.002000 0.000000"/>
       <geom mesh="fr3_link0" class="fr3_arm" material="fr3_white"/>
 
@@ -109,12 +124,12 @@
                           <site name="pika_gripper_tcp" pos="0 0 0.21" quat="1 0 0 0"/>
 
                           <!-- Pika Wrist Camera Optical Frame -->
-                          <site name="pika_wrist_color_optical_frame" pos="0.04 0.03 0.08" quat="0.5 -0.5 0.5 -0.5"/>
+                          <site name="pika_wrist_color_optical_frame" pos="0 0.035 0.045" quat="0.5 -0.5 0.5 -0.5"/>
 
-                          <!-- Pika Wrist Camera (D405 / eye-in-hand) -->
-                          <camera name="pika_d405" pos="0.02 0.05 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
-                          <camera name="wrist_camera" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
-                          <camera name="robot0_eye_in_hand" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
+                          <!-- LIBERO wrist view: look along +Z (TCP), sit on chassis +Y so Panda hand local pose does not clip a finger. -->
+                          <camera name="pika_d405" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
+                          <camera name="wrist_camera" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
+                          <camera name="robot0_eye_in_hand" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
 
                           <!-- Left Finger: origin at xyz="0.03898 0 0.0815", touching center at q=0 -->
                           <body name="gripper_left_link" pos="0.03898 0 0.0815">

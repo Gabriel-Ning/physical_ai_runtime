@@ -18,13 +18,16 @@
 #include <utility>
 #include <vector>
 
+#include <builtin_interfaces/msg/time.hpp>
 #include <piper/control_types.h>
 #include <piper/mit_config.h>
 #include <piper/model.h>
 #include <piper/robot.h>
 #include <piper/teaching_pendant.h>
 #include <rclcpp/rclcpp.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
@@ -97,6 +100,8 @@ public:
     shadow_velocity_limit_rad_s_ =
         declare_parameter<double>("shadow_velocity_limit_rad_s", 2.0);
     autostart_ = declare_parameter<bool>("autostart", true);
+    stamp_from_sim_clock_ =
+        declare_parameter<bool>("stamp_from_sim_clock", false);
 
     // Output Teleop Topics
     joint_topic_ = declare_parameter<std::string>(
@@ -109,6 +114,10 @@ public:
         "/action_sources/piper_leader/end_effector/joint_reference");
     status_topic_ = declare_parameter<std::string>(
         "status_topic", "/teleop/piper_leader/status");
+    clutch_topic_ = declare_parameter<std::string>(
+        "clutch_topic", "/teleop/piper_joint/clutch");
+    preempt_service_name_ = declare_parameter<std::string>(
+        "preempt_service", "~/preempt");
     gripper_joint_name_ =
         declare_parameter<std::string>("gripper_joint_name", "gripper_joint1");
     follower_gripper_joint_name_ = declare_parameter<std::string>(
@@ -136,19 +145,46 @@ public:
         pendant_topic_, rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
     status_pub_ = create_publisher<std_msgs::msg::String>(
         status_topic_, rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
+    clutch_pub_ = create_publisher<std_msgs::msg::Bool>(
+        clutch_topic_, command_qos);
+    publishClutchLocked(false);
 
-    // Subscriber to follower joint states for Shadow Tracking mode
+    // Match joint_state_broadcaster: RELIABLE KeepLast (MuJoCo JSB is KeepLast(1)).
     follower_sub_ = create_subscription<sensor_msgs::msg::JointState>(
-        follower_joint_topic_, rclcpp::QoS(rclcpp::KeepLast(5)).best_effort(),
-        std::bind(&PiperLeaderNode::onFollowerJointState, this, std::placeholders::_1));
+        follower_joint_topic_,
+        rclcpp::QoS(rclcpp::KeepLast(10)).reliable().durability_volatile(),
+        std::bind(&PiperLeaderNode::onFollowerJointState, this,
+                  std::placeholders::_1));
+    if (stamp_from_sim_clock_) {
+      clock_sub_ = create_subscription<rosgraph_msgs::msg::Clock>(
+          "/clock", rclcpp::QoS(rclcpp::KeepLast(1)).best_effort(),
+          std::bind(&PiperLeaderNode::onSimClock, this, std::placeholders::_1));
+      RCLCPP_INFO(get_logger(),
+                  "Command stamps copy /clock; node clock remains wall.");
+    }
+
+    {
+      std::ostringstream joints;
+      for (size_t i = 0; i < follower_joint_names_.size(); ++i) {
+        if (i != 0) {
+          joints << ", ";
+        }
+        joints << follower_joint_names_[i];
+      }
+      RCLCPP_INFO(get_logger(),
+                  "Shadow tracking %s joints [%s] gripper=%s",
+                  follower_joint_topic_.c_str(), joints.str().c_str(),
+                  follower_gripper_joint_name_.c_str());
+    }
 
     // Lifecycle Services
     enable_service_ = create_service<std_srvs::srv::SetBool>(
         "~/enable", std::bind(&PiperLeaderNode::onEnable, this,
                               std::placeholders::_1, std::placeholders::_2));
     preempt_service_ = create_service<std_srvs::srv::SetBool>(
-        "~/preempt", std::bind(&PiperLeaderNode::onPreempt, this,
-                               std::placeholders::_1, std::placeholders::_2));
+        preempt_service_name_.empty() ? "~/preempt" : preempt_service_name_,
+        std::bind(&PiperLeaderNode::onPreempt, this,
+                  std::placeholders::_1, std::placeholders::_2));
 
     const auto period = std::chrono::duration<double>(1.0 / publish_rate_hz_);
     publish_timer_ = create_wall_timer(
@@ -187,41 +223,86 @@ private:
     if (!msg || msg->name.empty() || msg->position.empty()) {
       return;
     }
-    std::lock_guard<std::mutex> lock(follower_mutex_);
-    std::array<double, piper::kNumJoints> target_q{};
-    bool all_found = true;
+    bool announce_follower = false;
+    bool announce_mismatch = false;
+    std::string mismatch_names;
+    {
+      std::lock_guard<std::mutex> lock(follower_mutex_);
+      std::array<double, piper::kNumJoints> target_q{};
+      bool all_found = true;
 
-    for (size_t i = 0; i < follower_joint_names_.size() && i < piper::kNumJoints; ++i) {
-      const auto &name = follower_joint_names_[i];
-      auto it = std::find(msg->name.begin(), msg->name.end(), name);
-      if (it != msg->name.end()) {
-        size_t idx = std::distance(msg->name.begin(), it);
-        if (idx < msg->position.size()) {
-          target_q[i] = msg->position[idx];
+      for (size_t i = 0; i < follower_joint_names_.size() && i < piper::kNumJoints; ++i) {
+        const auto &name = follower_joint_names_[i];
+        auto it = std::find(msg->name.begin(), msg->name.end(), name);
+        if (it != msg->name.end()) {
+          size_t idx = std::distance(msg->name.begin(), it);
+          if (idx < msg->position.size()) {
+            target_q[i] = msg->position[idx];
+          } else {
+            all_found = false;
+          }
         } else {
           all_found = false;
         }
-      } else {
-        all_found = false;
       }
-    }
 
-    if (all_found) {
-      latest_follower_q_ = target_q;
-      has_follower_q_ = true;
-      last_follower_update_time_ = std::chrono::steady_clock::now();
-    }
+      if (all_found) {
+        announce_follower = !has_follower_q_;
+        latest_follower_q_ = target_q;
+        has_follower_q_ = true;
+        last_follower_update_time_ = std::chrono::steady_clock::now();
+      } else {
+        announce_mismatch = true;
+        std::ostringstream got;
+        for (size_t i = 0; i < msg->name.size(); ++i) {
+          if (i != 0) {
+            got << ", ";
+          }
+          got << msg->name[i];
+        }
+        mismatch_names = got.str();
+      }
 
-    if (!follower_gripper_joint_name_.empty()) {
-      auto it_g = std::find(msg->name.begin(), msg->name.end(), follower_gripper_joint_name_);
-      if (it_g != msg->name.end()) {
-        size_t g_idx = std::distance(msg->name.begin(), it_g);
-        if (g_idx < msg->position.size()) {
-          latest_follower_gripper_pos_ = msg->position[g_idx];
-          has_follower_gripper_pos_ = true;
+      if (!follower_gripper_joint_name_.empty()) {
+        auto it_g = std::find(msg->name.begin(), msg->name.end(), follower_gripper_joint_name_);
+        if (it_g != msg->name.end()) {
+          size_t g_idx = std::distance(msg->name.begin(), it_g);
+          if (g_idx < msg->position.size()) {
+            latest_follower_gripper_pos_ = msg->position[g_idx];
+            has_follower_gripper_pos_ = true;
+          }
         }
       }
     }
+    if (announce_follower) {
+      RCLCPP_INFO(get_logger(), "Shadow tracking acquired follower JointState on %s",
+                  follower_joint_topic_.c_str());
+    } else if (announce_mismatch) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), throttle_clock_, 2000,
+          "Follower JointState on %s is missing required names. got=[%s]",
+          follower_joint_topic_.c_str(), mismatch_names.c_str());
+    }
+  }
+
+  void onSimClock(const rosgraph_msgs::msg::Clock::SharedPtr msg) {
+    if (!msg) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(clock_mutex_);
+    last_sim_clock_ = msg->clock;
+    have_sim_clock_ = true;
+  }
+
+  builtin_interfaces::msg::Time commandStamp() const {
+    if (!stamp_from_sim_clock_) {
+      return now();
+    }
+    std::lock_guard<std::mutex> lock(clock_mutex_);
+    if (have_sim_clock_) {
+      return last_sim_clock_;
+    }
+    return now();
   }
 
   void onEnable(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
@@ -289,6 +370,7 @@ private:
     if (target_mode == LeaderMode::kDisabled) {
       stopLocked();
       mode_ = LeaderMode::kDisabled;
+      publishClutchLocked(false);
       return;
     }
 
@@ -312,6 +394,14 @@ private:
         startTorqueControlLocked();
       }
     }
+
+    publishClutchLocked(mode_ == LeaderMode::kActivePreempt);
+  }
+
+  void publishClutchLocked(bool engaged) {
+    std_msgs::msg::Bool message;
+    message.data = engaged;
+    clutch_pub_->publish(message);
   }
 
   void ensureHardwareInitializedLocked() {
@@ -459,6 +549,7 @@ private:
 
   void publishLatest() {
     std::lock_guard<std::mutex> lock(state_mutex_);
+    publishClutchLocked(mode_ == LeaderMode::kActivePreempt);
     if (mode_ == LeaderMode::kDisabled || !robot_ || !pendant_) {
       publishStatus(nullptr, nullptr);
       return;
@@ -472,7 +563,29 @@ private:
     const bool pendant_usable =
         pendant.valid && isFresh(pendant.feedback_receive_time) &&
         pendant.device_status != piper::FeedbackDeviceStatus::kError;
-    const auto stamp = now();
+    const auto stamp = commandStamp();
+
+    bool has_q = false;
+    double follower_age_s = -1.0;
+    {
+      std::lock_guard<std::mutex> lock(follower_mutex_);
+      has_q = has_follower_q_;
+      if (has_q) {
+        follower_age_s = std::chrono::duration<double>(
+                            std::chrono::steady_clock::now() -
+                            last_follower_update_time_)
+                            .count();
+      }
+    }
+    if (mode_ == LeaderMode::kShadowTracking &&
+        (!has_q || follower_age_s > 0.25)) {
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), throttle_clock_, 2000,
+          "Shadow tracking has no fresh follower JointState on %s "
+          "(have_q=%s age=%.3f s). Leader will hold its current pose.",
+          follower_joint_topic_.c_str(), has_q ? "true" : "false",
+          follower_age_s);
+    }
 
     // In SHADOW_TRACKING mode, servo the teaching pendant to mirror follower gripper
     if (mode_ == LeaderMode::kShadowTracking) {
@@ -554,7 +667,15 @@ private:
       json << ",\"arm_sequence\":" << arm->feedback_sequence
            << ",\"arm_valid\":" << (arm->valid ? "true" : "false")
            << ",\"arm_coherent\":" << (arm->coherent ? "true" : "false")
-           << ",\"arm_source_age_s\":" << age;
+           << ",\"arm_source_age_s\":" << age
+           << ",\"arm_q\":[";
+      for (size_t i = 0; i < piper::kNumJoints; ++i) {
+        if (i != 0) {
+          json << ",";
+        }
+        json << arm->q[i];
+      }
+      json << "]";
     }
     if (pendant) {
       const double age =
@@ -568,6 +689,31 @@ private:
            << ",\"pendant_valid\":" << (pendant->valid ? "true" : "false")
            << ",\"pendant_source_age_s\":" << age;
     }
+    bool has_q = false;
+    double follower_age = -1.0;
+    std::array<double, piper::kNumJoints> follower_q{};
+    {
+      std::lock_guard<std::mutex> lock(follower_mutex_);
+      has_q = has_follower_q_;
+      if (has_q) {
+        follower_q = latest_follower_q_;
+        follower_age = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() -
+                           last_follower_update_time_)
+                           .count();
+      }
+    }
+    json << ",\"has_follower_q\":" << (has_q ? "true" : "false");
+    if (has_q) {
+      json << ",\"follower_age_s\":" << follower_age << ",\"follower_q\":[";
+      for (size_t i = 0; i < piper::kNumJoints; ++i) {
+        if (i != 0) {
+          json << ",";
+        }
+        json << follower_q[i];
+      }
+      json << "]";
+    }
     json << '}';
     std_msgs::msg::String message;
     message.data = json.str();
@@ -580,6 +726,7 @@ private:
   std::string default_mode_str_;
   std::string fallback_mode_str_;
   bool autostart_{true};
+  bool stamp_from_sim_clock_{false};
 
   std::unique_ptr<piper::Robot> robot_;
   std::unique_ptr<piper::Model> model_;
@@ -599,6 +746,11 @@ private:
   bool has_follower_gripper_pos_{false};
   double last_commanded_pendant_width_{-1.0};
 
+  mutable std::mutex clock_mutex_;
+  builtin_interfaces::msg::Time last_sim_clock_{};
+  bool have_sim_clock_{false};
+  rclcpp::Clock throttle_clock_{RCL_STEADY_TIME};
+
   std::string can_interface_;
   std::string leader_robot_description_;
   std::filesystem::path temporary_model_path_;
@@ -610,6 +762,8 @@ private:
   std::string pendant_topic_;
   std::string gripper_topic_;
   std::string status_topic_;
+  std::string clutch_topic_;
+  std::string preempt_service_name_;
   std::string gripper_joint_name_;
   std::vector<std::string> joint_names_;
   uint64_t last_arm_sequence_{0};
@@ -619,7 +773,9 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pendant_pub_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr gripper_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_pub_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr clutch_pub_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr follower_sub_;
+  rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr clock_sub_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr enable_service_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr preempt_service_;
   rclcpp::TimerBase::SharedPtr publish_timer_;

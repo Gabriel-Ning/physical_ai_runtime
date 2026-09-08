@@ -1,0 +1,35 @@
+<mujoco model="piper_gripper">
+  <worldbody>
+    <!-- ==================== STANDALONE PIPER 2-FINGER GRIPPER ==================== -->
+    <body name="gripper_base" pos="0 0 0">
+      <inertial pos="-0.00018 8.05e-05 0.03214" mass="0.45" diaginertia="0.00093 0.00071 0.00039"/>
+      <geom mesh="gripper_base" class="piper_gripper"/>
+      <site name="gripper_tcp" pos="0 0 0.1358" euler="0 0 0"/>
+      <camera name="wrist_camera" pos="0 -0.04 0.08" euler="-1.5707963 0 0" fovy="60"/>
+
+      <!-- Finger 1 (Active) -->
+      <body name="gripper_link1" pos="0 0 0.1358" quat="0.7071068 0.7071068 0 0">
+        <inertial pos="0.00065 -0.04919 0.00972" mass="0.025" diaginertia="7.37e-05 7.81e-06 7.47e-05"/>
+        <joint name="gripper_joint1" type="slide" axis="0 0 1" range="0.0 0.04" class="piper_gripper"/>
+        <geom mesh="gripper_link1" class="piper_gripper"/>
+      </body>
+
+      <!-- Finger 2 (Mimic) -->
+      <body name="gripper_link2" pos="0 0 0.1358" quat="0 0 -0.7071068 -0.7071068">
+        <inertial pos="0.00065 -0.04919 0.00972" mass="0.025" diaginertia="7.37e-05 7.81e-06 7.47e-05"/>
+        <joint name="gripper_joint2" type="slide" axis="0 0 -1" range="-0.04 0.0" class="piper_gripper"/>
+        <geom mesh="gripper_link2" class="piper_gripper"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <exclude body1="gripper_base" body2="gripper_link1"/>
+    <exclude body1="gripper_base" body2="gripper_link2"/>
+    <exclude body1="gripper_link1" body2="gripper_link2"/>
+  </contact>
+
+  <equality>
+    <joint joint1="gripper_joint2" joint2="gripper_joint1" polycoef="0 -1 0 0 0"/>
+  </equality>
+</mujoco>

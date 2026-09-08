@@ -1,6 +1,17 @@
-"""Bring up one or two Piper followers from validated launch arguments."""
+# Copyright 2026 physical_ai_runtime
+# SPDX-License-Identifier: Apache-2.0
+"""Bring up one or two Piper followers for **real / fake** hardware.
+
+Owns ros2_control composition: robot_state_publisher, ros2_control_node,
+serialized JSB → inactive route controllers, optional RViz, CPU pin.
+
+MuJoCo simulation lives in ``mujoco_bringup.launch.py``.
+"""
+
+from __future__ import annotations
 
 import os
+import shlex
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -19,11 +30,8 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 import xacro
 
-
 VALID_ARMS = {"left", "right", "both"}
 VALID_END_EFFECTORS = {"none", "piper_gripper"}
-
-# Per end-effector choice: (xacro-enabled joint name, forward controller name).
 _END_EFFECTOR_WIRING = {
     "piper_gripper": ("gripper_joint1", "gripper_fwd"),
 }
@@ -37,6 +45,25 @@ def _resolve_cpu_affinity(context) -> str:
     if explicit:
         return explicit
     return os.environ.get("RT_CM_CPU_AFFINITY", "").strip()
+
+
+def _resolve_fake_hardware(context) -> str:
+    """Map backend:=real|fake onto use_fake_hardware; reject mujoco."""
+    backend = LaunchConfiguration("backend").perform(context).lower().strip()
+    use_sim = LaunchConfiguration("use_sim_mujoco").perform(context).lower().strip()
+    if backend == "mujoco" or use_sim in ("true", "1", "yes"):
+        raise RuntimeError(
+            "MuJoCo is owned by mujoco_bringup.launch.py. "
+            "Use: ros2 launch piper_manipulation_rt_launch mujoco_bringup.launch.py "
+            "... or rt_stack.launch.py backend:=mujoco"
+        )
+    if backend == "real":
+        return "false"
+    if backend == "fake":
+        return "true"
+    if backend:
+        raise RuntimeError(f"'backend' must be real or fake, got '{backend}'")
+    return LaunchConfiguration("use_fake_hardware").perform(context)
 
 
 def _optional_xacro_args(context, *names):
@@ -56,32 +83,20 @@ def _after(event, actions, stage):
 
 
 def _nodes(context):
+    bringup_share = get_package_share_directory("piper_manipulation_rt_launch")
     description_share = get_package_share_directory("piper_description")
     arms = LaunchConfiguration("arms").perform(context).lower()
     if arms not in VALID_ARMS:
         raise RuntimeError("'arms' must be left, right, or both")
     active = [side for side in ("left", "right") if arms in (side, "both")]
 
-    use_sim_mujoco_arg = LaunchConfiguration("use_sim_mujoco").perform(context).lower().strip()
-    backend_arg = LaunchConfiguration("backend").perform(context).lower().strip()
-    fake_arg = LaunchConfiguration("use_fake_hardware").perform(context).lower().strip()
-    if backend_arg:
-        if backend_arg not in ("real", "fake", "mujoco"):
-            raise RuntimeError(f"'backend' must be real, fake, or mujoco, got '{backend_arg}'")
-        is_mujoco = (backend_arg == "mujoco")
-        fake = "true" if backend_arg == "fake" else "false"
-    elif use_sim_mujoco_arg in ("true", "1", "yes"):
-        is_mujoco = True
-        fake = "false"
-    else:
-        is_mujoco = False
-        fake = fake_arg
+    fake = _resolve_fake_hardware(context)
 
     can_interfaces = {
         side: LaunchConfiguration(f"{side}_can_interface").perform(context)
         for side in active
     }
-    if fake == "false" and not is_mujoco and arms == "both" and len(set(can_interfaces.values())) != 2:
+    if fake == "false" and arms == "both" and len(set(can_interfaces.values())) != 2:
         raise RuntimeError(
             "real dual-arm profile must use two different CAN interfaces"
         )
@@ -103,44 +118,15 @@ def _nodes(context):
                 f"'{side}_end_effector' must be one of {sorted(VALID_END_EFFECTORS)}"
             )
 
-    task_name = LaunchConfiguration("task").perform(context).strip()
-    headless_str = LaunchConfiguration("headless").perform(context).lower().strip()
-    headless = headless_str in ("true", "1", "yes")
-
-    mujoco_model_path = ""
-    if is_mujoco:
-        if os.path.isabs(task_name) and os.path.exists(task_name):
-            mujoco_model_path = task_name
-        else:
-            candidates = []
-            try:
-                tasks_share = get_package_share_directory("robotwin_tasks")
-                candidates.extend([
-                    os.path.join(tasks_share, "mjcf", f"{task_name}.xml"),
-                    os.path.join(tasks_share, "mjcf", "tasks", f"{task_name}.xml"),
-                ])
-            except Exception:
-                pass
-            candidates.extend([
-                os.path.join(description_share, "mjcf", "tasks", f"{task_name}.xml"),
-                os.path.join(description_share, "mjcf", f"{task_name}.xml"),
-            ])
-            for candidate in candidates:
-                if os.path.exists(candidate):
-                    mujoco_model_path = candidate
-                    break
-            if not mujoco_model_path:
-                mujoco_model_path = candidates[0] if candidates else os.path.join(description_share, "mjcf", "tasks", "table_pick_cube.xml")
-
     mappings = {
         "enable_left": str("left" in active).lower(),
         "enable_right": str("right" in active).lower(),
         "connected_to": LaunchConfiguration("connected_to").perform(context),
         "enable_table": LaunchConfiguration("enable_table").perform(context),
         "use_fake_hardware": fake,
-        "use_sim_mujoco": "true" if is_mujoco else "false",
-        "headless": "true" if headless else "false",
-        "mujoco_model": mujoco_model_path,
+        "use_sim_mujoco": "false",
+        "headless": "false",
+        "mujoco_model": "",
     }
     mappings.update(
         _optional_xacro_args(
@@ -170,7 +156,7 @@ def _nodes(context):
         )
     description = xacro.process_file(
         os.path.join(
-            description_share, "urdf", "piper_bimanual_manipulation.urdf.xacro"
+            bringup_share, "urdf", "piper_bimanual_manipulation.urdf.xacro"
         ),
         mappings=mappings,
     ).toprettyxml(indent="  ")
@@ -178,12 +164,6 @@ def _nodes(context):
         {"robot_description": description},
         LaunchConfiguration("controllers_yaml"),
     ]
-    if is_mujoco:
-        params.append({"use_sim_time": True})
-        params.append({"headless": headless})
-        plugins_yaml = os.path.join(description_share, "config", "mujoco_plugins.yaml")
-        if os.path.exists(plugins_yaml):
-            params.append(plugins_yaml)
 
     heartbeat_timeout_s = float(
         LaunchConfiguration("jtc_guard_heartbeat_timeout_s").perform(context)
@@ -200,7 +180,7 @@ def _nodes(context):
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
-        parameters=[{"robot_description": description, "use_sim_time": is_mujoco}],
+        parameters=[{"robot_description": description, "use_sim_time": False}],
     )
     rviz = Node(
         package="rviz2",
@@ -212,19 +192,16 @@ def _nodes(context):
             os.path.join(description_share, "rviz", "visualize_piper.rviz"),
         ],
         condition=IfCondition(LaunchConfiguration("use_rviz")),
+        parameters=[{"use_sim_time": False}],
     )
     cm = Node(
-        package="mujoco_ros2_control" if is_mujoco else "controller_manager",
+        package="controller_manager",
         executable="ros2_control_node",
         name="controller_manager",
         output="screen",
         parameters=params,
-        # launch joins prefix substitutions without spaces, then shlex.splits;
-        # pass one shell-like string (same requirement as launch-prefix).
         prefix=f"taskset -c {cpu_affinity}" if cpu_affinity else None,
     )
-    # Spawner can race with itself under slow HW init (already-active then
-    # re-configure). Treat "already active" as success via a small shell guard.
     jsb = ExecuteProcess(
         cmd=[
             "bash",
@@ -248,27 +225,28 @@ def _nodes(context):
             f"{side}_gripper_action",
         )
     ]
-    gripper_remaps = " ".join(
-        remap
-        for side in active
-        if end_effectors[side] != "none"
-        for remap in (
-            f"--remap {side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}"
-            f"/commands:=/execution/{side}_gripper/joint_reference",
-            f"--remap {side}_gripper_action/gripper_cmd:="
-            f"/execution/{side}_gripper/gripper_command",
-        )
-    )
-    jtc_remaps = " ".join(
+    # FCC/action default to ~/commands and ~/gripper_cmd. Wire them onto the
+    # same /execution/... endpoints EM publishes, matching Marvin/Franka.
+    route_remaps = [
         (
             f"--remap {side}_arm_jtc/follow_joint_trajectory:="
             f"/execution/{side}_arm/follow_joint_trajectory"
         )
         for side in active
-    )
-    controller_remaps = " ".join(
-        part for part in (jtc_remaps, gripper_remaps) if part
-    )
+    ]
+    for side in active:
+        if end_effectors[side] == "none":
+            continue
+        fwd = f"{side}_{_END_EFFECTOR_WIRING[end_effectors[side]][1]}"
+        route_remaps.extend(
+            [
+                f"--remap {fwd}/commands:=/execution/{side}_gripper/joint_reference",
+                (
+                    f"--remap {side}_gripper_action/gripper_cmd:="
+                    f"/execution/{side}_gripper/gripper_command"
+                ),
+            ]
+        )
     route_args = [
         *[
             f"{side}_arm_{route}"
@@ -282,8 +260,11 @@ def _nodes(context):
         "--controller-manager-timeout",
         "30",
     ]
+    if route_remaps:
+        route_args.extend(["--controller-ros-args", " ".join(route_remaps)])
     route_cmd_str = (
-        f"ros2 run controller_manager spawner {' '.join(route_args)} || true"
+        "ros2 run controller_manager spawner "
+        f"{' '.join(shlex.quote(arg) for arg in route_args)} || true"
     )
     routes = ExecuteProcess(
         cmd=["bash", "-c", route_cmd_str],
@@ -320,6 +301,7 @@ def _nodes(context):
                             ),
                             "heartbeat_timeout_s": heartbeat_timeout_s,
                             "cancel_response_timeout_s": cancel_response_timeout_s,
+                            "use_sim_time": False,
                         }
                     ],
                     output="screen",
@@ -357,6 +339,16 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
             DeclareLaunchArgument(
+                "backend",
+                default_value="",
+                description="real or fake. Empty falls back to use_fake_hardware.",
+            ),
+            DeclareLaunchArgument(
+                "use_sim_mujoco",
+                default_value="false",
+                description="Rejected here; use mujoco_bringup / rt_stack backend:=mujoco.",
+            ),
+            DeclareLaunchArgument(
                 "load_gripper_hardware",
                 default_value="true",
                 description=(
@@ -392,7 +384,6 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "right_mit_kd_effort_damping", default_value="0.0"
             ),
-            # Empty defers to piper_description xacro (site-calibrated mounts).
             DeclareLaunchArgument("left_xyz", default_value=""),
             DeclareLaunchArgument("right_xyz", default_value=""),
             DeclareLaunchArgument("left_rpy", default_value=""),
@@ -442,24 +433,8 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument(
-                "backend",
-                default_value="",
-                description="real, fake, or mujoco. Empty falls back to use_fake_hardware.",
-            ),
-            DeclareLaunchArgument(
-                "use_sim_mujoco",
-                default_value="false",
-                description="Run MuJoCo simulation backend (alias for backend:=mujoco).",
-            ),
-            DeclareLaunchArgument(
-                "task",
-                default_value="table_pick_cube",
-                description="Task name for MuJoCo simulation (e.g. table_pick_cube).",
-            ),
-            DeclareLaunchArgument(
-                "headless",
-                default_value="false",
-                description="Run MuJoCo simulation in headless mode (no GUI window).",
+                "jtc_guard_cancel_response_timeout_s",
+                default_value="0.5",
             ),
             OpaqueFunction(function=_nodes),
         ]

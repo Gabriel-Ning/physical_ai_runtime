@@ -303,43 +303,46 @@ def main() -> None:
     current_obs = robot.get_observation()
     name_to_pos = dict(zip(current_obs.joint_names, current_obs.joint_positions))
 
-    planner_node = ctx.make_node("Planner")
-    for part_name, q_start in start_poses.items():
-        if part_name not in ctx.profile.parts:
-            continue
-        part_joints = list(ctx.profile.parts[part_name].joint_names)
-        if len(part_joints) < 2:
-            # Single-joint grippers handled in replay directly
-            continue
+    planner_node = ctx.make_node("TrajectoryPlanner")
+    with planner_node.activate(preempt=True):
+        for part_name, q_start in start_poses.items():
+            if part_name not in ctx.profile.parts:
+                continue
+            part_joints = list(ctx.profile.parts[part_name].joint_names)
+            if len(part_joints) < 2:
+                # Single-joint grippers handled in replay directly
+                continue
 
-        if all(j in name_to_pos for j in part_joints):
-            q_curr = [name_to_pos[j] for j in part_joints]
-            max_delta = max(abs(c - s) for c, s in zip(q_curr, q_start[:len(part_joints)]))
+            if all(j in name_to_pos for j in part_joints):
+                q_curr = [name_to_pos[j] for j in part_joints]
+                max_delta = max(abs(c - s) for c, s in zip(q_curr, q_start[:len(part_joints)]))
 
-            if max_delta > 0.005:
-                print(
-                    f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({homing_duration_s:.1f}s)..."
-                )
-                homing_plan = generate_quintic_transition(
-                    part_joints,
-                    q_curr,
-                    q_start[:len(part_joints)],
-                    duration_s=homing_duration_s,
-                )
-                execution = planner_node.execute(part_name, homing_plan)
-                execution.wait(timeout=homing_duration_s + 5.0)
-                if execution.done and not execution.canceled:
-                    print(f"  [✓] Part '{part_name}' settled smoothly at episode start pose.")
+                if max_delta > 0.005:
+                    print(
+                        f"  -> Part '{part_name}': delta = {max_delta:.4f} rad. Executing smooth JTC homing ({homing_duration_s:.1f}s)..."
+                    )
+                    homing_plan = generate_quintic_transition(
+                        part_joints,
+                        q_curr,
+                        q_start[:len(part_joints)],
+                        duration_s=homing_duration_s,
+                    )
+                    execution = planner_node.execute(part_name, homing_plan)
+                    execution.wait(timeout=homing_duration_s + 5.0)
+                    if execution.done and not execution.canceled:
+                        print(f"  [✓] Part '{part_name}' settled smoothly at episode start pose.")
+                    else:
+                        print(f"  [!] Part '{part_name}' homing state: {execution.state.name}")
                 else:
-                    print(f"  [!] Part '{part_name}' homing state: {execution.state.name}")
-            else:
-                print(f"  [✓] Part '{part_name}' already aligned (delta = {max_delta:.4f} rad).")
+                    print(f"  [✓] Part '{part_name}' already aligned (delta = {max_delta:.4f} rad).")
 
     # 5. Phase 2: High-Rate 1:1 Policy Replay Loop
     print(f"\n[4/4] Phase 2: Activating JSIC Controller & Replaying Actions ({total_frames} frames @ {native_hz:.1f} Hz)...")
-    policy_node = ctx.make_node("Policy")
+    policy_node = ctx.make_node("JointPolicy")
 
     try:
+        policy_node.activate()
+        policy_node.wait_for_control()
         pbar = ProgressBar(total_frames, prefix="Replaying Action")
         pacer = rmi.ReplayPacer.from_node(ctx.node)
         pacer.start()
@@ -352,10 +355,13 @@ def main() -> None:
             pacer.wait_until(rel_t)
 
             # Dispatch joint positions for all parts in this frame atomically
-            actions = [
-                rmi.Action(part=part_name, command="joint_reference", value=pos)
-                for part_name, pos in part_poses.items()
-            ]
+            def select_reference(_):
+                actions = [
+                    rmi.Action(part=part_name, command="joint_reference", value=pos)
+                    for part_name, pos in part_poses.items()
+                ]
+                return actions
+            actions = policy_node.select_action(selector=select_reference)
             policy_node.submit(actions)
 
             pbar.update(idx + 1)

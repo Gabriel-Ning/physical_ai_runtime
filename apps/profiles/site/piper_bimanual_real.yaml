@@ -1,0 +1,152 @@
+metadata:
+  # 【严禁修改】具身本体与工作台唯一标识（真机工装台真实物理画像）
+  name: "piper_bimanual_real"
+  embodiment_type: "bimanual"
+  vendor: "piper"
+  version: "1.0"
+
+# 【严禁修改】调度中枢入口，指向 workstation_launch 的 EM 路由配置
+execution_manager_config:
+  package: "piper_manipulation_workstation_launch"
+  file: "config/execution_manager.yaml"
+
+# 【严禁修改】运动学逻辑分组（左右臂 + 原生夹爪）
+compound_groups:
+  left_manipulator:
+    included_groups: ["left_arm", "left_gripper"]
+  right_manipulator:
+    included_groups: ["right_arm", "right_gripper"]
+  dual_arm:
+    included_groups: ["left_arm", "right_arm"]
+  dual_manipulator:
+    included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
+
+# 【契约绑定】工作台支持的控制与示教通道目录（通道名称与 resources 必须严格与 EM sources 保持一致）
+nodes:
+  DummyPolicy:
+    source_role: POLICY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  JointPolicy:
+    source_role: POLICY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 30.0
+  CartesianPolicy:
+    source_role: POLICY
+    resources: {left_arm: pose_reference, left_gripper: joint_reference, right_arm: pose_reference, right_gripper: joint_reference}
+    frequency: 30.0
+  Replay:
+    source_role: MEMORY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 30.0
+  TrajectoryPlanner:
+    source_role: PLANNER
+    resources: {left_arm: joint_trajectory, left_gripper: gripper_command, right_arm: joint_trajectory, right_gripper: gripper_command}
+    # 备注：Action 式轨迹规划器为一次性调度 (One-shot)，frequency 仅作为 RMI 句柄判活心跳，非周期发布
+    frequency: 30.0
+  StreamingPlanner:
+    source_role: PLANNER
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  TeleopTwist_Left:
+    source_role: TELEOP
+    resources: {left_arm: twist_reference, left_gripper: joint_reference}
+    frequency: 100.0
+  TeleopTwist_Right:
+    source_role: TELEOP
+    resources: {right_arm: twist_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  TeleopCartesian_Left:
+    source_role: TELEOP
+    resources: {left_arm: pose_reference, left_gripper: joint_reference}
+    frequency: 50.0
+  TeleopCartesian_Right:
+    source_role: TELEOP
+    resources: {right_arm: pose_reference, right_gripper: joint_reference}
+    frequency: 50.0
+  TeleopJoint_Left:
+    source_role: TELEOP
+    resources: {left_arm: joint_reference, left_gripper: joint_reference}
+    frequency: 200.0
+  TeleopJoint_Right:
+    source_role: TELEOP
+    resources: {right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 200.0
+
+# 【硬件绑定】真实物理台架传感器（Orbbec Femto Bolt + 双腕 RealSense D435i）
+sensors:
+  cameras:
+    static_orbbec:
+      ros_topic: "/observation/static_orbbec/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [720, 1280]
+      qos_profile: "sensor_data"
+    left_wrist_cam:
+      ros_topic: "/observation/left_hand_realsense/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    right_wrist_cam:
+      ros_topic: "/observation/right_hand_realsense/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+
+# ==============================================================================
+# ↑ 【物理固定层 (Hardware Invariant)】
+#   上方内容：与物理台架硬件强绑定，台架安装搭建确定后不可变更。
+#   (metadata, execution_manager_config, compound_groups, nodes, sensors)
+# ==============================================================================
+# ↓ 【应用/实验可变层 (Task & Experiment Specific)】
+#   下方内容：随具体采集实验、训练配置、任务类型按需调整或覆盖。
+#   (homing, recorder 默认配置, features)
+# ==============================================================================
+
+# 【可修改】机械臂归位安全姿态（真实台架安全防撞初始姿态）
+homing:
+  duration_s: 8.0
+  joint_positions:
+    left_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    left_gripper: [0.0]
+    right_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    right_gripper: [0.0]
+
+# 【可修改】数据录制默认缺省参数
+recorder:
+  config: "../../recording/piper_bimanual_real.yaml"
+  root_dir: "data/episodes"
+  experiment_name: "piper_bimanual_real"
+  task: "bimanual_manipulation"
+  episodes: 5
+  rate_hz: 30.0
+  max_duration_s: 60.0
+
+# 【可修改】真实真机策略训练/推理特征映射
+features:
+  observation:
+    "observation.images.top":
+      type: "image"
+      shape: [3, 720, 1280]
+      source: "sensors.cameras.static_orbbec"
+    "observation.images.left_wrist":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.left_wrist_cam"
+    "observation.images.right_wrist":
+      type: "image"
+      shape: [3, 480, 640]
+      source: "sensors.cameras.right_wrist_cam"
+    "observation.state":
+      type: "vector"
+      shape: [14]
+      units: "rad"
+  action:
+    "action":
+      type: "vector"
+      shape: [14]
+      command_contract: "joint_reference"
+      units: "rad"
+      space: "abs"

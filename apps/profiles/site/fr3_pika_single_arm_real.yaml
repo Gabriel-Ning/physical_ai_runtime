@@ -100,7 +100,7 @@ homing:
 
 # 【可修改】数据录制默认缺省参数
 recorder:
-  config: "../recording/franka_manipulation_real.yaml"
+  config: "../../recording/franka_manipulation_real.yaml"
   root_dir: "data/episodes"
   experiment_name: "fr3_pika_real_policy"
   task: "pika_real_manipulation"

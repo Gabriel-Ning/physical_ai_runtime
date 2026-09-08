@@ -1,0 +1,25 @@
+<mujoco>
+  <equality>
+    <joint joint1="left_gripper_right_joint" joint2="left_gripper_left_joint" polycoef="0 1 0 0 0"/>
+    <joint joint1="right_gripper_right_joint" joint2="right_gripper_left_joint" polycoef="0 1 0 0 0"/>
+  </equality>
+
+  <actuator>
+    <position name="Joint1_L" joint="Joint1_L" ctrlrange="-2.9671 2.9671" class="marvin_arm"/>
+    <position name="Joint2_L" joint="Joint2_L" ctrlrange="-2.0944 2.0944" class="marvin_arm"/>
+    <position name="Joint3_L" joint="Joint3_L" ctrlrange="-2.9671 2.9671" class="marvin_arm"/>
+    <position name="Joint4_L" joint="Joint4_L" ctrlrange="-2.5307 1.0472" class="marvin_arm"/>
+    <position name="Joint5_L" joint="Joint5_L" ctrlrange="-2.9671 2.9671" class="marvin_wrist"/>
+    <position name="Joint6_L" joint="Joint6_L" ctrlrange="-1.0472 1.0472" class="marvin_wrist"/>
+    <position name="Joint7_L" joint="Joint7_L" ctrlrange="-1.5708 1.5708" class="marvin_wrist"/>
+    <position name="Joint1_R" joint="Joint1_R" ctrlrange="-2.9671 2.9671" class="marvin_arm"/>
+    <position name="Joint2_R" joint="Joint2_R" ctrlrange="-2.0944 2.0944" class="marvin_arm"/>
+    <position name="Joint3_R" joint="Joint3_R" ctrlrange="-2.9671 2.9671" class="marvin_arm"/>
+    <position name="Joint4_R" joint="Joint4_R" ctrlrange="-2.5307 1.0472" class="marvin_arm"/>
+    <position name="Joint5_R" joint="Joint5_R" ctrlrange="-2.9671 2.9671" class="marvin_wrist"/>
+    <position name="Joint6_R" joint="Joint6_R" ctrlrange="-1.0472 1.0472" class="marvin_wrist"/>
+    <position name="Joint7_R" joint="Joint7_R" ctrlrange="-1.5708 1.5708" class="marvin_wrist"/>
+    <position name="left_gripper_left_joint" joint="left_gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+    <position name="right_gripper_left_joint" joint="right_gripper_left_joint" class="pika_gripper" ctrlrange="0.0 0.045"/>
+  </actuator>
+</mujoco>

@@ -1,13 +1,16 @@
 metadata:
+  # 【严禁修改】具身本体与工作台唯一标识，与底座硬件强绑定
   name: "piper_bimanual"
   embodiment_type: "bimanual"
   vendor: "piper"
   version: "1.0"
 
+# 【严禁修改】调度中枢入口，指向 workstation_launch 的 EM 路由配置
 execution_manager_config:
-  package: piper_manipulation_workstation_launch
-  file: config/execution_manager.yaml
+  package: "piper_manipulation_workstation_launch"
+  file: "config/execution_manager.yaml"
 
+# 【严禁修改】运动学逻辑分组（左右臂 + 原生夹爪）
 compound_groups:
   left_manipulator:
     included_groups: ["left_arm", "left_gripper"]
@@ -18,19 +21,49 @@ compound_groups:
   dual_manipulator:
     included_groups: ["left_arm", "left_gripper", "right_arm", "right_gripper"]
 
+# 【契约绑定】工作台支持的控制与示教通道目录（通道名称与 resources 必须严格与 EM sources 保持一致）
 nodes:
-  Policy:
+  DummyPolicy:
+    source_role: POLICY
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  JointPolicy:
     source_role: POLICY
     resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
-  Planner:
-    source_role: PLANNER
-    resources: {left_arm: joint_trajectory, left_gripper: gripper_command, right_arm: joint_trajectory, right_gripper: gripper_command}
+  CartesianPolicy:
+    source_role: POLICY
+    resources: {left_arm: pose_reference, left_gripper: joint_reference, right_arm: pose_reference, right_gripper: joint_reference}
     frequency: 30.0
   Replay:
     source_role: MEMORY
     resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 30.0
+  TrajectoryPlanner:
+    source_role: PLANNER
+    resources: {left_arm: joint_trajectory, left_gripper: gripper_command, right_arm: joint_trajectory, right_gripper: gripper_command}
+    # 备注：Action 式轨迹规划器为一次性调度 (One-shot)，frequency 仅作为 RMI 句柄判活心跳，非周期发布
+    frequency: 30.0
+  StreamingPlanner:
+    source_role: PLANNER
+    resources: {left_arm: joint_reference, left_gripper: joint_reference, right_arm: joint_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  TeleopTwist_Left:
+    source_role: TELEOP
+    resources: {left_arm: twist_reference, left_gripper: joint_reference}
+    frequency: 100.0
+  TeleopTwist_Right:
+    source_role: TELEOP
+    resources: {right_arm: twist_reference, right_gripper: joint_reference}
+    frequency: 100.0
+  TeleopCartesian_Left:
+    source_role: TELEOP
+    resources: {left_arm: pose_reference, left_gripper: joint_reference}
+    frequency: 50.0
+  TeleopCartesian_Right:
+    source_role: TELEOP
+    resources: {right_arm: pose_reference, right_gripper: joint_reference}
+    frequency: 50.0
   TeleopJoint_Left:
     source_role: TELEOP
     resources: {left_arm: joint_reference, left_gripper: joint_reference}
@@ -39,34 +72,45 @@ nodes:
     source_role: TELEOP
     resources: {right_arm: joint_reference, right_gripper: joint_reference}
     frequency: 200.0
-  TeleopCartesian_Left:
-    source_role: TELEOP
-    resources: {left_arm: pose_reference}
-    frequency: 100.0
-  TeleopCartesian_Right:
-    source_role: TELEOP
-    resources: {right_arm: pose_reference}
-    frequency: 100.0
-  TeleopTwist_Left:
-    source_role: TELEOP
-    resources: {left_arm: twist_reference}
-    frequency: 100.0
-  TeleopTwist_Right:
-    source_role: TELEOP
-    resources: {right_arm: twist_reference}
-    frequency: 100.0
 
+# 【硬件绑定】物理传感器拓扑（话题名、编码与底层硬件/仿真驱动严格强绑定，严禁随意修改）
 sensors:
   cameras:
+    # 台架 Orbbec（第三人称）。MuJoCo head_camera 为 640x480；真机 Femto 为 1280x720
+    # （见 site/piper_bimanual_real.yaml）。
     static_orbbec:
       ros_topic: "/observation/static_orbbec/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    # 左腕 RealSense D435i。MJCF left_camera 为 640x480。
     left_wrist_cam:
       ros_topic: "/observation/left_hand_realsense/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
+    # 右腕 RealSense D435i。MJCF right_camera 为 640x480。
     right_wrist_cam:
       ros_topic: "/observation/right_hand_realsense/color/image_raw"
+      encoding: "rgb8"
+      fps: 30
+      resolution: [480, 640]
+      qos_profile: "sensor_data"
 
+# ==============================================================================
+# ↑ 【物理固定层 (Hardware Invariant)】
+#   上方内容：与物理台架/仿真环境强绑定，台架安装搭建确定后不可变更。
+#   (metadata, execution_manager_config, compound_groups, nodes, sensors)
+# ==============================================================================
+# ↓ 【应用/实验可变层 (Task & Experiment Specific)】
+#   下方内容：随具体采集实验、训练配置、任务类型按需调整或覆盖。
+#   (homing, recorder 默认配置, features)
+# ==============================================================================
+
+# 【可修改】机械臂归位安全姿态（根据实验台场景障碍物调整关节弧度）
 homing:
-  # Captured from Piper fake hardware /joint_states at startup.
   duration_s: 8.0
   joint_positions:
     left_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -74,36 +118,22 @@ homing:
     right_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     right_gripper: [0.0]
 
+# 【可修改】数据录制默认缺省参数（执行 apps/record.py 时可通过命令行参数动态覆盖）
 recorder:
-  config: "../recording/piper_bimanual_no_cam.yaml"
+  config: "../recording/piper_bimanual_mujoco.yaml"
   root_dir: "data/episodes"
   experiment_name: "piper_bimanual"
   task: "bimanual_manipulation"
   episodes: 5
-  rate_hz: 50.0
+  rate_hz: 30.0
   max_duration_s: 60.0
 
-teleoperators:
-  left_leader:
-    target_node: "TeleopJoint_Left"
-    arm_part: "left_arm"
-    gripper_part: "left_gripper"
-    arm_source: "/action_sources/piper_leader_left/arm/joint_reference"
-    gripper_source: "/action_sources/piper_leader_left/end_effector/joint_reference"
-    preempt_service: "/piper_leader_left/preempt"
-  right_leader:
-    target_node: "TeleopJoint_Right"
-    arm_part: "right_arm"
-    gripper_part: "right_gripper"
-    arm_source: "/action_sources/piper_leader_right/arm/joint_reference"
-    gripper_source: "/action_sources/piper_leader_right/end_effector/joint_reference"
-    preempt_service: "/piper_leader_right/preempt"
-
+# 【可修改】策略模型与数据集特征映射（根据所训练模型的输入输出 Tensor Schema 调整）
 features:
   observation:
     "observation.images.top":
       type: "image"
-      shape: [3, 720, 1280]
+      shape: [3, 480, 640]
       source: "sensors.cameras.static_orbbec"
     "observation.images.left_wrist":
       type: "image"
@@ -122,3 +152,10 @@ features:
       type: "vector"
       shape: [14]
       command_contract: "joint_reference"
+      units: "rad"
+      # 【核心约定】动作空间表达模式:
+      # - "abs": 绝对目标动作 (Absolute: a_t = q_{target})
+      # - "rel": 相对当前状态的动作增量 (Delta: Δa_t = q_{target} - q_{current})
+      # 架构定则: 底层通信 (EM) 与控制器严禁接收累加增量，只接收绝对目标 (abs) 或速度 (twist)。
+      # 若模型训练为 rel，推理端 (Policy Client) 必须在本地闭环积分转换后 (a_target = s_actual + Δa_rel) 提交至 EM。
+      space: "abs"  # 可选: ["abs", "rel"]

@@ -46,6 +46,9 @@ def _nodes(context, *args, **kwargs):
     autostart = _optional_bool(
         "autostart", LaunchConfiguration("autostart").perform(context)
     )
+    use_sim_time = _optional_bool(
+        "use_sim_time", LaunchConfiguration("use_sim_time").perform(context)
+    )
 
     leader_model_xacro = LaunchConfiguration("leader_model_xacro")
     leader_robot_description = Command(
@@ -58,6 +61,10 @@ def _nodes(context, *args, **kwargs):
     node_params = {
         "leader_robot_description": leader_robot_description,
     }
+    # Never set the node's ROS use_sim_time: CAN/hardware stay on wall clock.
+    # The launch flag only selects command-stamp source.
+    if use_sim_time:
+        node_params["stamp_from_sim_clock"] = True
     if can_interface:
         node_params["can_interface"] = can_interface
     if publish_rate_hz:
@@ -168,6 +175,14 @@ def generate_launch_description() -> LaunchDescription:
                 "autostart",
                 default_value="",
                 description="Optional hardware activation override: true | false (empty = use config).",
+            ),
+            DeclareLaunchArgument(
+                "use_sim_time",
+                default_value="false",
+                description=(
+                    "false: original real-robot stamps from now(). "
+                    "true: command stamps copy /clock. Node ROS clock stays wall."
+                ),
             ),
             DeclareLaunchArgument(
                 "leader_model_xacro",

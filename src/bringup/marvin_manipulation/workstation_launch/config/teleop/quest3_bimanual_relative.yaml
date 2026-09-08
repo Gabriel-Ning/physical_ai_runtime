@@ -4,10 +4,10 @@ quest3_bimanual_target:
     rate_hz: 50.0
 
     # Action sources / Ingress topics for Marvin Execution Manager
-    left_output_topic: /action_sources/quest3/left_arm/pose_reference
-    right_output_topic: /action_sources/quest3/right_arm/pose_reference
-    left_gripper_output_topic: /action_sources/quest3/left_gripper/joint_reference
-    right_gripper_output_topic: /action_sources/quest3/right_gripper/joint_reference
+    left_output_topic: /action_sources/teleop_cartesian_left/left_arm/pose_reference
+    right_output_topic: /action_sources/teleop_cartesian_right/right_arm/pose_reference
+    left_gripper_output_topic: /action_sources/teleop_cartesian_left/left_gripper/joint_reference
+    right_gripper_output_topic: /action_sources/teleop_cartesian_right/right_gripper/joint_reference
 
     # Pika gripper joint and stroke configurations
     left_gripper_joint_name: left_gripper_left_joint

@@ -14,6 +14,10 @@ class Action:
     part: str
     command: str
     value: Any
+    # Internal execution epoch captured before producer computation.
+    _lease_id: str | None = field(default=None, repr=False, compare=False)
+    _source_instance: str | None = field(default=None, repr=False, compare=False)
+    _prepared_stamp: Any = field(default=None, repr=False, compare=False)
 
 
 @dataclass

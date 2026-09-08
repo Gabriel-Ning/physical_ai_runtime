@@ -1,0 +1,176 @@
+<mujoco model="marvin_bimanual_base">
+  <!-- Orientations are URDF RPY (Rz*Ry*Rx) stored as quaternions. Do not use
+       default MJCF euler here: compound wrist RPY does not match eulerseq=xyz. -->
+  <compiler angle="radian"/>
+  <worldbody>
+    <body name="base_link" pos="0 0 0">
+      <inertial pos="6.8101E-06 5.7901E-11 0.068902" mass="1.21"
+                fullinertia="0.00393 0.0047631 0.0034321 1.5099E-09 -3.4422E-07 8.9145E-13"/>
+      <geom mesh="base_link" class="marvin_arm" material="marvin_metal"/>
+      <geom name="column_link" type="cylinder" size="0.060 0.50" pos="0 0 -0.50"
+            class="marvin_arm" material="marvin_metal"/>
+      <site name="tracking_base_link" pos="0 0 -1"/>
+    <body name="Base_L" pos="0 0.026 0.070" quat="0.70738827 -0.70682518 0 0">
+      <inertial pos="0.00032267 4.798E-05 0.04066353" mass="1.1962" fullinertia="0.00107329 0.00107003 0.00127315 -1.68E-06 -1.05E-05 -3.43E-06"/>
+      <geom mesh="Base_L" class="marvin_arm"/>
+      <body name="Link1_L" pos="0 0 0.1745">
+        <inertial pos="0.00002347 0.00557150 -0.03075998" mass="1.9705" fullinertia="0.00492293 0.00526513 0.00188107 0.00000550 0.00000193 0.00033232"/>
+        <joint name="Joint1_L" axis="0 0 1" range="-2.9671 2.9671" class="marvin_arm"/>
+        <geom mesh="Link1_L" class="marvin_arm"/>
+        <body name="Link2_L" pos="0 0 0" quat="0.70710548 0.70710808 0 0">
+          <inertial pos="0.00013483 0.06170460 0.00950639" mass="2.24398" fullinertia="0.01194933 0.00361581 0.01098356 0.00000336 0.00000091 -0.00132804"/>
+          <joint name="Joint2_L" axis="0 0 1" range="-2.0944 2.0944" class="marvin_arm"/>
+          <geom mesh="Link2_L" class="marvin_arm"/>
+          <body name="Link3_L" pos="0 0.287 0" quat="0.70710548 -0.70710808 0 0">
+            <inertial pos="0.00968562 0.00246599 -0.04627302" mass="1.9242" fullinertia="0.00718224 0.00762563 0.00178597 0.00004413 0.00089552 0.00022096"/>
+            <joint name="Joint3_L" axis="0 0 1" range="-2.9671 2.9671" class="marvin_arm"/>
+            <geom mesh="Link3_L" class="marvin_arm"/>
+            <body name="Link4_L" pos="0.018 0 0" quat="-2.5973435e-06 2.597353e-06 -0.70710808 0.70710548">
+              <inertial pos="0.00850411 -0.04718223 0.00941509" mass="1.6085" fullinertia="0.00580480 0.00223807 0.00533060 -0.00066669 -0.00012722 0.00070523"/>
+              <joint name="Joint4_L" axis="0 0 1" range="-2.5307 1.0472" class="marvin_arm"/>
+              <geom mesh="Link4_L" class="marvin_arm"/>
+              <body name="Link5_L" pos="0.018 -0.314 0" quat="-2.5973435e-06 2.597353e-06 -0.70710808 0.70710548">
+                <inertial pos="0.00051127 0.00101064 -0.11271739" mass="2.0883" fullinertia="0.00626603 0.00564387 0.00243632 0.00004009 0.00005338 -0.00006193"/>
+                <joint name="Joint5_L" axis="0 0 1" range="-2.9671 2.9671" class="marvin_wrist"/>
+                <geom mesh="Link5_L" class="marvin_wrist"/>
+                <body name="Link6_L" pos="0 0 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                  <inertial pos="0.00032659 0.00531336 -0.00030182" mass="0.72496" fullinertia="0.00046040 0.00051716 0.00042521 0.00000189 0.00000083 -0.00000346"/>
+                  <joint name="Joint6_L" axis="0 0 1" range="-1.0472 1.0472" class="marvin_wrist"/>
+                  <geom mesh="Link6_L" class="marvin_wrist"/>
+                  <body name="Link7_L" pos="0 0 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                    <inertial pos="-0.00009108 -0.03153255 0.00889371" mass="0.68606" fullinertia="0.00173687 0.00089035 0.00139406 -0.00000345 -0.00000116 0.00030680"/>
+                    <joint name="Joint7_L" axis="0 0 1" range="-1.5708 1.5708" class="marvin_wrist"/>
+                    <geom mesh="Link7_L" class="marvin_wrist"/>
+                    <body name="flange_L" pos="0 -0.095 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                      <site name="flange_L_site" pos="0 0 0"/>
+                      <body name="left_pika_adaptor_link" pos="0 0 0">
+                        <inertial pos="0 0 0.003" mass="0.05" diaginertia="1.3e-05 3.2e-05 4.4e-05"/>
+                        <geom type="mesh" mesh="pika_marvin_adaptor" material="pika_adaptor_mat" class="pika_gripper"/>
+                        <body name="left_gripper_base_link" pos="0 0 0.004" quat="0.38268343 0 0 -0.92387953">
+                          <inertial pos="0 0.0084 0.0375" mass="0.1897" diaginertia="0.00014 0.00011 0.00022"/>
+                          <geom type="mesh" mesh="pika_gripper_base" material="pika_chassis_white" class="pika_gripper"/>
+                          <site name="left_pika_gripper_tcp" pos="0 0 0.21"/>
+                          <camera name="left_pika_d405" pos="0.02 0 0.04" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
+                          <body name="left_gripper_left_link" pos="0.03898 0 0.0815">
+                            <inertial pos="-0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="left_gripper_left_joint" type="slide" axis="-1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom type="mesh" mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+                          <body name="left_gripper_right_link" pos="-0.03898 0 0.0815" quat="6.123234e-17 0 0 -1">
+                            <inertial pos="0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="left_gripper_right_joint" type="slide" axis="-1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom type="mesh" mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <body name="Base_R" pos="0 -0.026 0.070" quat="0.70738827 0.70682518 0 0">
+      <inertial pos="0.00032267 4.798E-05 0.04066353" mass="1.1962" fullinertia="0.00107329 0.00107003 0.00127315 -1.68E-06 -1.05E-05 -3.43E-06"/>
+      <geom mesh="Base_R" class="marvin_arm"/>
+      <body name="Link1_R" pos="0 0 0.1745">
+        <inertial pos="0.00002347 0.00557150 -0.03075998" mass="1.9705" fullinertia="0.00492293 0.00526513 0.00188107 0.00000550 0.00000193 0.00033232"/>
+        <joint name="Joint1_R" axis="0 0 1" range="-2.9671 2.9671" class="marvin_arm"/>
+        <geom mesh="Link1_R" class="marvin_arm"/>
+        <body name="Link2_R" pos="0 0 0" quat="0.70710548 0.70710808 0 0">
+          <inertial pos="0.00013483 0.06170460 0.00950639" mass="2.24398" fullinertia="0.01194933 0.00361581 0.01098356 0.00000336 0.00000091 -0.00132804"/>
+          <joint name="Joint2_R" axis="0 0 1" range="-2.0944 2.0944" class="marvin_arm"/>
+          <geom mesh="Link2_R" class="marvin_arm"/>
+          <body name="Link3_R" pos="0 0.287 0" quat="0.70710548 -0.70710808 0 0">
+            <inertial pos="0.00968562 0.00246599 -0.04627302" mass="1.9242" fullinertia="0.00718224 0.00762563 0.00178597 0.00004413 0.00089552 0.00022096"/>
+            <joint name="Joint3_R" axis="0 0 1" range="-2.9671 2.9671" class="marvin_arm"/>
+            <geom mesh="Link3_R" class="marvin_arm"/>
+            <body name="Link4_R" pos="0.018 0 0" quat="-2.5973435e-06 2.597353e-06 -0.70710808 0.70710548">
+              <inertial pos="0.00850411 -0.04718223 0.00941509" mass="1.6085" fullinertia="0.00580480 0.00223807 0.00533060 -0.00066669 -0.00012722 0.00070523"/>
+              <joint name="Joint4_R" axis="0 0 1" range="-2.5307 1.0472" class="marvin_arm"/>
+              <geom mesh="Link4_R" class="marvin_arm"/>
+              <body name="Link5_R" pos="0.018 -0.314 0" quat="-2.5973435e-06 2.597353e-06 -0.70710808 0.70710548">
+                <inertial pos="-0.00051127 -0.00101064 -0.11271739" mass="2.0883" fullinertia="0.00626603 0.00564387 0.00243632 0.00004009 -0.00005338 0.00006193"/>
+                <joint name="Joint5_R" axis="0 0 1" range="-2.9671 2.9671" class="marvin_wrist"/>
+                <geom mesh="Link5_R" class="marvin_wrist"/>
+                <body name="Link6_R" pos="0 0 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                  <inertial pos="0.00032659 -0.00531336 0.00030182" mass="0.72496" fullinertia="0.00046040 0.00051716 0.00042521 -0.00000189 -0.00000083 -0.00000346"/>
+                  <joint name="Joint6_R" axis="0 0 1" range="-1.0472 1.0472" class="marvin_wrist"/>
+                  <geom mesh="Link6_R" class="marvin_wrist"/>
+                  <body name="Link7_R" pos="0 0 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                    <inertial pos="-0.00009108 -0.03153255 0.00889371" mass="0.68606" fullinertia="0.00173687 0.00089035 0.00139406 -0.00000345 -0.00000116 0.00030680"/>
+                    <joint name="Joint7_R" axis="0 0 1" range="-1.5708 1.5708" class="marvin_wrist"/>
+                    <geom mesh="Link7_R" class="marvin_wrist"/>
+                    <body name="flange_R" pos="0 -0.095 0" quat="0.49999816 0.5 -0.5 0.50000184">
+                      <site name="flange_R_site" pos="0 0 0"/>
+                      <body name="right_pika_adaptor_link" pos="0 0 0">
+                        <inertial pos="0 0 0.003" mass="0.05" diaginertia="1.3e-05 3.2e-05 4.4e-05"/>
+                        <geom type="mesh" mesh="pika_marvin_adaptor" material="pika_adaptor_mat" class="pika_gripper"/>
+                        <body name="right_gripper_base_link" pos="0 0 0.004" quat="0.92387953 0 0 -0.38268343">
+                          <inertial pos="0 0.0084 0.0375" mass="0.1897" diaginertia="0.00014 0.00011 0.00022"/>
+                          <geom type="mesh" mesh="pika_gripper_base" material="pika_chassis_white" class="pika_gripper"/>
+                          <site name="right_pika_gripper_tcp" pos="0 0 0.21"/>
+                          <camera name="right_pika_d405" pos="0.02 0 0.04" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
+                          <body name="right_gripper_left_link" pos="0.03898 0 0.0815">
+                            <inertial pos="-0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="right_gripper_left_joint" type="slide" axis="-1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom type="mesh" mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+                          <body name="right_gripper_right_link" pos="-0.03898 0 0.0815" quat="6.123234e-17 0 0 -1">
+                            <inertial pos="0.0147 -0.0058 0.0333" mass="0.0337" diaginertia="0.00003 0.00004 0.00002"/>
+                            <joint name="right_gripper_right_joint" type="slide" axis="-1 0 0" range="0.0 0.045" class="pika_gripper"/>
+                            <geom type="mesh" mesh="pika_finray_finger" class="pika_gripper"/>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <exclude body1="Base_L" body2="Link1_L"/>
+    <exclude body1="Link1_L" body2="Link2_L"/>
+    <exclude body1="Link2_L" body2="Link3_L"/>
+    <exclude body1="Link3_L" body2="Link4_L"/>
+    <exclude body1="Link4_L" body2="Link5_L"/>
+    <exclude body1="Link5_L" body2="Link6_L"/>
+    <exclude body1="Link6_L" body2="Link7_L"/>
+    <exclude body1="Link7_L" body2="flange_L"/>
+    <exclude body1="flange_L" body2="left_pika_adaptor_link"/>
+    <exclude body1="left_pika_adaptor_link" body2="left_gripper_base_link"/>
+    <exclude body1="left_gripper_base_link" body2="left_gripper_left_link"/>
+    <exclude body1="left_gripper_base_link" body2="left_gripper_right_link"/>
+    <exclude body1="left_gripper_left_link" body2="left_gripper_right_link"/>
+    <exclude body1="Base_R" body2="Link1_R"/>
+    <exclude body1="Link1_R" body2="Link2_R"/>
+    <exclude body1="Link2_R" body2="Link3_R"/>
+    <exclude body1="Link3_R" body2="Link4_R"/>
+    <exclude body1="Link4_R" body2="Link5_R"/>
+    <exclude body1="Link5_R" body2="Link6_R"/>
+    <exclude body1="Link6_R" body2="Link7_R"/>
+    <exclude body1="Link7_R" body2="flange_R"/>
+    <exclude body1="flange_R" body2="right_pika_adaptor_link"/>
+    <exclude body1="right_pika_adaptor_link" body2="right_gripper_base_link"/>
+    <exclude body1="right_gripper_base_link" body2="right_gripper_left_link"/>
+    <exclude body1="right_gripper_base_link" body2="right_gripper_right_link"/>
+    <exclude body1="right_gripper_left_link" body2="right_gripper_right_link"/>
+    <exclude body1="base_link" body2="Base_L"/>
+    <exclude body1="base_link" body2="Base_R"/>
+    <!-- Skip-1: MuJoCo already ignores parent-child. These CAD meshes still
+         overlap: stand vs shoulder, and Link5/Link7 share the wrist origin. -->
+    <exclude body1="base_link" body2="Link1_L"/>
+    <exclude body1="base_link" body2="Link1_R"/>
+    <exclude body1="Link5_L" body2="Link7_L"/>
+    <exclude body1="Link5_R" body2="Link7_R"/>
+  </contact>
+</mujoco>

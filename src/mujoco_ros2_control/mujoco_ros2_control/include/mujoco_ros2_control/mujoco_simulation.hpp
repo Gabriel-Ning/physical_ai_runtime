@@ -532,6 +532,8 @@ private:
   // Threads for rendering physics and the UI simulation
   std::thread physics_thread_;
   std::thread ui_thread_;
+  // Distinguishes a programmatic RenderLoop wakeup from the user closing its window.
+  std::atomic<bool> explicit_shutdown_requested_{ false };
 
   // Primary clock publisher for the world
   std::shared_ptr<rclcpp::Publisher<rosgraph_msgs::msg::Clock>> clock_publisher_;

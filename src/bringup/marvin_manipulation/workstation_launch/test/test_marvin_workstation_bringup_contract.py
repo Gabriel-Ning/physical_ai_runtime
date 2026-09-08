@@ -26,12 +26,18 @@ def _em() -> dict:
 
 
 def _recording() -> dict:
-    return _load_yaml(REPO_ROOT / "apps" / "recording" / "marvin_manipulation.yaml")
+    return _load_yaml(REPO_ROOT / "apps" / "recording" / "marvin_bimanual_real.yaml")
 
 
 def _no_camera_recording() -> dict:
     return _load_yaml(
-        REPO_ROOT / "apps" / "recording" / "marvin_manipulation_no_cam.yaml"
+        REPO_ROOT / "apps" / "recording" / "marvin_bimanual_no_cam.yaml"
+    )
+
+
+def _mujoco_recording() -> dict:
+    return _load_yaml(
+        REPO_ROOT / "apps" / "recording" / "marvin_bimanual_mujoco.yaml"
     )
 
 
@@ -60,6 +66,8 @@ def test_workstation_stack_conditionally_starts_cameras() -> None:
     assert "IfCondition" in launch
     assert "with_execution_manager" not in launch
     assert "with_recorder" not in launch
+    assert 'DeclareLaunchArgument(\n                "use_sim_time"' in launch
+    assert '"use_sim_time": LaunchConfiguration("use_sim_time")' in launch
     assert 'DeclareLaunchArgument(\n                "with_cameras"' in launch
     assert 'IfCondition(LaunchConfiguration("with_cameras"))' in launch
     assert 'DeclareLaunchArgument(\n                "with_teleop"' in launch
@@ -92,6 +100,7 @@ def test_execution_manager_launch_uses_package_config() -> None:
     assert "marvin_bimanual.yaml" not in launch
     assert "apps/profiles" not in launch
     assert 'DeclareLaunchArgument("config"' in launch
+    assert 'DeclareLaunchArgument("use_sim_time"' in launch
     assert "execution_manager.yaml" in launch
     assert 'get_package_share_directory("execution_manager")' in launch
     assert 'os.path.join(em_share, "launch", "execution_manager.launch.py")' in launch
@@ -155,9 +164,11 @@ def test_execution_manager_config_is_the_only_routing_table() -> None:
         assert gripper["controllers"]["gripper_command"]["ros_actions"] == {
             "gripper_command": f"/execution/{side}_gripper/gripper_command"
         }
-        assert em["sources"]["Planner"]["inputs"][f"{side}_gripper"] == {
+        assert em["sources"]["TrajectoryPlanner"]["inputs"][f"{side}_gripper"] == {
             "command_contract": "gripper_command",
-            "action": f"/action_sources/planner/{side}_gripper/gripper_command",
+            "action": (
+                f"/execution_manager/ingress/planner/{side}_gripper/gripper_command"
+            ),
         }
 
 
@@ -166,7 +177,7 @@ def test_no_camera_profile_keeps_full_execution_capability() -> None:
         REPO_ROOT / "apps" / "profiles" / "site" / "marvin_bimanual_no_cam.yaml"
     )
     expected = _profile()
-    expected["recorder"]["config"] = "../../recording/marvin_manipulation_no_cam.yaml"
+    expected["recorder"]["config"] = "../../recording/marvin_bimanual_no_cam.yaml"
     assert site == expected
     assert site["nodes"]["DummyPolicy"]["resources"] == {
         "left_arm": "joint_reference",
@@ -195,26 +206,31 @@ def test_marvin_profiles_register_supported_teleop_nodes() -> None:
             if node["source_role"] == "TELEOP"
         }
         assert teleop_nodes == {
-            "Quest3TeleopLeft",
-            "Quest3TeleopRight",
-            "TeleopJoint",
+            "TeleopTwist_Left",
+            "TeleopTwist_Right",
+            "TeleopCartesian_Left",
+            "TeleopCartesian_Right",
+            "TeleopJoint_Left",
+            "TeleopJoint_Right",
         }
-        assert profile["nodes"]["Quest3TeleopLeft"]["resources"] == {
+        assert profile["nodes"]["TeleopCartesian_Left"]["resources"] == {
             "left_arm": "pose_reference",
             "left_gripper": "joint_reference",
         }
-        assert profile["nodes"]["Quest3TeleopRight"]["resources"] == {
+        assert profile["nodes"]["TeleopCartesian_Right"]["resources"] == {
             "right_arm": "pose_reference",
             "right_gripper": "joint_reference",
         }
-        assert profile["nodes"]["TeleopJoint"]["resources"] == {
+        assert profile["nodes"]["TeleopJoint_Left"]["resources"] == {
             "left_arm": "joint_reference",
             "left_gripper": "joint_reference",
+        }
+        assert profile["nodes"]["TeleopJoint_Right"]["resources"] == {
             "right_arm": "joint_reference",
             "right_gripper": "joint_reference",
         }
         assert profile["nodes"]["Replay"]["source_role"] == "MEMORY"
-        assert profile["nodes"]["Planner"]["resources"] == {
+        assert profile["nodes"]["TrajectoryPlanner"]["resources"] == {
             "left_arm": "joint_trajectory",
             "left_gripper": "gripper_command",
             "right_arm": "joint_trajectory",
@@ -226,10 +242,10 @@ def test_quest3_launch_uses_marvin_specific_parameter_overrides() -> None:
     config = _load_yaml(CONFIG_DIR / "teleop" / "quest3_bimanual_relative.yaml")
     params = config["quest3_bimanual_target"]["ros__parameters"]
     assert params["left_output_topic"] == (
-        "/action_sources/quest3/left_arm/pose_reference"
+        "/action_sources/teleop_cartesian_left/left_arm/pose_reference"
     )
     assert params["right_output_topic"] == (
-        "/action_sources/quest3/right_arm/pose_reference"
+        "/action_sources/teleop_cartesian_right/right_arm/pose_reference"
     )
     assert params["left_tcp_frame"] == "left_pika_gripper_tcp"
     assert params["right_tcp_frame"] == "right_pika_gripper_tcp"
@@ -267,8 +283,7 @@ def test_recorder_launch_uses_package_config() -> None:
     assert "workstation_defaults" not in recorder
     assert "apps/profiles" not in recorder
     assert "apps/profiles/marvin_bimanual.yaml" not in recorder
-    assert "DeclareLaunchArgument" not in recorder
-    assert "marvin_manipulation.yaml" not in recorder
+    assert "marvin_bimanual_real.yaml" not in recorder
     assert "rmi_marvin_bimanual.yaml" not in recorder
     assert not (CONFIG_DIR / "recording" / "rmi_marvin_bimanual.yaml").exists()
     assert 'get_package_share_directory("episode_recorder")' in recorder
@@ -276,6 +291,7 @@ def test_recorder_launch_uses_package_config() -> None:
     assert "stream_config_uri" not in recorder
     assert '"queue_capacity_bytes": str(4 * 1024 * 1024 * 1024)' in recorder
     assert '"queue_capacity_messages": "16384"' in recorder
+    assert '"use_sim_time": LaunchConfiguration("use_sim_time")' in recorder
     assert "recording_stream_config" not in workstation
     assert '"root_dir"' not in workstation
     assert '"experiment_name"' not in workstation
@@ -303,7 +319,7 @@ def test_recording_config_is_the_stream_contract() -> None:
         "teleoperators",
     ):
         assert forbidden not in recording
-    assert profile["recorder"]["config"] == "../recording/marvin_manipulation.yaml"
+    assert profile["recorder"]["config"] == "../recording/marvin_bimanual_real.yaml"
     assert "profile" not in profile["recorder"]
     assert profile["recorder"]["root_dir"] == "data/episodes"
     assert profile["recorder"]["experiment_name"] == "marvin_bimanual"
@@ -351,8 +367,8 @@ def test_recording_gripper_streams_use_float64_multiarray() -> None:
 def test_recording_keeps_right_gripper_even_if_rt_omits_hardware() -> None:
     by_id = _streams_by_id()
     assert "right_gripper" in _em()["groups"]
-    assert by_id["source_policy_right_gripper"]["topic"] == (
-        "/action_sources/policy/right_gripper/joint_reference"
+    assert by_id["source_joint_policy_right_gripper"]["topic"] == (
+        "/action_sources/joint_policy/right_gripper/joint_reference"
     )
     assert by_id["execution_right_gripper_joint_reference"]["topic"] == (
         "/execution/right_gripper/joint_reference"
@@ -417,14 +433,32 @@ def test_camera_and_no_camera_recording_contracts_only_change_camera_gates() -> 
         assert with_cameras[stream_id] == without_cameras[stream_id]
 
 
+def test_mujoco_recording_keeps_sim_cameras_and_drops_fisheye_gate() -> None:
+    real = {stream["id"]: stream for stream in _recording()["streams"]}
+    mujoco = {stream["id"]: stream for stream in _mujoco_recording()["streams"]}
+    assert set(real) == set(mujoco)
+    for stream_id in ("left_pika_fisheye_color", "right_pika_fisheye_color"):
+        assert mujoco[stream_id]["required"] is False
+        assert mujoco[stream_id]["start_gate"] is False
+    for stream_id in (
+        "left_pika_d405_color",
+        "head_d435_color",
+        "third_person_d435_color",
+        "robot_joint_states",
+        "authority_status",
+    ):
+        assert mujoco[stream_id]["required"] is True
+        assert mujoco[stream_id]["start_gate"] is True
+
+
 def test_recording_covers_profile_provider_topics_and_traces() -> None:
     topics = {stream["topic"] for stream in _recording()["streams"]}
     assert {
         "/execution_manager/authority_status",
         "/execution_manager/authority_events",
     } <= topics
-    assert "/action_sources/policy/left_arm/joint_reference" in topics
-    assert "/action_sources/quest3/left_arm/pose_reference" in topics
+    assert "/action_sources/joint_policy/left_arm/joint_reference" in topics
+    assert "/action_sources/teleop_cartesian_left/left_arm/pose_reference" in topics
     assert "/execution_trace/policy/left_arm/joint_reference" in topics
     assert "/execution_trace/teleop/left_arm/pose_reference" in topics
     assert "/execution_trace/teleop/left_gripper/joint_reference" in topics
@@ -504,7 +538,8 @@ def test_docs_do_not_point_at_removed_packages() -> None:
     assert "execution_manager.launch.py" in readme
     assert "execution_manager.yaml" in readme
     assert "recorder.launch.py" in readme
-    assert "marvin_manipulation.yaml" in readme
+    assert "marvin_bimanual_real.yaml" in readme
+    assert "marvin_bimanual_mujoco.yaml" in readme
     assert "rmi_marvin_bimanual.yaml" not in readme
     assert "双 Pika" in readme
     assert "D405" in readme

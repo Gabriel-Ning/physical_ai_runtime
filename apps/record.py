@@ -1,70 +1,256 @@
 #!/usr/bin/env python3
 # Copyright 2026 Physical AI Runtime contributors
 # SPDX-License-Identifier: Apache-2.0
-"""apps/record.py: Production Multi-Modal Robot Dataset Recorder Application.
+"""apps/record.py: Profile-driven multi-modal episode recorder.
 
-A lightweight, high-performance dataset recording client built entirely on the
-Robot Middleware Interface (RMI) SDK and distributed C++ Episode Recorder.
+Does not start RT or workstation. Bring those up first, then:
 
-Usage:
-  # Record dataset using profile defaults:
-  pixi run record --profile piper_bimanual.yaml
+  python apps/record.py --profile <profile.yaml>
 
-  # Record specific task with custom episode count:
-  pixi run record --profile piper_bimanual.yaml --task "cup_sorting" --episodes 15
+Profiles:
+  piper_bimanual.yaml              MuJoCo default (head + two wrist cams from RT)
+  site/piper_bimanual_real.yaml    Real cell (workstation Orbbec + RealSense)
+  fr3_pika_single_arm.yaml / marvin_bimanual.yaml
+                                   Same app; physical clutch owns engage
+
+Piper has no device clutch. ENTER calls every workstation ``preempt_service``
+in parallel (leaders publish clutch). ENTER again ends the episode.
+
+MuJoCo smoke (local RT cameras; no real camera drivers):
+
+  pixi run rt-piper backend:=mujoco
+  pixi run workstation-piper use_sim_time:=true \\
+    with_orbbec:=false with_realsense:=false with_leaders:=true
+  python apps/record.py --profile piper_bimanual.yaml --use-sim-time
+
+Real cell (RT already up on the RT host):
+
+  pixi run workstation-piper with_leaders:=true
+  python apps/record.py --profile site/piper_bimanual_real.yaml
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import select
 import shutil
+import sys
 import threading
 import time
-from contextlib import ExitStack
 from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
 import rmi
+import yaml
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CompressedImage, Image
 from std_srvs.srv import SetBool
-from trajectory_msgs.msg import JointTrajectory
+
+
+def _profile_raw(profile: Any) -> dict[str, Any]:
+    raw = getattr(profile, "raw_data", None)
+    if raw is None and isinstance(profile, dict):
+        raw = profile
+    return raw if isinstance(raw, dict) else {}
+
+
+def _workstation_share(profile: Any) -> Path | None:
+    em = _profile_raw(profile).get("execution_manager_config")
+    if not isinstance(em, dict):
+        return None
+    package = em.get("package")
+    if not package:
+        return None
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        installed = Path(get_package_share_directory(str(package)))
+        if installed.is_dir():
+            return installed
+    except Exception:  # noqa: BLE001 - fall back to the source tree.
+        pass
+    repo = Path(__file__).resolve().parents[1]
+    for package_xml in repo.glob("src/**/package.xml"):
+        if f"<name>{package}</name>" not in package_xml.read_text(encoding="utf-8"):
+            continue
+        return package_xml.parent
+    return None
+
+
+def _part_for_joints(groups: dict[str, Any], joint_names: list[str]) -> str:
+    wanted = list(joint_names)
+    for name, group in groups.items():
+        if isinstance(group, dict) and list(group.get("joint_names") or []) == wanted:
+            return str(name)
+    return ""
+
+
+def _teleoperators_from_workstation(
+    leaders: dict[str, Any], em: dict[str, Any]
+) -> dict[str, Any]:
+    groups = em.get("groups") or {}
+    sources = em.get("sources") or {}
+    devices: dict[str, Any] = {}
+    for node_name, block in leaders.items():
+        if not isinstance(block, dict):
+            continue
+        params = block.get("ros__parameters")
+        if not isinstance(params, dict) or not params.get("joint_reference_topic"):
+            continue
+        clutch = params.get("clutch_topic")
+        arm_part = _part_for_joints(groups, list(params.get("joint_names") or []))
+        grip_name = params.get("follower_gripper_joint_name") or params.get(
+            "gripper_joint_name"
+        )
+        gripper_part = _part_for_joints(groups, [grip_name] if grip_name else [])
+        target_node = ""
+        for source_name, source in sources.items():
+            if not isinstance(source, dict):
+                continue
+            if source.get("activation_topic") != clutch:
+                continue
+            inputs = source.get("inputs") or {}
+            arm_in = inputs.get(arm_part) if arm_part else None
+            if (
+                isinstance(arm_in, dict)
+                and arm_in.get("command_contract") == "joint_reference"
+                and gripper_part in inputs
+            ):
+                target_node = str(source_name)
+                break
+        if not arm_part or not gripper_part or not target_node:
+            continue
+        preempt = params.get("preempt_service")
+        if not isinstance(preempt, str) or not preempt.strip():
+            preempt = f"/{node_name}/preempt"
+        devices[node_name] = {
+            "preempt_service": preempt.strip(),
+            "arm_source": params["joint_reference_topic"],
+            "gripper_source": params["gripper_reference_topic"],
+            "arm_part": arm_part,
+            "gripper_part": gripper_part,
+            "target_node": target_node,
+        }
+    return devices
+
+
+def load_teleoperators(profile: Any) -> dict[str, Any]:
+    """Leader devices from workstation ``config/teleop/*.yaml`` (profile package)."""
+    share = _workstation_share(profile)
+    em_ref = _profile_raw(profile).get("execution_manager_config")
+    em_file = em_ref.get("file") if isinstance(em_ref, dict) else None
+    if share is None or not em_file:
+        return {}
+    em_path = share / str(em_file)
+    teleop_dir = share / "config" / "teleop"
+    if not em_path.is_file() or not teleop_dir.is_dir():
+        return {}
+    em = yaml.safe_load(em_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(em, dict):
+        return {}
+    devices: dict[str, Any] = {}
+    for path in sorted(teleop_dir.glob("*.yaml")):
+        leaders = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if isinstance(leaders, dict):
+            devices.update(_teleoperators_from_workstation(leaders, em))
+    return devices
+
+
+def _device_cfgs(teleoperators: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        name: cfg
+        for name, cfg in teleoperators.items()
+        if isinstance(cfg, dict)
+    }
+
+
+def _node_context_ok(node: Any) -> bool:
+    try:
+        context = getattr(node, "context", None)
+        return bool(context is not None and context.ok())
+    except Exception:  # noqa: BLE001 - RCL context may already be torn down.
+        return False
+
+
+def verify_leader_preempt_services(
+    node: Any, teleoperators: dict[str, Any], timeout_sec: float = 3.0
+) -> bool:
+    """Shadow standby has no joint stream; only ``~/preempt`` must be up."""
+    ok = True
+    for name, cfg in _device_cfgs(teleoperators).items():
+        srv_name = cfg.get("preempt_service")
+        if not srv_name:
+            print(f"  [!] {name}: missing preempt_service")
+            ok = False
+            continue
+        client = None
+        try:
+            client = node.create_client(SetBool, srv_name)
+            ready = client.wait_for_service(timeout_sec=timeout_sec)
+            print(
+                f"  {'[✓]' if ready else '[!]'} {name:<14}: {srv_name} -> "
+                f"{'READY' if ready else 'UNAVAILABLE (workstation with_leaders:=true)'}"
+            )
+            ok = ok and ready
+        except Exception as exc:  # noqa: BLE001 - aggregated like set_teleop_preempt.
+            print(f"  [!] {name}: {exc.__class__.__name__}")
+            ok = False
+        finally:
+            if client is not None:
+                try:
+                    node.destroy_client(client)
+                except Exception:  # noqa: BLE001, S110 - best-effort during shutdown.
+                    pass
+    return ok
 
 
 def set_teleop_preempt(
     node: Any, teleoperators: dict[str, Any], preempt_active: bool
 ) -> bool:
-    """Set every leader mode, requiring all transitions to succeed."""
-    if not teleoperators:
+    """Call every leader ``~/preempt`` in parallel. Leaders publish clutch to EM."""
+    cfgs = [
+        (name, cfg.get("preempt_service"))
+        for name, cfg in _device_cfgs(teleoperators).items()
+    ]
+    if not cfgs:
         return True
-    try:
-        context = getattr(node, "context", None)
-        if context is None or not context.ok():
-            return False
-    except Exception:  # noqa: BLE001 - RCL context may already be torn down.
+    if not _node_context_ok(node):
         return False
+    clients: list[Any] = []
+    futures: list[tuple[str, str, Any]] = []
     failures: list[str] = []
-    for name, cfg in teleoperators.items():
-        srv_name = cfg.get("preempt_service")
-        if not srv_name:
-            failures.append(f"{name}: missing preempt_service")
-            continue
-        client = None
-        try:
+    try:
+        for name, srv_name in cfgs:
+            if not srv_name:
+                failures.append(f"{name}: missing preempt_service")
+                continue
             client = node.create_client(SetBool, srv_name)
+            clients.append(client)
             if not client.wait_for_service(timeout_sec=3.0):
                 failures.append(f"{name}: {srv_name} unavailable")
                 continue
-            future = client.call_async(SetBool.Request(data=preempt_active))
-            t_end = time.monotonic() + 5.0
-            while not future.done() and time.monotonic() < t_end:
+            futures.append(
+                (name, srv_name, client.call_async(SetBool.Request(data=preempt_active)))
+            )
+        t_end = time.monotonic() + 5.0
+        pending = list(futures)
+        while pending and time.monotonic() < t_end:
+            pending = [
+                item for item in pending if not item[2].done()
+            ]
+            if pending:
                 time.sleep(0.01)
+        for name, srv_name, future in futures:
             if not future.done():
                 failures.append(f"{name}: {srv_name} timed out")
                 continue
-            response = future.result()
+            try:
+                response = future.result()
+            except Exception as exc:  # noqa: BLE001 - service failures are aggregated.
+                failures.append(f"{name}: {exc.__class__.__name__}")
+                continue
             if response is None or not response.success:
                 failures.append(
                     f"{name}: {getattr(response, 'message', 'no response')}"
@@ -74,18 +260,46 @@ def set_teleop_preempt(
                 "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
             )
             print(f"  [✓] {name} Preempt {mode_label}: {response.message}")
-        except Exception as exc:  # noqa: BLE001 - service failures are aggregated.
-            failures.append(f"{name}: {exc.__class__.__name__}")
-        finally:
-            if client is not None:
-                try:
-                    node.destroy_client(client)
-                except Exception:  # noqa: BLE001, S110 - best-effort during shutdown.
-                    pass
+    finally:
+        for client in clients:
+            try:
+                node.destroy_client(client)
+            except Exception:  # noqa: BLE001, S110 - best-effort during shutdown.
+                pass
     if failures:
         print("  [!] Leader mode transition failed: " + "; ".join(failures))
         return False
     return True
+
+
+def _drain_stdin() -> None:
+    if not sys.stdin.isatty():
+        return
+    while select.select([sys.stdin], [], [], 0)[0]:
+        if not sys.stdin.readline():
+            break
+
+
+def _wait_leader_teleop_active(
+    ctx: Any, teleoperators: dict[str, Any], timeout_sec: float = 2.0
+) -> set[str]:
+    wanted = [
+        str(cfg["target_node"])
+        for cfg in _device_cfgs(teleoperators).values()
+        if cfg.get("target_node")
+    ]
+    if not wanted:
+        return set()
+    nodes = {name: ctx.make_node(name) for name in wanted}
+    deadline = time.monotonic() + timeout_sec
+    active: set[str] = set()
+    need = set(wanted)
+    while time.monotonic() < deadline:
+        active = {name for name, node in nodes.items() if node.has_control}
+        if need <= active:
+            return active
+        time.sleep(0.02)
+    return active
 
 
 def verify_cameras(
@@ -167,7 +381,7 @@ def smooth_homing(
                     list(target),
                 )
 
-    for cfg in teleoperators.values():
+    for cfg in _device_cfgs(teleoperators).values():
         arm_p, grip_p = cfg["arm_part"], cfg["gripper_part"]
         arm_spec, grip_spec = (
             ctx.profile.parts.get(arm_p),
@@ -192,29 +406,48 @@ def smooth_homing(
     steps = int(max(duration_s * rate_hz, 10))
     dt = duration_s / steps
 
-    policy_node = ctx.make_node("Policy")
-    t_start = time.monotonic()
-    for i in range(steps + 1):
-        s = i / steps
-        h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
+    policy_node = ctx.make_node("JointPolicy")
+    with policy_node.activate(preempt=True):
+        t_start = time.monotonic()
+        for i in range(steps + 1):
+            def select_reference(_):
+                s = i / steps
+                h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
 
-        actions = [
-            rmi.Action(
-                part=part_name,
-                command="joint_reference",
-                value=[
-                    q_start[j] + h * (q_goal[j] - q_start[j])
-                    for j in range(len(q_goal))
-                ],
-            )
-            for part_name, (q_start, q_goal) in parts_to_home.items()
-        ]
-        policy_node.submit(actions)
+                actions = [
+                    rmi.Action(
+                        part=part_name,
+                        command="joint_reference",
+                        value=[
+                            q_start[j] + h * (q_goal[j] - q_start[j])
+                            for j in range(len(q_goal))
+                        ],
+                    )
+                    for part_name, (q_start, q_goal) in parts_to_home.items()
+                ]
+                return actions
+            actions = policy_node.select_action(selector=select_reference)
+            policy_node.submit(actions)
 
-        elapsed = time.monotonic() - t_start
-        target_t = (i + 1) * dt
-        if target_t > elapsed:
-            time.sleep(target_t - elapsed)
+            elapsed = time.monotonic() - t_start
+            target_t = (i + 1) * dt
+            if target_t > elapsed:
+                time.sleep(target_t - elapsed)
+
+
+def _open_context(profile: str, *, use_sim_time: bool):
+    """Build RMI Context; optionally pin the node clock to /clock."""
+    if not use_sim_time:
+        return rmi.Context.from_profile(profile)
+
+    import rclpy
+    from rclpy.parameter import Parameter
+
+    if not rclpy.ok():
+        rclpy.init()
+    node = rclpy.create_node("rmi_record")
+    node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+    return rmi.Context.from_profile(profile, node=node)
 
 
 def parse_args() -> argparse.Namespace:
@@ -250,6 +483,15 @@ def parse_args() -> argparse.Namespace:
         "--skip-camera-check",
         action="store_true",
         help="Skip camera perception stream warmup check",
+    )
+    parser.add_argument(
+        "--use-sim-time",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Stamp commands with /clock (required when workstation uses sim time). "
+            "Wall-clock stamps are dropped by EM as future_command."
+        ),
     )
     return parser.parse_args()
 
@@ -296,19 +538,13 @@ def _finalized_episode_directory(scope: Any) -> Path:
     return path if path.is_dir() else path.parent
 
 
-def _relay(node: rmi.Node, part: str):
-    def _callback(msg: JointTrajectory) -> None:
-        node.submit(rmi.Action(part=part, command="joint_reference", value=msg))
-
-    return _callback
-
-
 def main() -> None:
     args = parse_args()
 
     # 1. Connect Context strictly from Profile
     print("[1/4] Connecting to robot embodiment runtime...")
-    ctx = rmi.Context.from_profile(args.profile)
+    print(f"  use_sim_time={args.use_sim_time}")
+    ctx = _open_context(args.profile, use_sim_time=args.use_sim_time)
     ctx.wait_until_ready(timeout=6.0)
 
     # 2. Extract Profile Parameters
@@ -328,23 +564,36 @@ def main() -> None:
         homing_cfg.get("home_pose", [0.0, 0.5, -0.5, 0.0, 0.0, 0.0]),
     )
 
-    teleoperators = ctx.profile.raw_data.get("teleoperators", {})
+    teleoperators = load_teleoperators(ctx.profile)
     cameras_cfg = ctx.profile.raw_data.get("sensors", {}).get("cameras", {})
 
     print("=" * 72)
     print("  RMI Production Multi-Modal Dataset Recorder Client")
     print(f"  Embodiment Profile : {args.profile}")
+    print(f"  Sim clock          : {args.use_sim_time}")
     print(f"  Task Description   : '{task_name}'")
     print(f"  Target Episodes    : {target_episodes}")
     print(f"  Recording Rate     : {rate_hz:.1f} Hz")
     print(
         f"  Dataset Directory  : {Path(rec_cfg.get('root_dir', 'data/episodes')) / task_name}"
     )
+    if _device_cfgs(teleoperators):
+        services = [
+            f"{name}:{cfg.get('preempt_service')}"
+            for name, cfg in _device_cfgs(teleoperators).items()
+        ]
+        print(f"  Keyboard clutch    : ENTER toggles {services}")
+    else:
+        print("  Keyboard clutch    : none (device clutch / ENTER gates recording only)")
     print("=" * 72)
 
     # 3. Perception Warmup
     if not args.skip_camera_check and cameras_cfg:
         verify_cameras(ctx.node, cameras_cfg, timeout_sec=3.0)
+
+    if _device_cfgs(teleoperators):
+        print("\n[leaders] Verifying ~/preempt (shadow has no joint stream)...")
+        verify_leader_preempt_services(ctx.node, teleoperators)
 
     # 4. Activate MCAP Recorder Backend
     recorder = ctx.make_recorder(
@@ -354,7 +603,6 @@ def main() -> None:
     recorder.activate()
 
     robot = ctx.robot
-    qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
     saved_episodes: list[str] = []
 
     try:
@@ -376,11 +624,18 @@ def main() -> None:
             )
             print("  [✓] Staging Home Pose reached. Master & Slave aligned.")
 
-            # STEP 2: Ready Gate (Simulating Preempt Engagement via Keyboard Enter)
+            # STEP 2: Keyboard gate. Piper: ENTER = parallel preempt. Else ENTER starts bag only.
             print("\n" + "-" * 72)
-            input(
-                f"  >> [READY] Press [ENTER] to ENGAGE Preempt & START recording Episode {current_ep_idx}... "
-            )
+            _drain_stdin()
+            if _device_cfgs(teleoperators):
+                input(
+                    f"  >> [READY] Press [ENTER] to ENGAGE both leaders & START Episode {current_ep_idx}... "
+                )
+            else:
+                input(
+                    f"  >> [READY] Press [ENTER] to START recording Episode {current_ep_idx}... "
+                )
+            _drain_stdin()
             print("-" * 72)
 
             metadata = {
@@ -400,42 +655,21 @@ def main() -> None:
             start_time = time.monotonic()
             dt = 1.0 / rate_hz
 
-            # STEP 3: Lockstep Recording & Active Teleop Streaming
-            with (
-                recorder.episode(task=task_name, metadata=metadata) as ep,
-                ExitStack() as stack,
-            ):
-                    for name, cfg in teleoperators.items():
-                        node_name = cfg.get("target_node") or cfg.get(
-                            "target_agent", name
-                        )
-                        teleop_node = ctx.make_node(node_name)
-                        arm_sub = ctx.node.create_subscription(
-                            JointTrajectory,
-                            cfg["arm_source"],
-                            _relay(teleop_node, cfg["arm_part"]),
-                            qos,
-                        )
-                        gripper_sub = ctx.node.create_subscription(
-                            JointTrajectory,
-                            cfg["gripper_source"],
-                            _relay(teleop_node, cfg["gripper_part"]),
-                            qos,
-                        )
-                        stack.callback(ctx.node.destroy_subscription, gripper_sub)
-                        stack.callback(ctx.node.destroy_subscription, arm_sub)
-
-                    # Engage 0-G float on physical teleop devices
+            # STEP 3: Record while leaders publish clutch + joints to EM.
+            with recorder.episode(task=task_name, metadata=metadata) as ep:
                     if not set_teleop_preempt(ctx.node, teleoperators, True):
                         set_teleop_preempt(ctx.node, teleoperators, False)
                         raise RuntimeError(
                             "teleoperation was not engaged; every leader must confirm 0-G mode"
                         )
+                    active = _wait_leader_teleop_active(ctx, teleoperators)
+                    if _device_cfgs(teleoperators):
+                        print(f"  [ACTIVE] {sorted(active) or list(_device_cfgs(teleoperators))}")
 
                     print(
                         "\n  🔴 RECORDING ACTIVE! Manipulate master arms to demonstrate task."
                     )
-                    print("  >> Press [ENTER] in console when episode is COMPLETE.\n")
+                    print("  >> Press [ENTER] to FINISH this episode (releases preempt).\n")
                     stop_thread.start()
 
                     step_count = 0
@@ -462,6 +696,7 @@ def main() -> None:
                     # STEP 4: Release Preempt back to Shadow fallback mode
                     set_teleop_preempt(ctx.node, teleoperators, False)
 
+            _drain_stdin()
             last_recorded_path = str(_finalized_episode_directory(ep))
 
             print(

@@ -15,3 +15,5 @@ piper_leader:
     gripper_reference_topic: /action_sources/piper_leader/end_effector/joint_reference
     pendant_state_topic: /teleop/piper_leader/pendant_state
     status_topic: /teleop/piper_leader/status
+    clutch_topic: /teleop/piper_joint/clutch
+    preempt_service: ~/preempt

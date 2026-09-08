@@ -20,6 +20,7 @@
 #include "mujoco_ros2_control/mujoco_simulation.hpp"
 #include "array_safety.h"
 #include "mujoco_ros2_control/sim_display_text.hpp"
+#include "render_loop_exit.hpp"
 
 #include <unistd.h>
 #include <cerrno>
@@ -528,6 +529,7 @@ MujocoSimulation::~MujocoSimulation()
 bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::string& model_path,
                                   const std::string& mujoco_model_topic, double sim_speed_factor, bool headless)
 {
+  explicit_shutdown_requested_.store(false);
   node_ = node;
   model_path_ = model_path;
   mujoco_model_topic_ = mujoco_model_topic;
@@ -623,6 +625,12 @@ bool MujocoSimulation::initialize(rclcpp::Node::SharedPtr node, const std::strin
       // Blocks until terminated
       RCLCPP_INFO(get_logger(), "Starting the MuJoCo rendering thread...");
       sim_->RenderLoop();
+      if (detail::handle_render_loop_exit(sim_->exitrequest, explicit_shutdown_requested_,
+                                          node_->get_node_base_interface()->get_context()))
+      {
+        RCLCPP_INFO(get_logger(), "MuJoCo rendering window closed; shut down its ROS context.");
+      }
+
       // GlfwAdapter frees its mjrContext in its destructor. Destroy it here,
       // while its OpenGL context is still current on the owning UI thread,
       // rather than later from MujocoSimulation's destructor thread.
@@ -823,6 +831,8 @@ void MujocoSimulation::start_physics_thread()
 
 void MujocoSimulation::shutdown()
 {
+  explicit_shutdown_requested_.store(true);
+
   // If sim_ is created and running, clean shut it down
   if (sim_)
   {
@@ -876,6 +886,9 @@ void MujocoSimulation::reset_world_state(bool fill_initial_state,
   // Reset applied forces
   std::fill(mj_data_->qfrc_applied, mj_data_->qfrc_applied + mj_model_->nv, 0.0);
   std::fill(mj_data_->xfrc_applied, mj_data_->xfrc_applied + 6 * mj_model_->nbody, 0.0);
+
+  // Restore equality-constraint activations to their MJCF defaults
+  std::copy(mj_model_->eq_active0, mj_model_->eq_active0 + mj_model_->neq, mj_data_->eq_active);
 
   {
     // Clear staged control inputs so stale commands from before the reset are not re-applied

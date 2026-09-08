@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Manual simulation-only A/B check; run in a sourced ROS workspace.
 
-python test/check_camera_fanout.py --domain 98 [--gui] [--dual-camera]
+python test/check_camera_fanout.py --domain 98 [--gui] [--dual-camera] [--max-subscribers N]
 Starts its own MuJoCo with a unique SHM prefix; never commands hardware.
 Measures wall-clock reception, SHM production and /clock RTF. JSON goes to stdout.
+Use MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI to override bridge DDS (ablation vs default spdp).
 """
 import argparse
 import json
@@ -61,8 +62,16 @@ def main():
     parser.add_argument('--seconds', type=float, default=10)
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--dual-camera', action='store_true')
+    parser.add_argument(
+        '--max-subscribers',
+        type=int,
+        default=2,
+        help='Measure wall FPS for 0..N independent subscriber processes (default: 2).',
+    )
     parser.add_argument('--subscriber', nargs='+', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.max_subscribers < 0:
+        parser.error('--max-subscribers must be >= 0')
     os.environ['ROS_DOMAIN_ID'] = str(args.domain)
     if args.subscriber:
         print(json.dumps(receive(args.subscriber, args.seconds)))
@@ -107,10 +116,10 @@ def main():
             for topic in topics:
                 publishers = node.get_publishers_info_by_topic(topic)
                 assert [p.node_name for p in publishers] == ['mujoco_image_bridge'], topic
-            cm = node.get_publisher_names_and_types_by_node('mujoco_ros2_control_node', '/')
+            cm = node.get_publisher_names_and_types_by_node('controller_manager', '/')
             assert not any('sensor_msgs/msg/Image' in types for _, types in cm), cm
             phases = []
-            for count in (0, 1, 2):
+            for count in range(0, args.max_subscribers + 1):
                 clocks.clear()
                 before = {name: sequence(path) for name, path in paths.items()}
                 started = time.monotonic()
@@ -132,13 +141,19 @@ def main():
                     'source_fps': {name: (sequence(path) - before[name]) / elapsed for name, path in paths.items()},
                     'rtf': (clocks[-1][1] - clocks[0][1]) / (clocks[-1][0] - clocks[0][0]),
                     'clock_backwards': any(b[1] < a[1] for a, b in zip(clocks, clocks[1:])),
+                    'bridge_cyclonedds_uri': os.environ.get(
+                        'MUJOCO_IMAGE_BRIDGE_CYCLONEDDS_URI', '(inherit+spdp append)'),
+                    'client_cyclonedds_uri': os.environ.get('CYCLONEDDS_URI', ''),
                 }
                 phases.append(result)
                 print(json.dumps(result), flush=True)
                 assert not result['clock_backwards']
-            for client in phases[2]['wall_fps']:
-                for topic in topics:
-                    assert client[topic] >= phases[1]['wall_fps'][0][topic] * 0.9 > 0, (topic, phases)
+            # Dual-subscriber regression: only when that phase was requested.
+            if args.max_subscribers >= 2 and len(phases) > 2 and phases[1]['wall_fps']:
+                baseline = phases[1]['wall_fps'][0]
+                for client in phases[2]['wall_fps']:
+                    for topic in topics:
+                        assert client[topic] >= baseline[topic] * 0.9 > 0, (topic, phases)
         finally:
             for client in clients:
                 if client.poll() is None:

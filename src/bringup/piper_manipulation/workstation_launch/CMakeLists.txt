@@ -21,7 +21,8 @@ install(DIRECTORY "${REPO_ROOT}/apps/profiles/"
   DESTINATION share/${PROJECT_NAME}/profiles
 )
 install(FILES
-  "${REPO_ROOT}/apps/recording/piper_bimanual.yaml"
+  "${REPO_ROOT}/apps/recording/piper_bimanual_real.yaml"
+  "${REPO_ROOT}/apps/recording/piper_bimanual_mujoco.yaml"
   "${REPO_ROOT}/apps/recording/piper_bimanual_no_cam.yaml"
   DESTINATION share/${PROJECT_NAME}/recording
 )

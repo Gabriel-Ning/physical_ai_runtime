@@ -71,6 +71,9 @@ def _include_control_stack(context, *args, **kwargs):
                     "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
                         "jtc_guard_heartbeat_timeout_s"
                     ),
+                    "jtc_guard_cancel_response_timeout_s": LaunchConfiguration(
+                        "jtc_guard_cancel_response_timeout_s"
+                    ),
                 },
             )
         ]
@@ -89,6 +92,9 @@ def _include_control_stack(context, *args, **kwargs):
                 "gripper_serial_port": LaunchConfiguration("gripper_serial_port"),
                 "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
                     "jtc_guard_heartbeat_timeout_s"
+                ),
+                "jtc_guard_cancel_response_timeout_s": LaunchConfiguration(
+                    "jtc_guard_cancel_response_timeout_s"
                 ),
             },
         )
@@ -165,6 +171,9 @@ def generate_launch_description() -> LaunchDescription:
                 description="Serial device for the attached Pika gripper.",
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
+            DeclareLaunchArgument(
+                "jtc_guard_cancel_response_timeout_s", default_value="0.5"
+            ),
             DeclareLaunchArgument(
                 "with_cameras",
                 default_value="false",

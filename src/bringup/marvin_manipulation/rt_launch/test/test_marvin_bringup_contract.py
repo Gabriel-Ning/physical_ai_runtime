@@ -113,6 +113,17 @@ def test_jtc_uses_validated_marvin_goal_constraints() -> None:
         )
 
 
+def test_controller_bringup_rejects_mujoco() -> None:
+    launch = (PACKAGE_ROOT / "launch" / "controller_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "MuJoCo is owned by mujoco_bringup.launch.py" in launch
+    assert "_resolve_fake_hardware" in launch
+    assert "mujoco_image_bridge" not in launch
+    assert "_camera_bridge_parameters" not in launch
+    assert 'package="mujoco_ros2_control"' not in launch
+
+
 def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
     launch_source = (
         PACKAGE_ROOT / "launch" / "controller_bringup.launch.py"
@@ -162,6 +173,74 @@ def test_server_defaults_safe_and_leaves_execution_to_rmi_deployment() -> None:
         assert f'"{argument}"' in launch_source
     assert 'default_value="/dev/pika_left_gripper"' in launch_source
     assert 'default_value="/dev/pika_right_gripper"' in launch_source
+
+
+def test_composition_urdf_matches_franka_mujoco_pattern() -> None:
+    urdf = (PACKAGE_ROOT / "urdf" / "marvin_manipulation.urdf.xacro").read_text(
+        encoding="utf-8"
+    )
+    assert "use_sim_mujoco" in urdf
+    assert "mujoco_ros2_control/MujocoSystemInterface" in urdf
+    assert "MarvinMujocoHardware" in urdf
+    assert "<!-- 1. Unified MuJoCo Simulation Hardware Interface -->" in urdf
+    assert "<!-- 2. Real Hardware or Generic Mock Hardware Interface -->" in urdf
+    assert urdf.count("MujocoSystemInterface") == 1
+    assert "marvin_arm_ros2_control" in urdf
+    assert 'xacro:unless value="$(arg use_sim_mujoco)"' in urdf
+    assert 'xacro:if value="$(arg use_sim_mujoco)"' in urdf
+
+
+def test_mujoco_bringup_owns_sim_path() -> None:
+    assert (PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py").is_file()
+    assert (PACKAGE_ROOT / "config" / "mujoco_plugins.yaml").is_file()
+    assert (PACKAGE_ROOT / "mjcf" / "robot" / "test_marvin.xml").is_file()
+    assert (PACKAGE_ROOT / "mjcf" / "robot" / "marvin_bimanual_base.xml").is_file()
+    assert (PACKAGE_ROOT / "mjcf" / "actuators" / "marvin_position_actuators.xml").is_file()
+    assets = (PACKAGE_ROOT / "mjcf" / "robot" / "marvin_assets.xml").read_text(
+        encoding="utf-8"
+    )
+    assert "../../../../../marvin_description/share/marvin_description/meshes" in assets
+    assert "../../../../../pika_gripper_description/share/pika_gripper_description/meshes" in assets
+    base = (PACKAGE_ROOT / "mjcf" / "robot" / "marvin_bimanual_base.xml").read_text(
+        encoding="utf-8"
+    )
+    # URDF rpy 1.5708 -1.5708 0 → quat wxyz ≈ 0.5 0.5 -0.5 0.5 (not euler xyz).
+    assert 'name="Link6_L"' in base
+    assert "0.49999816 0.5 -0.5 0.50000184" in base
+    assert 'axis="-1 0 0"' in base
+    assert "base_to_left_arm" not in base
+    assert 'name="Base_L"' in base and 'name="Base_R"' in base
+    assert 'name="flange_L"' in base and 'name="flange_R"' in base
+    assert 'body1="Link5_L" body2="Link7_L"' in base
+    assert 'body1="Link5_R" body2="Link7_R"' in base
+    assert 'body1="base_link" body2="Link1_L"' in base
+    assert 'body1="base_link" body2="Link1_R"' in base
+    launch = (PACKAGE_ROOT / "launch" / "mujoco_bringup.launch.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_resolve_mujoco_model" in launch
+    assert "mujoco_image_bridge" in launch
+    assert 'package="mujoco_ros2_control"' in launch
+    assert "ParameterValue" in launch
+    assert 'get_package_share_directory("marvin_manipulation_rt_launch")' in launch
+    assert '"urdf", "marvin_manipulation.urdf.xacro"' in launch
+    assert 'os.path.join(share, "config", "mujoco_plugins.yaml")' in launch
+    assert "test_marvin" in launch
+    assert "duobench_tasks" in launch
+    assert "execution_manager.launch.py" not in launch
+    plugins = yaml.safe_load((PACKAGE_ROOT / "config" / "mujoco_plugins.yaml").read_text())
+    camera = plugins["/**"]["ros__parameters"]["mujoco_plugins"]["mujoco_camera_plugin"]
+    assert camera["output"] == "shm"
+    assert camera["default_policy"] == "disabled"
+    assert camera["left_pika_d405"]["image_topic"] == (
+        "/left_pika_d405/camera/color/image_raw"
+    )
+    assert camera["head_d435"]["image_topic"] == "/head_d435/camera/color/image_raw"
+    assert "{side}_arm_jtc/follow_joint_trajectory:=" in launch
+    assert "/execution/{side}_arm/follow_joint_trajectory" in launch
+    assert "/execution/left_gripper/joint_reference" in launch
+    assert "--controller-ros-args" in launch
+    assert "shlex.quote" in launch
 
 
 def test_manipulation_xacro_is_owned_by_bringup() -> None:
@@ -270,6 +349,27 @@ def test_load_pika_hardware_false_omits_both_grippers() -> None:
     assert "RightPikaGripperHardware" not in names
 
 
+def test_mujoco_xacro_uses_single_system_interface() -> None:
+    import xml.etree.ElementTree as ET
+
+    stdout = _run_xacro(
+        "ros2_control:=true",
+        "use_sim_mujoco:=true",
+        "mujoco_model:=/tmp/test_marvin.xml",
+        "headless:=true",
+    )
+    root = ET.fromstring(stdout)
+    controls = root.findall("ros2_control")
+    assert len(controls) == 1
+    assert controls[0].get("name") == "MarvinMujocoHardware"
+    plugin = controls[0].find("hardware/plugin")
+    assert plugin is not None
+    assert plugin.text == "mujoco_ros2_control/MujocoSystemInterface"
+    names = {joint.get("name") for joint in controls[0].findall("joint")}
+    assert {"Joint1_L", "Joint7_R", "left_gripper_left_joint", "right_gripper_left_joint"} <= names
+    assert len(names) == 16
+
+
 def test_controller_manager_profile_targets_rt_host() -> None:
     manager = _load_config("controller", "controllers.yaml")["controller_manager"][
         "ros__parameters"
@@ -296,6 +396,9 @@ def test_package_xml_declares_runtime_plugins() -> None:
         "manipulation_position_controllers",
         "pika_gripper_hardware_interface",
         "joint_trajectory_controller_guard",
+        "duobench_tasks",
+        "mujoco_ros2_control",
+        "mujoco_ros2_control_plugins",
         "realsense2_camera",
         "mjpeg_cam",
     ):
@@ -371,16 +474,30 @@ def test_camera_yaml_is_unique_stream_source_for_app_profile() -> None:
         assert "pixel_format" not in fisheye
 
 
+def test_rt_stack_dispatches_by_backend_like_franka() -> None:
+    combo = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(encoding="utf-8")
+    assert "_CONTROL_MODULES = {" in combo
+    assert '"mujoco": "mujoco_bringup.launch.py"' in combo
+    assert '"real": "controller_bringup.launch.py"' in combo
+    assert '"fake": "controller_bringup.launch.py"' in combo
+    assert "OpaqueFunction(function=_include_control_stack)" in combo
+    assert "execution_manager.launch.py" not in combo
+    assert 'get_package_share_directory("rmi")' not in combo
+    assert '"backend"' in combo
+
+
 def test_rt_stack_contains_only_rt_runtime_components() -> None:
     source = (PACKAGE_ROOT / "launch" / "rt_stack.launch.py").read_text(
         encoding="utf-8"
     )
     assert "controller_bringup.launch.py" in source
+    assert "mujoco_bringup.launch.py" in source
     assert "prime_arm_position.launch.py" in source
     assert '"prime_arm_position"' in source
     assert "execution_manager.launch.py" not in source
     assert 'get_package_share_directory("rmi")' not in source
     assert '"load_pika_hardware"' in source
+    assert "pika_camera_bringup.launch.py" in source
 
 
 def test_prime_arm_position_is_real_hardware_only() -> None:
@@ -395,7 +512,9 @@ def test_prime_arm_position_is_real_hardware_only() -> None:
     assert "switch_controllers" in prime
     assert "libmarvin" in prime or "CCS" in prime or "vendor" in prime
     assert "use_fake_hardware" in stack
-    assert "_prime_actions" in stack
+    assert "_include_control_stack" in stack
+    assert "prime_arm_position.launch.py" in stack
+    assert "module_key == \"real\"" in stack
     assert "prime_arm_position" not in controller
     assert "switch_controllers" not in controller
 

@@ -331,3 +331,7 @@ __all__ = [
     "format_jtc_guard_diagnostic_lines",
     "goal_rejected_error",
 ]
+
+
+class SourceAuthorityError(RuntimeError):
+    """Source is unregistered, waiting, or an action belongs to an old lease."""

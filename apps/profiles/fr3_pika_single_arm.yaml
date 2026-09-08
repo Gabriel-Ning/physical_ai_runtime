@@ -63,27 +63,27 @@ sensors:
       ros_topic: "/pika_d405/camera/color/image_raw"
       encoding: "rgb8"
       fps: 30
-      # MuJoCo MJCF wrist cam is 640x480; real D405 is 848x480 (see site profile).
-      resolution: [480, 640]
+      # MuJoCo LIBERO-aligned wrist cam is 256x256; real D405 is 848x480 (see site profile).
+      resolution: [256, 256]
       qos_profile: "sensor_data"
     pika_d405_depth:
       ros_topic: "/pika_d405/camera/aligned_depth_to_color/image_raw"
       encoding: "16UC1"
       fps: 30
-      resolution: [480, 640]
+      resolution: [256, 256]
       qos_profile: "sensor_data"
     # 外部全局第三人称视角相机（AgentView，来自 MuJoCo 仿真）
     agentview:
       ros_topic: "/agentview/camera/color/image_raw"
       encoding: "rgb8"
       fps: 30
-      resolution: [480, 640]
+      resolution: [256, 256]
       qos_profile: "sensor_data"
     agentview_depth:
       ros_topic: "/agentview/camera/aligned_depth_to_color/image_raw"
       encoding: "16UC1"
       fps: 30
-      resolution: [480, 640]
+      resolution: [256, 256]
       qos_profile: "sensor_data"
 
 # ==============================================================================
@@ -100,8 +100,8 @@ sensors:
 homing:
   duration_s: 8.0
   joint_positions:
-    arm: [0.0, -0.7853981633974483, 0.0, -2.356194490192345,
-          0.0, 1.5707963267948966, 0.7853981633974483]
+    arm: [0.0, -0.161037389, 0.0, -2.44459747,
+          0.0, 2.22675220, 0.7853981633974483]
     end_effector: [0.0]
 
 # 【可修改】数据录制默认缺省参数（执行 apps/record.py 时可通过命令行参数动态覆盖）
@@ -119,11 +119,11 @@ features:
   observation:
     "observation.images.pika_d405":
       type: "image"
-      shape: [3, 480, 640]
+      shape: [3, 256, 256]
       source: "sensors.cameras.pika_d405"
     "observation.images.agentview":
       type: "image"
-      shape: [3, 480, 640]
+      shape: [3, 256, 256]
       source: "sensors.cameras.agentview"
     "observation.state":
       type: "vector"

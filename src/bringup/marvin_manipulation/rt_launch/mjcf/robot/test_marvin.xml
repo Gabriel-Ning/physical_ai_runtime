@@ -1,0 +1,17 @@
+<mujoco model="test_marvin">
+  <compiler angle="radian" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <include file="marvin_assets.xml"/>
+  <include file="marvin_bimanual_base.xml"/>
+  <include file="../actuators/marvin_position_actuators.xml"/>
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0.1 0.1 0.1"/>
+    <rgba haze="0.15 0.25 0.35 1"/>
+  </visual>
+  <worldbody>
+    <light pos="0 0 2.5" dir="0 0 -1" directional="true"/>
+    <geom name="floor" type="plane" size="2 2 0.1" rgba="0.2 0.2 0.22 1" contype="1" conaffinity="1"/>
+    <camera name="head_d435" pos="0 -0.55 1.45" xyaxes="1 0 0 0 0.45 0.89" fovy="58" resolution="640 480"/>
+    <camera name="third_person_d435" pos="1.4 -0.8 1.1" xyaxes="0.55 0.83 0 -0.25 0.17 0.95" fovy="58" resolution="640 480"/>
+  </worldbody>
+</mujoco>

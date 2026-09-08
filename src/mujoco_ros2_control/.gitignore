@@ -15,3 +15,6 @@ log/*
 
 # Cloned MuJoCo src
 mujoco_ros2_control/mujoco/*
+
+# Workspace upstream metadata
+.pai_upstream*

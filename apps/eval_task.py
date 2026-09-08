@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Evaluate a policy or teleop runner against benchmark task specifications.
 
-Pure Python API runner adhering to Scheme B architecture:
-- Resolves tasks across both LIBERO (135 tasks) and RoboTwin (51 tasks).
-- Connects to the running RT stack (via ROS 2 / RMI) and Workstation stack (Execution Manager).
-- Supports full batch verification mode (--validate-all) to test reset & check_success across all 186 tasks.
-- Evaluates goal success predicates, tracks success rate, and logs episode metrics.
+Resolves official suites:
+  LIBERO 130 + LIBERO-Plus overlays (Franka)
+  RoboTwin 2.0 50 + RoboTwin 2.0-Plus overlays (Piper)
+  DuoBench 11 with stage metadata (Marvin)
 """
 
 from __future__ import annotations
@@ -23,17 +22,24 @@ except ImportError:
     rmi = None
 
 # Import registries
+import duobench_tasks
 import libero_tasks
 import robotwin_tasks
-from task_base import BaseTask
+from task_base import (
+    BaseTask,
+    PLUS_PERTURBATION_PROFILES,
+    list_plus_profiles,
+)
 
 
 def resolve_task(name: str, context: Any = None, **kwargs: Any) -> BaseTask:
-    """Resolve and instantiate task across both LIBERO and RoboTwin suites."""
+    """Resolve and instantiate task across LIBERO, RoboTwin, and DuoBench suites."""
     if name in libero_tasks.list_tasks():
         return libero_tasks.get_task(name, context=context, **kwargs)
     if name in robotwin_tasks.list_tasks():
         return robotwin_tasks.get_task(name, context=context, **kwargs)
+    if name in duobench_tasks.list_tasks():
+        return duobench_tasks.get_task(name, context=context, **kwargs)
     raise KeyError(
         f"Task '{name}' not found. Use --list-tasks to view all available tasks."
     )
@@ -41,7 +47,11 @@ def resolve_task(name: str, context: Any = None, **kwargs: Any) -> BaseTask:
 
 def list_all_tasks() -> list[str]:
     """Return unified list of all registered tasks across all suites."""
-    all_names = set(libero_tasks.list_tasks()) | set(robotwin_tasks.list_tasks())
+    all_names = (
+        set(libero_tasks.list_tasks())
+        | set(robotwin_tasks.list_tasks())
+        | set(duobench_tasks.list_tasks())
+    )
     return sorted(all_names)
 
 
@@ -65,11 +75,16 @@ class DummyHoldPolicy:
 
 
 def run_batch_validation() -> int:
-    """Systematically validate instantiation, reset, and check_success for ALL 186 tasks."""
+    """Systematically validate instantiation, reset, and check_success for ALL 197 tasks."""
     all_tasks = list_all_tasks()
     print("=" * 70)
     print(f" Physical AI Runtime — Full Suite Batch Task Validation")
-    print(f" Total Registered Tasks: {len(all_tasks)} (LIBERO: {len(libero_tasks.list_tasks())}, RoboTwin: {len(robotwin_tasks.list_tasks())})")
+    print(
+        f" Total Registered Tasks: {len(all_tasks)} "
+        f"(LIBERO: {len(libero_tasks.list_tasks())}, "
+        f"RoboTwin: {len(robotwin_tasks.list_tasks())}, "
+        f"DuoBench: {len(duobench_tasks.list_tasks())})"
+    )
     print("=" * 70)
 
     passed_count = 0
@@ -109,9 +124,10 @@ def run_batch_validation() -> int:
         print("=" * 70)
         return 1
     else:
-        print(f" All 186 tasks across LIBERO and RoboTwin successfully verified!")
-        print(f" - Randomization & reset() verified for 100% of tasks.")
-        print(f" - Predicate evaluation & check_success() verified for 100% of tasks.")
+        print(f" Official suites verified (LIBERO 130, RoboTwin 50, DuoBench 11).")
+        print(f" Plus overlays: {', '.join(list_plus_profiles())}")
+        print(f" - Randomization & reset() verified for registered tasks.")
+        print(f" - Predicate evaluation & check_success() verified on empty obs.")
         print("=" * 70)
         return 0
 
@@ -121,12 +137,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--validate-all",
         action="store_true",
-        help="Run comprehensive batch validation across all 186 tasks (reset & check_success)",
+        help="Run reset/check_success validation across all registered tasks",
     )
     parser.add_argument(
         "--list-tasks",
         action="store_true",
         help="List all registered benchmark tasks across all suites",
+    )
+    parser.add_argument(
+        "--plus-profile",
+        default="demo_clean",
+        choices=list(PLUS_PERTURBATION_PROFILES),
+        help="LIBERO-Plus / RoboTwin 2.0-Plus overlay (default: demo_clean)",
     )
     parser.add_argument(
         "--task",
@@ -175,8 +197,12 @@ def main() -> None:
     if args.list_tasks:
         libero = libero_tasks.list_tasks()
         robotwin = robotwin_tasks.list_tasks()
+        duobench = duobench_tasks.list_tasks()
         print(f"============================================================")
-        print(f" Physical AI Runtime Benchmark Catalog ({len(libero) + len(robotwin)} Total Tasks)")
+        print(
+            f" Physical AI Runtime Benchmark Catalog "
+            f"({len(libero) + len(robotwin) + len(duobench)} Total Tasks)"
+        )
         print(f"============================================================")
         print(f"\n[1] LIBERO Benchmark Suite -> Franka FR3 Single Arm ({len(libero)} tasks)")
         print(f"    Bringup Stack: pixi run rt-franka backend:=mujoco task:=<task_name>")
@@ -188,6 +214,14 @@ def main() -> None:
         print(f"    Dispatch Stack: pixi run workstation-piper use_sim_time:=true")
         for t in robotwin:
             print(f"      - {t}")
+        print(f"\n[3] DuoBench Suite -> Marvin Dual Arm ({len(duobench)} tasks)")
+        print(f"    Bringup Stack: pixi run rt-marvin backend:=mujoco task:=<task_name>")
+        print(f"    Dispatch Stack: pixi run workstation-marvin use_sim_time:=true")
+        for t in duobench:
+            print(f"      - {t}")
+        print(f"\n[4] Plus overlays (LIBERO-Plus / RoboTwin 2.0-Plus) -> --plus-profile")
+        for p in list_plus_profiles():
+            print(f"      - {p}")
         sys.exit(0)
 
     if args.validate_all:
@@ -204,6 +238,11 @@ def main() -> None:
     if args.task in robotwin_tasks.list_tasks():
         if profile == "fr3_pika_single_arm.yaml":
             profile = "piper_bimanual.yaml"
+        if resource == "arm":
+            resource = "left_arm"
+    elif args.task in duobench_tasks.list_tasks():
+        if profile == "fr3_pika_single_arm.yaml":
+            profile = "marvin_bimanual.yaml"
         if resource == "arm":
             resource = "left_arm"
 
@@ -227,6 +266,7 @@ def main() -> None:
             context=context,
             max_steps=args.max_steps,
             control_freq=args.control_freq,
+            plus_profile=args.plus_profile,
         )
 
         policy_node = context.make_node(args.node_name, policy)
@@ -263,7 +303,7 @@ def main() -> None:
                         obs = context.robot.get_observation()
 
                     # Select and submit action to Execution Manager
-                    actions = policy.select_action(obs)
+                    actions = policy_node[resource].select_action(obs)
                     policy_node[resource].submit(actions)
 
                     # Step task logic and check goal predicates

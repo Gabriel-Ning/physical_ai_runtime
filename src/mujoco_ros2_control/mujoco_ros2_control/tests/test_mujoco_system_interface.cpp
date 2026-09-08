@@ -219,6 +219,10 @@ TEST_F(MujocoSystemInterfaceTest, IntVelocityActuatorSupportsVelocityCommandInte
   ASSERT_EQ(command_interfaces.size(), 1u);
   EXPECT_EQ(command_interfaces.front().get_name(), "wheel_joint/velocity");
 
+  ASSERT_EQ(
+      interface_->perform_command_mode_switch({ "wheel_joint/velocity" }, {}),
+      hardware_interface::return_type::OK);
+
   constexpr double velocity_command = 2.0;
   command_interfaces.front().set_value(velocity_command);
   ASSERT_EQ(interface_->write(rclcpp::Time(0), rclcpp::Duration::from_seconds(0.002)),

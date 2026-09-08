@@ -1,4 +1,13 @@
-"""Timestamped sensors backed by ROS subscriptions."""
+"""Timestamped observation sensors: ROS topics, cameras, and TF poses.
+
+All share one Robot attachment surface: ``Observation.sensors[name]`` holds
+``TimestampedSample[...]``. Context only snapshots ``latest`` — no cross-stream
+time sync.
+
+TCP poses come from TF today (``TfTcpPoseSensor``). A future FoundationPose
+estimator can publish into a topic-backed pose sensor with the same
+``PoseSample`` value type and sensor-name contract.
+"""
 
 from __future__ import annotations
 
@@ -191,6 +200,143 @@ class Camera(Sensor[ValueT]):
         return self.latest
 
 
+@dataclass(frozen=True)
+class PoseSample:
+    """One SE(3) sample in a parent frame (quaternion is wxyz)."""
+
+    position_xyz: tuple[float, float, float]
+    orientation_wxyz: tuple[float, float, float, float]
+    frame_id: str
+    child_frame_id: str = ""
+
+
+class TfTcpPoseSensor:
+    """Pull latest ``base_frame`` → ``tcp_frame`` from a shared TF buffer.
+
+    Implements the same ``name`` / ``latest`` / ``is_ready`` /
+    ``wait_until_ready`` surface as ``Sensor`` so ``Robot`` can attach it.
+    """
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        base_frame: str,
+        tcp_frame: str,
+        buffer: Any,
+        node: Any,
+        lookup_timeout_s: float = 0.05,
+    ) -> None:
+        if not name:
+            raise ValueError("pose sensor name must not be empty")
+        if not base_frame:
+            raise ValueError("base_frame must not be empty")
+        if not tcp_frame:
+            raise ValueError("tcp_frame must not be empty")
+        if lookup_timeout_s < 0.0:
+            raise ValueError("lookup_timeout_s must be non-negative")
+        self.name = name
+        self.base_frame = base_frame
+        self.tcp_frame = tcp_frame
+        self._buffer = buffer
+        self._node = node
+        self._lookup_timeout_s = float(lookup_timeout_s)
+        self._sequence = 0
+
+    @property
+    def value(self) -> PoseSample:
+        return self.latest.value
+
+    @property
+    def latest(self) -> TimestampedSample[PoseSample]:
+        from rclpy.duration import Duration
+        from rclpy.time import Time
+
+        receive_time_s = _node_now_s(self._node)
+        try:
+            transform = self._buffer.lookup_transform(
+                self.base_frame,
+                self.tcp_frame,
+                Time(),
+                timeout=Duration(seconds=self._lookup_timeout_s),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"TF lookup failed for {self.base_frame!r} → {self.tcp_frame!r}: {exc}"
+            ) from exc
+        translation = transform.transform.translation
+        rotation = transform.transform.rotation
+        stamp = transform.header.stamp
+        source_time_s = float(stamp.sec) + float(stamp.nanosec) * 1e-9
+        if source_time_s <= 0.0:
+            source_time_s = receive_time_s
+        self._sequence += 1
+        return TimestampedSample(
+            value=PoseSample(
+                position_xyz=(
+                    float(translation.x),
+                    float(translation.y),
+                    float(translation.z),
+                ),
+                orientation_wxyz=(
+                    float(rotation.w),
+                    float(rotation.x),
+                    float(rotation.y),
+                    float(rotation.z),
+                ),
+                frame_id=self.base_frame,
+                child_frame_id=self.tcp_frame,
+            ),
+            source_time_s=source_time_s,
+            receive_time_s=receive_time_s,
+            sequence=self._sequence,
+            frame_id=self.base_frame,
+        )
+
+    def is_ready(self) -> bool:
+        from rclpy.duration import Duration
+        from rclpy.time import Time
+
+        try:
+            return bool(
+                self._buffer.can_transform(
+                    self.base_frame,
+                    self.tcp_frame,
+                    Time(),
+                    timeout=Duration(seconds=0.0),
+                )
+            )
+        except Exception:
+            return False
+
+    def wait_until_ready(self, timeout: float = 10.0) -> None:
+        if timeout <= 0.0:
+            raise ValueError("timeout must be positive")
+        deadline = time.monotonic() + timeout
+        from rclpy.duration import Duration
+        from rclpy.time import Time
+
+        poll = Duration(seconds=0.05)
+        while time.monotonic() < deadline:
+            try:
+                if self._buffer.can_transform(
+                    self.base_frame,
+                    self.tcp_frame,
+                    Time(),
+                    timeout=poll,
+                ):
+                    return
+            except Exception:
+                pass
+            time.sleep(0.05)
+        raise TimeoutError(
+            f"timed out waiting for TF {self.base_frame!r} → {self.tcp_frame!r}"
+        )
+
+    def close(self) -> None:
+        """TF buffer is owned by Context; nothing to destroy per sensor."""
+
+
 def _identity(value: ValueT) -> ValueT:
     return value
 
@@ -228,7 +374,9 @@ def _header_metadata(message: Any, receive_time_s: float) -> tuple[float, str]:
 
 __all__ = [
     "Camera",
+    "PoseSample",
     "SampleBuffer",
     "Sensor",
+    "TfTcpPoseSensor",
     "TimestampedSample",
 ]

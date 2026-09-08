@@ -13,9 +13,10 @@ from sensor_msgs.msg import JointState as RosJointState
 
 from .config import EmbodimentConfig
 from .node import Node
+from .reset import ResetHandler, ResetMode
 from .robot import Robot
 from .selection import AuthorityClient, ExecutionManagerClient
-from .sensing import Camera, Sensor, _node_now_s
+from .sensing import Camera, Sensor, TfTcpPoseSensor, _node_now_s
 
 
 class Context:
@@ -56,9 +57,13 @@ class Context:
         self._camera_history_sizes: dict[str, int] = {}
         self._sensors: dict[str, Sensor[Any]] = {}
         self._sensor_specs: dict[str, tuple[str, Any, int]] = {}
+        self._tcp_poses: dict[str, TfTcpPoseSensor] = {}
+        self._tf_buffer = None
+        self._tf_listener = None
         self._recorder = None
         self._recorder_config = None
         self._recorder_client_factory = recorder_client_factory
+        self._reset_handler = ResetHandler(self)
         self._executor = None
         self._spin_thread = None
         self._state_subscription = node.create_subscription(
@@ -158,6 +163,11 @@ class Context:
                     self.make_camera(cam_name)
             for cam in self._cameras.values():
                 cam.wait_until_ready(timeout=timeout)
+
+        # 3. TCP pose sensors already registered via make_tcp_pose (TF is mandatory
+        # once requested — same readiness bar as cameras).
+        for pose in self._tcp_poses.values():
+            pose.wait_until_ready(timeout=timeout)
 
     def prepare_execution(
         self,
@@ -326,6 +336,61 @@ class Context:
         self._sensor_specs[name] = (topic, message_type, history_size)
         return sensor
 
+    def make_tcp_pose(
+        self,
+        part_name: str,
+        *,
+        lookup_timeout_s: float = 0.05,
+    ) -> TfTcpPoseSensor:
+        """Attach a TF-backed TCP pose sensor for one Profile part.
+
+        The sample appears on ``Observation.sensors[part_name]``. Frame names
+        come from the part's ``base_frame`` / ``tcp_frame`` (EM-bound). Call
+        before ``wait_until_ready`` so TF readiness is gated like cameras.
+        """
+        if part_name in self._tcp_poses:
+            existing = self._tcp_poses[part_name]
+            if abs(existing._lookup_timeout_s - float(lookup_timeout_s)) > 1e-12:
+                raise ValueError(
+                    f"tcp pose {part_name!r} already exists with a different "
+                    "lookup_timeout_s"
+                )
+            return existing
+        try:
+            part = self.profile.parts[part_name]
+        except KeyError as exc:
+            raise KeyError(f"unknown profile part {part_name!r}") from exc
+        base_frame = part.base_frame or "base_link"
+        tcp_frame = part.tcp_frame or ""
+        if not tcp_frame:
+            raise ValueError(
+                f"part {part_name!r} must declare tcp_frame for make_tcp_pose"
+            )
+        if part_name in self.robot._sensors:
+            raise ValueError(
+                f"sensor name {part_name!r} is already attached to the robot"
+            )
+        self._ensure_tf_listener()
+        sensor = TfTcpPoseSensor(
+            name=part_name,
+            base_frame=base_frame,
+            tcp_frame=tcp_frame,
+            buffer=self._tf_buffer,
+            node=self.node,
+            lookup_timeout_s=lookup_timeout_s,
+        )
+        self._tcp_poses[part_name] = sensor
+        self.robot._attach_sensor(sensor)
+        return sensor
+
+    def _ensure_tf_listener(self) -> None:
+        if self._tf_buffer is not None:
+            return
+        from tf2_ros import Buffer, TransformListener
+
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self.node)
+
     def make_recorder(
         self,
         *,
@@ -365,6 +430,22 @@ class Context:
 
         return MemoryReplayBuffer(capacity=capacity)
 
+    def reset(
+        self,
+        mode: ResetMode | str = ResetMode.AUTO,
+        *,
+        keyframe: str = "",
+        custom_fn: Any | None = None,
+        timeout_sec: float = 5.0,
+    ) -> bool:
+        """Reset embodiment or simulation state according to selected mode."""
+        return self._reset_handler.reset(
+            mode,
+            keyframe=keyframe,
+            custom_fn=custom_fn,
+            timeout_sec=timeout_sec,
+        )
+
     def close(self) -> None:
         if self._closed:
             return
@@ -400,6 +481,14 @@ class Context:
                 sensor.close()
             except Exception:
                 pass
+        for pose in list(self._tcp_poses.values()):
+            try:
+                pose.close()
+            except Exception:
+                pass
+        self._tcp_poses.clear()
+        self._tf_listener = None
+        self._tf_buffer = None
         try:
             self.authority_client.close()
         except Exception:

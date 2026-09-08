@@ -37,6 +37,23 @@ def test_launch_declares_optional_autostart_argument(monkeypatch, tmp_path):
         if isinstance(entity, DeclareLaunchArgument)
     }
     assert "autostart" in arguments
+    assert "use_sim_time" in arguments
     default_value = arguments["autostart"].default_value
     assert len(default_value) == 1
     assert default_value[0].perform(None) == ""
+    sim_default = arguments["use_sim_time"].default_value
+    assert len(sim_default) == 1
+    assert sim_default[0].perform(None) == "false"
+
+
+def test_sim_clock_stamps_only_when_use_sim_time_true():
+    launch = LAUNCH_PATH.read_text(encoding="utf-8")
+    cpp = (
+        Path(__file__).parents[1] / "src" / "piper_leader_node.cpp"
+    ).read_text(encoding="utf-8")
+    assert 'node_params["use_sim_time"]' not in launch
+    assert 'if use_sim_time:' in launch
+    assert 'node_params["stamp_from_sim_clock"] = True' in launch
+    assert "if (stamp_from_sim_clock_)" in cpp
+    assert 'create_subscription<rosgraph_msgs::msg::Clock>' in cpp
+    assert "if (!stamp_from_sim_clock_)" in cpp

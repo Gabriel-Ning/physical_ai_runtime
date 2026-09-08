@@ -17,7 +17,14 @@ def test_profile_resolver_preserves_relative_site_directory():
 
 @pytest.mark.parametrize(
     "profile_name",
-    ["fr3_pika_single_arm.yaml", "marvin_bimanual.yaml", "piper_bimanual.yaml"],
+    [
+        "fr3_pika_single_arm.yaml",
+        "site/fr3_pika_single_arm_real.yaml",
+        "marvin_bimanual.yaml",
+        "site/marvin_bimanual_real.yaml",
+        "piper_bimanual.yaml",
+        "site/piper_bimanual_real.yaml",
+    ],
 )
 def test_every_node_resource_is_an_em_capability(profile_name):
     config = EmbodimentConfig.from_yaml(PROFILES / profile_name)
@@ -47,9 +54,10 @@ def test_every_node_resource_is_an_em_capability(profile_name):
     [
         "apps/recording/franka_manipulation_real.yaml",
         "apps/recording/franka_manipulation_mujoco.yaml",
-        "apps/recording/marvin_manipulation.yaml",
-        "apps/recording/marvin_manipulation_no_cam.yaml",
-        "apps/recording/piper_bimanual.yaml",
+        "apps/recording/marvin_bimanual_real.yaml",
+        "apps/recording/marvin_bimanual_no_cam.yaml",
+        "apps/recording/piper_bimanual_real.yaml",
+        "apps/recording/piper_bimanual_mujoco.yaml",
         "apps/recording/piper_bimanual_no_cam.yaml",
     ],
 )
@@ -66,12 +74,12 @@ def test_recording_contracts_use_typed_authority_and_commands(path):
     assert auth_status["required"] is True
     assert auth_status["start_gate"] is True
 
-    # Authority events must be required
+    # Event-driven: no authority transition during an episode is valid.
     auth_events = by_topic["/execution_manager/authority_events"]
     assert auth_events["expected_type"] == (
         "execution_manager_interfaces/msg/AuthorityEvent"
     )
-    assert auth_events["required"] is True
+    assert auth_events["start_gate"] is False
 
     for stream in streams:
         # Application-facing action sources use ordinary ROS messages. Lease

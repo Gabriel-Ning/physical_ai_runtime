@@ -135,6 +135,24 @@ class PolicyLayout:
     camera_topics: dict[str, str]
     camera_shapes: dict[str, tuple[int, int, int]]
     frequency: float
+    control_mode: str = "joint"
+    action_space: str = "abs"
+    pose_part: str | None = None
+    gripper_parts: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        mode = str(self.control_mode).lower()
+        if mode not in {"joint", "cartesian"}:
+            raise ValueError(
+                f"control_mode must be 'joint' or 'cartesian', got {self.control_mode!r}"
+            )
+        space = str(self.action_space).lower()
+        if space not in {"abs", "rel"}:
+            raise ValueError(
+                f"action_space must be 'abs' or 'rel', got {self.action_space!r}"
+            )
+        if mode == "cartesian" and not self.pose_part:
+            raise ValueError("cartesian PolicyLayout requires pose_part")
 
     @property
     def state_feature_names(self) -> tuple[str, ...]:
@@ -142,8 +160,26 @@ class PolicyLayout:
         return tuple(f"{name}.pos" for name in self.joints.joint_names)
 
     @property
+    def action_dimension(self) -> int:
+        """Policy action vector size (may differ from joint state size)."""
+        if self.control_mode == "cartesian":
+            gripper_dim = sum(
+                len(group.joint_names)
+                for group in self.joints.groups
+                if group.part in self.gripper_parts
+            )
+            return 6 + gripper_dim
+        return self.joints.dimension
+
+    @property
     def action_feature_names(self) -> tuple[str, ...]:
         """Canonical scalar action features in policy output order."""
+        if self.control_mode == "cartesian":
+            names = ["ee_x", "ee_y", "ee_z", "ee_ax", "ee_ay", "ee_az"]
+            for group in self.joints.groups:
+                if group.part in self.gripper_parts:
+                    names.extend(f"{name}.pos" for name in group.joint_names)
+            return tuple(names)
         return self.state_feature_names
 
     @property
@@ -250,16 +286,45 @@ class EmbodimentConfig:
     def policy_layout(self, node_name: str = "Policy") -> PolicyLayout:
         """Resolve the common policy layout consumed offline and at runtime."""
         joints = self.joint_layout(node_name)
-        unsupported = [
+        pose_parts = [
+            group.part
+            for group in joints.groups
+            if group.command == "pose_reference"
+        ]
+        joint_parts = [
+            group.part
+            for group in joints.groups
+            if group.command == "joint_reference"
+        ]
+        other = [
             f"{group.part}.{group.command}"
             for group in joints.groups
-            if group.command != "joint_reference"
+            if group.command not in {"joint_reference", "pose_reference"}
         ]
-        if unsupported:
+        if other:
             raise ValueError(
-                "policy layout requires joint_reference resources; "
-                f"got {unsupported}"
+                "policy layout supports joint_reference and pose_reference only; "
+                f"got {other}"
             )
+        if pose_parts and len(pose_parts) != 1:
+            raise ValueError(
+                "cartesian policy layout requires exactly one pose_reference part; "
+                f"got {pose_parts}"
+            )
+        if pose_parts:
+            control_mode = "cartesian"
+            pose_part = pose_parts[0]
+            gripper_parts = tuple(joint_parts)
+            if not gripper_parts:
+                raise ValueError(
+                    "cartesian policy layout requires at least one gripper "
+                    "joint_reference part"
+                )
+        else:
+            control_mode = "joint"
+            pose_part = None
+            gripper_parts = ()
+
         node = self.nodes[node_name]
         if node.frequency is None or node.frequency <= 0.0:
             raise ValueError(f"node {node_name!r} must declare a positive frequency")
@@ -270,6 +335,13 @@ class EmbodimentConfig:
         state_topic = str(state_feature.get("source", "/joint_states"))
         if not state_topic.startswith("/"):
             raise ValueError("observation.state.source must be an absolute ROS topic")
+
+        action_feature = self.features.get("action", {}).get("action", {})
+        action_space = str(action_feature.get("space", "abs")).lower()
+        if action_space not in {"abs", "rel"}:
+            raise ValueError(
+                f"features.action.action.space must be abs or rel, got {action_space!r}"
+            )
 
         action_topics: dict[str, str] = {}
         for group in joints.groups:
@@ -315,14 +387,7 @@ class EmbodimentConfig:
             camera_topics[feature_name] = camera.ros_topic
             camera_shapes[feature_name] = (height, width, channels)
 
-        declared_action = self.features.get("action", {}).get("action", {})
-        shape = declared_action.get("shape")
-        if shape is not None and list(shape) != [joints.dimension]:
-            raise ValueError(
-                f"features.action.action.shape {shape!r} does not match resolved "
-                f"action dimension {joints.dimension}"
-            )
-        return PolicyLayout(
+        layout = PolicyLayout(
             profile_name=self.name,
             profile_hash=self.profile_hash(),
             joints=joints,
@@ -332,7 +397,24 @@ class EmbodimentConfig:
             camera_topics=camera_topics,
             camera_shapes=camera_shapes,
             frequency=float(node.frequency),
+            control_mode=control_mode,
+            action_space=action_space,
+            pose_part=pose_part,
+            gripper_parts=gripper_parts,
         )
+        declared_action = action_feature
+        shape = declared_action.get("shape")
+        if shape is not None and list(shape) != [layout.action_dimension]:
+            # Shared profiles may declare joint action shape while evaluating a
+            # CartesianPolicy node; only enforce when contracts align.
+            declared_contract = str(declared_action.get("command_contract", ""))
+            if control_mode == "joint" or declared_contract == "pose_reference":
+                raise ValueError(
+                    f"features.action.action.shape {shape!r} does not match resolved "
+                    f"action dimension {layout.action_dimension}"
+                )
+        return layout
+
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> EmbodimentConfig:
@@ -701,6 +783,11 @@ def _nodes(
                     raise ValueError(
                         f"{input_path} must declare exactly one of topic or action"
                     )
+                if action is not None:
+                    suffix = "follow_joint_trajectory" if contract == "joint_trajectory" else contract
+                    expected = f"/execution_manager/ingress/{role.lower()}/{resource}/{suffix}"
+                    if action != expected:
+                        raise ValueError(f"{input_path}.action must use leased ingress {expected!r}")
                 inputs[resource] = NodeInputConfig(
                     endpoint=_string(
                         action if action is not None else topic,

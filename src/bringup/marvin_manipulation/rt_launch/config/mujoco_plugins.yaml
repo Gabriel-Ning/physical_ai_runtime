@@ -1,0 +1,41 @@
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      mujoco_camera_plugin:
+        type: "mujoco_ros2_control_plugins/CameraPlugin"
+        # Align ROS topics with apps/profiles/marvin_bimanual.yaml sensors.
+        # MJCF names: left_pika_d405 / right_pika_d405 / head_d435 / third_person_d435.
+        default_policy: disabled
+        shm_prefix: /pai_mj_cam_
+        camera_publish_rate: 30.0
+        # ros: publish in CM; shm: SHM only, independent bridge publishes images;
+        # both: debug only (SHM plus in-process ROS publishers).
+        output: shm
+        left_pika_d405:
+          policy: streaming
+          frame_name: left_pika_d405_color_optical_frame
+          info_topic: /left_pika_d405/camera/color/camera_info
+          image_topic: /left_pika_d405/camera/color/image_raw
+          depth_topic: /left_pika_d405/camera/aligned_depth_to_color/image_raw
+        right_pika_d405:
+          policy: streaming
+          frame_name: right_pika_d405_color_optical_frame
+          info_topic: /right_pika_d405/camera/color/camera_info
+          image_topic: /right_pika_d405/camera/color/image_raw
+          depth_topic: /right_pika_d405/camera/aligned_depth_to_color/image_raw
+        head_d435:
+          policy: streaming
+          frame_name: head_d435_color_optical_frame
+          info_topic: /head_d435/camera/color/camera_info
+          image_topic: /head_d435/camera/color/image_raw
+          depth_topic: /head_d435/camera/aligned_depth_to_color/image_raw
+        third_person_d435:
+          policy: streaming
+          frame_name: third_person_d435_color_optical_frame
+          info_topic: /third_person_d435/camera/color/camera_info
+          image_topic: /third_person_d435/camera/color/image_raw
+          depth_topic: /third_person_d435/camera/aligned_depth_to_color/image_raw
+      free_joint_state_publisher:
+        type: "mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
+        topic: /free_joint_states
+        publish_rate: 50.0

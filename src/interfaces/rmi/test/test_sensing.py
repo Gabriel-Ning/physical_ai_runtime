@@ -158,3 +158,67 @@ def test_wait_next_does_not_return_an_already_consumed_latest_sample():
 
     with pytest.raises(TimeoutError, match="next sensor sample"):
         sensor.wait_next(timeout=0.001)
+
+
+def test_tf_tcp_pose_sensor_lookup_and_ready():
+    from rmi.sensing import PoseSample, TfTcpPoseSensor
+
+    class FakeBuffer:
+        def __init__(self):
+            self.can = True
+
+        def can_transform(self, target, source, time, timeout=None):
+            return self.can
+
+        def lookup_transform(self, target, source, time, timeout=None):
+            return SimpleNamespace(
+                header=SimpleNamespace(
+                    stamp=SimpleNamespace(sec=7, nanosec=0),
+                    frame_id=target,
+                ),
+                transform=SimpleNamespace(
+                    translation=SimpleNamespace(x=0.1, y=0.2, z=0.3),
+                    rotation=SimpleNamespace(w=1.0, x=0.0, y=0.0, z=0.0),
+                ),
+            )
+
+    node = FakeNode()
+    buffer = FakeBuffer()
+    sensor = TfTcpPoseSensor(
+        name="arm",
+        base_frame="base_link",
+        tcp_frame="fr3_hand_tcp",
+        buffer=buffer,
+        node=node,
+    )
+
+    assert sensor.is_ready() is True
+    sample = sensor.latest
+    assert isinstance(sample.value, PoseSample)
+    assert sample.value.position_xyz == (0.1, 0.2, 0.3)
+    assert sample.value.orientation_wxyz == (1.0, 0.0, 0.0, 0.0)
+    assert sample.source_time_s == 7.0
+    assert sample.receive_time_s == 10.0
+    assert sample.frame_id == "base_link"
+    assert sample.value.child_frame_id == "fr3_hand_tcp"
+
+    buffer.can = False
+    assert sensor.is_ready() is False
+
+
+def test_tf_tcp_pose_sensor_wait_until_ready_times_out():
+    from rmi.sensing import TfTcpPoseSensor
+
+    class NeverReady:
+        def can_transform(self, *args, **kwargs):
+            return False
+
+    sensor = TfTcpPoseSensor(
+        name="arm",
+        base_frame="base",
+        tcp_frame="tcp",
+        buffer=NeverReady(),
+        node=FakeNode(),
+    )
+    with pytest.raises(TimeoutError, match="timed out waiting for TF"):
+        sensor.wait_until_ready(timeout=0.05)

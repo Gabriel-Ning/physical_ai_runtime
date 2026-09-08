@@ -223,7 +223,9 @@ def test_package_xml_declares_runtime_plugins() -> None:
     for dep in (
         "forward_command_controller",
         "franka_hardware",
+        "libero_tasks",
         "manipulation_position_controllers",
+        "mujoco_ros2_control",
         "pika_gripper_hardware_interface",
         "parallel_gripper_action_controller",
         "joint_trajectory_controller_guard",
@@ -246,6 +248,7 @@ def test_rt_stack_contains_only_rt_runtime_components() -> None:
     assert "execution_manager.launch.py" not in source
     assert 'get_package_share_directory("rmi")' not in source
     assert '"load_pika_hardware"' in source
+    assert "jtc_guard_cancel_response_timeout_s" in source
 
 
 def test_mujoco_task_resolves_absolute_path(tmp_path) -> None:
@@ -280,6 +283,7 @@ def test_mujoco_bringup_owns_task_and_bridge() -> None:
         encoding="utf-8"
     )
     assert "_resolve_mujoco_model" in source
+    assert 'package="mujoco_ros2_control"' in source
     assert 'executable="mujoco_image_bridge"' in source
     assert "_camera_bridge_parameters" in source
     assert "mujoco_task" not in source

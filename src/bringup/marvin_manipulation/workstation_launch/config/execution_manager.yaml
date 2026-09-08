@@ -4,40 +4,42 @@ metadata: {name: marvin_bimanual, version: "2.0"}
 # bounds delayed packet pollution; it is not a control-loop latency target.
 max_command_age_s: 0.25
 
+# Trusted workstation sources publish plain ROS commands. EM owns their
+# internal leases, controller switching, preemption, and fallback.
 sources:
-  Planner:
-    source_role: PLANNER
-    preempt: true
-    inputs:
-      left_arm:
-        command_contract: joint_trajectory
-        action: /action_sources/planner/left_arm/follow_joint_trajectory
-      right_arm:
-        command_contract: joint_trajectory
-        action: /action_sources/planner/right_arm/follow_joint_trajectory
-      left_gripper:
-        command_contract: gripper_command
-        action: /action_sources/planner/left_gripper/gripper_command
-      right_gripper:
-        command_contract: gripper_command
-        action: /action_sources/planner/right_gripper/gripper_command
-
-  Policy:
+  JointPolicy:
     source_role: POLICY
     preempt: false
     inputs:
       left_arm:
         command_contract: joint_reference
-        topic: /action_sources/policy/left_arm/joint_reference
+        topic: /action_sources/joint_policy/left_arm/joint_reference
       left_gripper:
         command_contract: joint_reference
-        topic: /action_sources/policy/left_gripper/joint_reference
+        topic: /action_sources/joint_policy/left_gripper/joint_reference
       right_arm:
         command_contract: joint_reference
-        topic: /action_sources/policy/right_arm/joint_reference
+        topic: /action_sources/joint_policy/right_arm/joint_reference
       right_gripper:
         command_contract: joint_reference
-        topic: /action_sources/policy/right_gripper/joint_reference
+        topic: /action_sources/joint_policy/right_gripper/joint_reference
+
+  CartesianPolicy:
+    source_role: POLICY
+    preempt: false
+    inputs:
+      left_arm:
+        command_contract: pose_reference
+        topic: /action_sources/cartesian_policy/left_arm/pose_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/cartesian_policy/left_gripper/joint_reference
+      right_arm:
+        command_contract: pose_reference
+        topic: /action_sources/cartesian_policy/right_arm/pose_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/cartesian_policy/right_gripper/joint_reference
 
   Replay:
     source_role: MEMORY
@@ -73,46 +75,109 @@ sources:
         command_contract: joint_reference
         topic: /action_sources/dummy_policy/right_gripper/joint_reference
 
-  TeleopJoint:
-    source_role: TELEOP
+  TrajectoryPlanner:
+    source_role: PLANNER
+    preempt: true
+    inputs:
+      left_arm:
+        command_contract: joint_trajectory
+        action: /execution_manager/ingress/planner/left_arm/follow_joint_trajectory
+      left_gripper:
+        command_contract: gripper_command
+        action: /execution_manager/ingress/planner/left_gripper/gripper_command
+      right_arm:
+        command_contract: joint_trajectory
+        action: /execution_manager/ingress/planner/right_arm/follow_joint_trajectory
+      right_gripper:
+        command_contract: gripper_command
+        action: /execution_manager/ingress/planner/right_gripper/gripper_command
+
+  StreamingPlanner:
+    source_role: PLANNER
     preempt: true
     inputs:
       left_arm:
         command_contract: joint_reference
-        topic: /action_sources/teleop_joint/left_arm/joint_reference
+        topic: /action_sources/streaming_planner/left_arm/joint_reference
       left_gripper:
         command_contract: joint_reference
-        topic: /action_sources/teleop_joint/left_gripper/joint_reference
+        topic: /action_sources/streaming_planner/left_gripper/joint_reference
       right_arm:
         command_contract: joint_reference
-        topic: /action_sources/teleop_joint/right_arm/joint_reference
+        topic: /action_sources/streaming_planner/right_arm/joint_reference
       right_gripper:
         command_contract: joint_reference
-        topic: /action_sources/teleop_joint/right_gripper/joint_reference
+        topic: /action_sources/streaming_planner/right_gripper/joint_reference
 
-  Quest3TeleopLeft:
+  TeleopTwist_Left:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      left_arm:
+        command_contract: twist_reference
+        topic: /action_sources/teleop_twist_left/left_arm/twist_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_twist_left/left_gripper/joint_reference
+
+  TeleopTwist_Right:
+    source_role: TELEOP
+    preempt: true
+    inputs:
+      right_arm:
+        command_contract: twist_reference
+        topic: /action_sources/teleop_twist_right/right_arm/twist_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_twist_right/right_gripper/joint_reference
+
+  TeleopCartesian_Left:
     source_role: TELEOP
     preempt: true
     activation_topic: /teleop/quest3_bimanual/left_clutch
     inputs:
       left_arm:
         command_contract: pose_reference
-        topic: /action_sources/quest3/left_arm/pose_reference
+        topic: /action_sources/teleop_cartesian_left/left_arm/pose_reference
       left_gripper:
         command_contract: joint_reference
-        topic: /action_sources/quest3/left_gripper/joint_reference
+        topic: /action_sources/teleop_cartesian_left/left_gripper/joint_reference
 
-  Quest3TeleopRight:
+  TeleopCartesian_Right:
     source_role: TELEOP
     preempt: true
     activation_topic: /teleop/quest3_bimanual/right_clutch
     inputs:
       right_arm:
         command_contract: pose_reference
-        topic: /action_sources/quest3/right_arm/pose_reference
+        topic: /action_sources/teleop_cartesian_right/right_arm/pose_reference
       right_gripper:
         command_contract: joint_reference
-        topic: /action_sources/quest3/right_gripper/joint_reference
+        topic: /action_sources/teleop_cartesian_right/right_gripper/joint_reference
+
+  TeleopJoint_Left:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /teleop/marvin_joint/clutch
+    inputs:
+      left_arm:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint_left/left_arm/joint_reference
+      left_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint_left/left_gripper/joint_reference
+
+  TeleopJoint_Right:
+    source_role: TELEOP
+    preempt: true
+    activation_topic: /teleop/marvin_joint/clutch
+    inputs:
+      right_arm:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint_right/right_arm/joint_reference
+      right_gripper:
+        command_contract: joint_reference
+        topic: /action_sources/teleop_joint_right/right_gripper/joint_reference
 
 groups:
   left_arm:

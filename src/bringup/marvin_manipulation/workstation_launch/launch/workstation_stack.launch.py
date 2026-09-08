@@ -36,6 +36,11 @@ def generate_launch_description() -> LaunchDescription:
                 description="Execution Manager routing table. Default is the dual-Pika table.",
             ),
             DeclareLaunchArgument(
+                "use_sim_time",
+                default_value="false",
+                description="Use simulation clock (/clock); required for MuJoCo RT.",
+            ),
+            DeclareLaunchArgument(
                 "with_cameras",
                 default_value="true",
                 description="Launch workstation RealSense cameras from their config.",
@@ -61,6 +66,7 @@ def generate_launch_description() -> LaunchDescription:
                 ),
                 launch_arguments={
                     "config": LaunchConfiguration("em_config"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
                 }.items(),
             ),
             IncludeLaunchDescription(
@@ -72,7 +78,10 @@ def generate_launch_description() -> LaunchDescription:
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     os.path.join(launch_dir, "recorder.launch.py")
-                )
+                ),
+                launch_arguments={
+                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                }.items(),
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(

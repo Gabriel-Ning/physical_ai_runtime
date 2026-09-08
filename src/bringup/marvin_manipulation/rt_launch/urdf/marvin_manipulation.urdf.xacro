@@ -41,6 +41,9 @@
     default="$(find marvin_manipulation_rt_launch)/config/model/gripper_tcp.yaml"/>
   <xacro:arg name="gripper_joint_limits_file"
     default="$(find marvin_manipulation_rt_launch)/config/model/joint_limits.yaml"/>
+  <xacro:arg name="use_sim_mujoco" default="false"/>
+  <xacro:arg name="mujoco_model" default=""/>
+  <xacro:arg name="headless" default="false"/>
 
   <xacro:include filename="$(find marvin_description)/urdf/parts/marvin_stand.xacro"/>
   <xacro:include filename="$(find marvin_description)/urdf/parts/marvin_bimanual_arm.xacro"/>
@@ -80,27 +83,80 @@
   </xacro:if>
 
   <xacro:if value="$(arg ros2_control)">
-    <xacro:marvin_arm_ros2_control
-      use_fake_hardware="$(arg use_fake_hardware)"
-      hardware_plugin="$(arg hardware_plugin)"
-      robot_ip="$(arg robot_ip)"
-      stale_warn_ms="$(arg stale_warn_ms)"
-      stale_error_ms="$(arg stale_error_ms)"
-      max_joint_velocity="$(arg max_joint_velocity)"/>
-    <xacro:if value="$(arg load_pika_hardware)">
-        <xacro:pika_gripper_ros2_control
-          name="LeftPikaGripperHardware"
-          prefix="left_"
-          serial_port="$(arg left_gripper_serial_port)"
-          joint_limits_file="$(arg gripper_joint_limits_file)"
-          use_fake_hardware="$(arg use_fake_hardware)"/>
-        <xacro:pika_gripper_ros2_control
-          name="RightPikaGripperHardware"
-          prefix="right_"
-          serial_port="$(arg right_gripper_serial_port)"
-          joint_limits_file="$(arg gripper_joint_limits_file)"
-          use_fake_hardware="$(arg use_fake_hardware)"/>
+    <!-- 1. Unified MuJoCo Simulation Hardware Interface -->
+    <xacro:if value="$(arg use_sim_mujoco)">
+      <ros2_control name="MarvinMujocoHardware" type="system">
+        <hardware>
+          <plugin>mujoco_ros2_control/MujocoSystemInterface</plugin>
+          <param name="headless">$(arg headless)</param>
+          <xacro:if value="${'$(arg mujoco_model)' != ''}">
+            <param name="mujoco_model">$(arg mujoco_model)</param>
+          </xacro:if>
+        </hardware>
+
+        <!-- MJCF uses <position> actuators; only expose position commands. -->
+        <xacro:macro name="configure_joint" params="joint_name">
+          <joint name="${joint_name}">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
+          </joint>
+        </xacro:macro>
+
+        <xacro:configure_joint joint_name="Joint1_L"/>
+        <xacro:configure_joint joint_name="Joint2_L"/>
+        <xacro:configure_joint joint_name="Joint3_L"/>
+        <xacro:configure_joint joint_name="Joint4_L"/>
+        <xacro:configure_joint joint_name="Joint5_L"/>
+        <xacro:configure_joint joint_name="Joint6_L"/>
+        <xacro:configure_joint joint_name="Joint7_L"/>
+        <xacro:configure_joint joint_name="Joint1_R"/>
+        <xacro:configure_joint joint_name="Joint2_R"/>
+        <xacro:configure_joint joint_name="Joint3_R"/>
+        <xacro:configure_joint joint_name="Joint4_R"/>
+        <xacro:configure_joint joint_name="Joint5_R"/>
+        <xacro:configure_joint joint_name="Joint6_R"/>
+        <xacro:configure_joint joint_name="Joint7_R"/>
+        <xacro:if value="$(arg load_pika_hardware)">
+          <joint name="left_gripper_left_joint">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+          </joint>
+          <joint name="right_gripper_left_joint">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+          </joint>
+        </xacro:if>
+      </ros2_control>
     </xacro:if>
+
+    <!-- 2. Real Hardware or Generic Mock Hardware Interface -->
+    <xacro:unless value="$(arg use_sim_mujoco)">
+      <xacro:marvin_arm_ros2_control
+        use_fake_hardware="$(arg use_fake_hardware)"
+        hardware_plugin="$(arg hardware_plugin)"
+        robot_ip="$(arg robot_ip)"
+        stale_warn_ms="$(arg stale_warn_ms)"
+        stale_error_ms="$(arg stale_error_ms)"
+        max_joint_velocity="$(arg max_joint_velocity)"/>
+      <xacro:if value="$(arg load_pika_hardware)">
+          <xacro:pika_gripper_ros2_control
+            name="LeftPikaGripperHardware"
+            prefix="left_"
+            serial_port="$(arg left_gripper_serial_port)"
+            joint_limits_file="$(arg gripper_joint_limits_file)"
+            use_fake_hardware="$(arg use_fake_hardware)"/>
+          <xacro:pika_gripper_ros2_control
+            name="RightPikaGripperHardware"
+            prefix="right_"
+            serial_port="$(arg right_gripper_serial_port)"
+            joint_limits_file="$(arg gripper_joint_limits_file)"
+            use_fake_hardware="$(arg use_fake_hardware)"/>
+      </xacro:if>
+    </xacro:unless>
   </xacro:if>
 
 </robot>

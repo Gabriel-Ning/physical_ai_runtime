@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Stop leftover ROS 2 processes from this workspace that weren't cleanly
-# Ctrl-C'd (launch parents, spawners, CM, cameras, RViz, ...).
+# Ctrl-C'd (launch parents, spawners, CM, cameras, RViz, app clients, ...).
 #
 #   pixi run stop                         # this machine only (default)
 #   STOP_ROS_REMOTE=1 pixi run stop       # also run the same script on RT host
 #
 # Safe with nothing running. Always restarts the ros2 daemon afterwards.
+# Also stops apps/eval.py / hil_eval.py / teleop / record / replay clients that hold EM leases.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,6 +57,13 @@ launch_patterns=(
   "marvin_manipulation_rt_launch"
   "marvin_manipulation_workstation_launch"
   "marvin_manipulation_controller_bringup"
+  # App clients (policy / teleop / record) — not started by launch, but hold EM leases.
+  "apps/eval.py"
+  "apps/hil_eval.py"
+  "apps/teleop.py"
+  "apps/record.py"
+  "apps/replay.py"
+  "apps/check_runtime.py"
 )
 
 # Node cmdline fragments. Cameras are started by rt_stack and often
@@ -81,6 +89,9 @@ node_patterns=(
   "game_controller_node"
   "joy_linux_node"
   "joy_node"
+  "rmi_eval"
+  "_rmi_client"
+  "_rmi_eval"
 )
 
 # killall matches /proc/pid/comm (Linux truncates to 15 chars).
@@ -179,7 +190,11 @@ _report_leftovers() {
     jtc_guard_node \
     robot_state_publisher \
     "ros2 launch" \
-    rt_stack.launch.py
+    rt_stack.launch.py \
+    "apps/eval.py" \
+    "apps/hil_eval.py" \
+    "apps/teleop.py" \
+    rmi_eval
   do
     while read -r pid; do
       [[ -z "$pid" ]] && continue

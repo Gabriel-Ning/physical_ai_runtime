@@ -1,0 +1,31 @@
+<mujoco>
+  <include file="piper_assets.xml"/>
+  <include file="piper_left_arm.xml"/>
+  <include file="piper_right_arm.xml"/>
+
+  <contact>
+    <!-- Left arm adjacent self-collision exclusions -->
+    <exclude body1="left_base_link" body2="left_link1"/>
+    <exclude body1="left_link1" body2="left_link2"/>
+    <exclude body1="left_link2" body2="left_link3"/>
+    <exclude body1="left_link3" body2="left_link4"/>
+    <exclude body1="left_link4" body2="left_link5"/>
+    <exclude body1="left_link5" body2="left_link6"/>
+    <exclude body1="left_link6" body2="left_gripper_base"/>
+    <exclude body1="left_gripper_base" body2="left_gripper_link1"/>
+    <exclude body1="left_gripper_base" body2="left_gripper_link2"/>
+    <exclude body1="left_gripper_link1" body2="left_gripper_link2"/>
+
+    <!-- Right arm adjacent self-collision exclusions -->
+    <exclude body1="right_base_link" body2="right_link1"/>
+    <exclude body1="right_link1" body2="right_link2"/>
+    <exclude body1="right_link2" body2="right_link3"/>
+    <exclude body1="right_link3" body2="right_link4"/>
+    <exclude body1="right_link4" body2="right_link5"/>
+    <exclude body1="right_link5" body2="right_link6"/>
+    <exclude body1="right_link6" body2="right_gripper_base"/>
+    <exclude body1="right_gripper_base" body2="right_gripper_link1"/>
+    <exclude body1="right_gripper_base" body2="right_gripper_link2"/>
+    <exclude body1="right_gripper_link1" body2="right_gripper_link2"/>
+  </contact>
+</mujoco>

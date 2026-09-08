@@ -200,8 +200,9 @@ def _launch_setup(context, *args, **kwargs):
             parameters=[{"robot_description": robot_description, "use_sim_time": True}],
         ),
         Node(
-            package="controller_manager",
+            package="mujoco_ros2_control",
             executable="ros2_control_node",
+            name="controller_manager",
             parameters=[
                 {"robot_description": robot_description},
                 controllers_yaml,
@@ -209,6 +210,7 @@ def _launch_setup(context, *args, **kwargs):
                 {"load_gripper": False},
                 {"arm_prefix": ""},
                 {"use_sim_time": True},
+                {"headless": headless},
                 mujoco_plugins_yaml,
             ],
             output="screen",

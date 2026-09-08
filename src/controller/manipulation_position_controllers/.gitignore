@@ -1,0 +1,10 @@
+build/
+install/
+log/
+__pycache__/
+.pytest_cache/
+.coverage
+compile_commands.json
+output/
+*.pyc
+.DS_Store

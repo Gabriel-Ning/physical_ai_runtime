@@ -6,11 +6,12 @@ Layout::
     command_messages.py  RMI command validation and ROS payload encoding
     config.py            Embodiment profile loader
     context.py           Context factories for one application process
+    converters.py        ROS message -> value converters for Camera / Sensor
     errors.py            Explicit cause-bearing RMI exceptions
     node.py              Action producer binding and authority status
     robot.py             Joint-state facade
     selection.py         authority protocol and Execution Manager client
-    sensing.py           Camera / sensor facades
+    sensing.py           Camera / topic / TF pose sensor facades
     recording.py         EpisodeRecorder (MCAP) and MemoryReplayBuffer (RL)
     replay.py            MCAP action replay pacing
 """
@@ -39,6 +40,7 @@ from .contracts import (
     PoseHorizonResult,
     ResolveResult,
 )
+from .converters import ros_image_to_numpy
 from .errors import (
     ActionTimeoutError,
     ControllerClientError,
@@ -55,7 +57,7 @@ from .node import (
     Node,
     NodeActivation,
     NodeResource,
-    NodeStatus,
+    SourceState,
 )
 from .recording import EpisodeRecorder, EpisodeScope, MemoryReplayBuffer
 from .replay import (
@@ -68,13 +70,14 @@ from .replay import (
     ReplayPacer,
     ReplayPlayer,
 )
+from .reset import ResetHandler, ResetMode
 from .robot import Robot, RobotResource
 from .selection import (
     AuthorityClient,
     AuthoritySnapshot,
     ExecutionManagerClient,
 )
-from .sensing import Camera, SampleBuffer, Sensor, TimestampedSample
+from .sensing import Camera, PoseSample, SampleBuffer, Sensor, TfTcpPoseSensor, TimestampedSample
 
 __all__ = [
     "Action",
@@ -111,7 +114,7 @@ __all__ = [
     "NodeConfig",
     "NodeInputConfig",
     "NodeResource",
-    "NodeStatus",
+    "SourceState",
     "Observation",
     "PartConfig",
     "PlanPoint",
@@ -119,16 +122,21 @@ __all__ = [
     "PolicyLayout",
     "PoseHorizonPoint",
     "PoseHorizonResult",
+    "PoseSample",
     "RecordedAction",
     "ReplayClockJumpError",
     "ReplayPacer",
     "ReplayPlayer",
+    "ResetHandler",
+    "ResetMode",
     "ResolveResult",
     "RmiError",
     "Robot",
     "RobotResource",
     "SampleBuffer",
     "Sensor",
+    "TfTcpPoseSensor",
     "TimestampedSample",
     "TrajectoryCanceledError",
+    "ros_image_to_numpy",
 ]

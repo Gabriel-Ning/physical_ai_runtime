@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).parents[2]
 
@@ -68,10 +69,116 @@ TELEOPERATORS = {
     "left": {"preempt_service": "/left/preempt"},
     "right": {"preempt_service": "/right/preempt"},
 }
+PREEMPT_SERVICES = ["/left/preempt", "/right/preempt"]
 
 
-@pytest.mark.parametrize("app", [record, teleop])
-def test_preempt_requires_every_leader_and_destroys_clients(app):
+def test_load_teleoperators_from_workstation_yaml_not_profile():
+    profile = SimpleNamespace(
+        raw_data={
+            "execution_manager_config": {
+                "package": "piper_manipulation_workstation_launch",
+                "file": "config/execution_manager.yaml",
+            }
+        }
+    )
+    loaded = record.load_teleoperators(profile)
+    left = loaded["piper_leader_left"]
+    assert left["preempt_service"] == "/piper_leader_left/preempt"
+    assert left["arm_part"] == "left_arm"
+    assert left["gripper_part"] == "left_gripper"
+    assert left["target_node"] == "TeleopJoint_Left"
+    assert loaded["piper_leader_right"]["target_node"] == "TeleopJoint_Right"
+    assert loaded["piper_leader_right"]["preempt_service"] == (
+        "/piper_leader_right/preempt"
+    )
+
+
+def test_load_teleoperators_follows_profile_package_and_skips_franka():
+    piper = SimpleNamespace(raw_data=_profile_raw("piper_bimanual.yaml"))
+    real = SimpleNamespace(raw_data=_profile_raw("site/piper_bimanual_real.yaml"))
+    assert set(record.load_teleoperators(piper)) == {
+        "piper_leader_left",
+        "piper_leader_right",
+    }
+    assert set(record.load_teleoperators(real)) == {
+        "piper_leader_left",
+        "piper_leader_right",
+    }
+    assert (
+        record.load_teleoperators(
+            SimpleNamespace(raw_data=_profile_raw("fr3_pika_single_arm.yaml"))
+        )
+        == {}
+    )
+    assert (
+        record.load_teleoperators(
+            SimpleNamespace(raw_data=_profile_raw("marvin_bimanual.yaml"))
+        )
+        == {}
+    )
+
+
+def _profile_raw(name: str) -> dict:
+    return yaml.safe_load(
+        (REPO_ROOT / "apps" / "profiles" / name).read_text(encoding="utf-8")
+    )
+
+
+def test_teleop_preempt_services_come_from_workstation_teleop_yaml():
+    assert teleop.load_preempt_services(SimpleNamespace(raw_data={})) == []
+    assert "teleop" not in _profile_raw("piper_bimanual.yaml")
+    assert "teleop" not in _profile_raw("site/piper_bimanual_real.yaml")
+    leaders = yaml.safe_load(
+        (
+            REPO_ROOT
+            / "src/bringup/piper_manipulation/workstation_launch/config/teleop/piper_leaders.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert leaders["piper_leader_left"]["ros__parameters"]["preempt_service"] == (
+        "/piper_leader_left/preempt"
+    )
+    assert leaders["piper_leader_right"]["ros__parameters"]["preempt_service"] == (
+        "/piper_leader_right/preempt"
+    )
+    assert teleop.load_preempt_services(
+        SimpleNamespace(raw_data=_profile_raw("piper_bimanual.yaml"))
+    ) == [
+        "/piper_leader_left/preempt",
+        "/piper_leader_right/preempt",
+    ]
+    assert teleop.load_preempt_services(
+        SimpleNamespace(raw_data=_profile_raw("site/piper_bimanual_real.yaml"))
+    ) == [
+        "/piper_leader_left/preempt",
+        "/piper_leader_right/preempt",
+    ]
+    assert (
+        teleop.load_preempt_services(
+            SimpleNamespace(raw_data=_profile_raw("fr3_pika_single_arm.yaml"))
+        )
+        == []
+    )
+    assert (
+        teleop.load_preempt_services(
+            SimpleNamespace(raw_data=_profile_raw("marvin_bimanual.yaml"))
+        )
+        == []
+    )
+
+
+def test_teleop_node_names_are_profile_teleop_sources():
+    nodes = {
+        "JointPolicy": SimpleNamespace(source_role="POLICY"),
+        "TeleopJoint_Left": SimpleNamespace(source_role="TELEOP"),
+        "TeleopTwist": SimpleNamespace(source_role="TELEOP"),
+    }
+    assert teleop.teleop_node_names(SimpleNamespace(nodes=nodes)) == [
+        "TeleopJoint_Left",
+        "TeleopTwist",
+    ]
+
+
+def test_record_preempt_requires_every_leader_and_destroys_clients():
     node = _Node(
         [
             SimpleNamespace(success=True, message="ready"),
@@ -79,13 +186,49 @@ def test_preempt_requires_every_leader_and_destroys_clients(app):
         ]
     )
 
-    assert app.set_teleop_preempt(node, TELEOPERATORS, True) is False
+    assert record.set_teleop_preempt(node, TELEOPERATORS, True) is False
     assert [name for name, _ in node.created] == ["/left/preempt", "/right/preempt"]
     assert node.destroyed == [client for _, client in node.created]
 
 
-@pytest.mark.parametrize("app", [record, teleop])
-def test_preempt_succeeds_only_when_every_leader_confirms(app):
+def test_teleop_preempt_requires_every_service_and_destroys_clients():
+    node = _Node(
+        [
+            SimpleNamespace(success=True, message="ready"),
+            SimpleNamespace(success=False, message="rejected"),
+        ]
+    )
+
+    assert teleop.set_teleop_preempt(node, PREEMPT_SERVICES, True) is False
+    assert [name for name, _ in node.created] == ["/left/preempt", "/right/preempt"]
+    assert node.destroyed == [client for _, client in node.created]
+
+
+def test_record_verify_leader_preempt_services_requires_both():
+    node = _Node(
+        [
+            SimpleNamespace(success=True, message="ready"),
+            SimpleNamespace(success=True, message="ready"),
+        ]
+    )
+    assert record.verify_leader_preempt_services(node, TELEOPERATORS) is True
+    assert [name for name, _ in node.created] == ["/left/preempt", "/right/preempt"]
+    assert node.destroyed == [client for _, client in node.created]
+
+
+def test_teleop_verify_leader_preempt_services_requires_both():
+    node = _Node(
+        [
+            SimpleNamespace(success=True, message="ready"),
+            SimpleNamespace(success=True, message="ready"),
+        ]
+    )
+    assert teleop.verify_leader_preempt_services(node, PREEMPT_SERVICES) is True
+    assert [name for name, _ in node.created] == ["/left/preempt", "/right/preempt"]
+    assert node.destroyed == [client for _, client in node.created]
+
+
+def test_record_preempt_succeeds_only_when_every_leader_confirms():
     node = _Node(
         [
             SimpleNamespace(success=True, message="ready"),
@@ -93,7 +236,18 @@ def test_preempt_succeeds_only_when_every_leader_confirms(app):
         ]
     )
 
-    assert app.set_teleop_preempt(node, TELEOPERATORS, True) is True
+    assert record.set_teleop_preempt(node, TELEOPERATORS, True) is True
+
+
+def test_teleop_preempt_succeeds_only_when_every_service_confirms():
+    node = _Node(
+        [
+            SimpleNamespace(success=True, message="ready"),
+            SimpleNamespace(success=True, message="ready"),
+        ]
+    )
+
+    assert teleop.set_teleop_preempt(node, PREEMPT_SERVICES, True) is True
 
 
 @pytest.mark.parametrize(
@@ -123,6 +277,15 @@ def test_task_recorder_config_aligns_task_and_dataset_directory():
     assert config.task == "pick_bread"
     assert config.operator_name == "operator-a"
     assert config.max_episode_duration == 42.0
+
+
+def test_record_and_teleop_expose_use_sim_time_flag():
+    source = (REPO_ROOT / "apps" / "record.py").read_text(encoding="utf-8")
+    teleop_source = (REPO_ROOT / "apps" / "teleop.py").read_text(encoding="utf-8")
+    assert "--use-sim-time" in source
+    assert "--use-sim-time" in teleop_source
+    assert "def _open_context(" in source
+    assert "def _open_context(" in teleop_source
 
 
 def test_finalized_episode_directory_accepts_directory_and_mcap(tmp_path):

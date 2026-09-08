@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from rmi import JointLayout, PolicyLayout
+from rmi import JointLayout, PolicyLayout, ros_image_to_numpy
 
 from .mcap_reader import McapReader
 
@@ -213,32 +213,3 @@ def _command_positions(
     if positions is not None:
         return dict(zip(expected_names, map(float, positions), strict=False))
     raise TypeError(f"unsupported action message {type(message).__name__}")
-
-
-def ros_image_to_numpy(message: Any) -> np.ndarray:
-    """Decode supported raw ROS Image encodings into contiguous HWC RGB."""
-    encoding = str(getattr(message, "encoding", "")).lower()
-    channels = {
-        "rgb8": 3,
-        "bgr8": 3,
-        "rgba8": 4,
-        "bgra8": 4,
-        "mono8": 1,
-        "8uc1": 1,
-        "8uc3": 3,
-        "8sc3": 3,
-    }.get(encoding)
-    if channels is None:
-        raise ValueError(f"unsupported image encoding {encoding!r}")
-    height, width = int(message.height), int(message.width)
-    required = height * int(message.step)
-    source = np.frombuffer(message.data, dtype=np.uint8)
-    if source.size < required:
-        raise ValueError(f"image data is truncated: {source.size} < {required}")
-    image = source[:required].reshape(height, int(message.step))
-    image = image[:, : width * channels].reshape(height, width, channels)
-    if channels == 1:
-        return np.repeat(image, 3, axis=2).copy()
-    if encoding in {"bgr8", "bgra8"}:
-        return image[..., :3][..., ::-1].copy()
-    return image[..., :3].copy()

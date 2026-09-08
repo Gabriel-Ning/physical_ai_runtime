@@ -3,10 +3,10 @@ quest3_bimanual_absolute_target:
     profile_name: marvin_quest3_bimanual_absolute
     rate_hz: 50.0
 
-    left_output_topic: /action_sources/quest3/left_arm/pose_reference
-    right_output_topic: /action_sources/quest3/right_arm/pose_reference
-    left_gripper_output_topic: /action_sources/quest3/left_gripper/joint_reference
-    right_gripper_output_topic: /action_sources/quest3/right_gripper/joint_reference
+    left_output_topic: /action_sources/teleop_cartesian_left/left_arm/pose_reference
+    right_output_topic: /action_sources/teleop_cartesian_right/right_arm/pose_reference
+    left_gripper_output_topic: /action_sources/teleop_cartesian_left/left_gripper/joint_reference
+    right_gripper_output_topic: /action_sources/teleop_cartesian_right/right_gripper/joint_reference
     left_clutch_topic: /teleop/quest3_bimanual/left_clutch
     right_clutch_topic: /teleop/quest3_bimanual/right_clutch
 

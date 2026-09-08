@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import time
+import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from enum import Enum
 from types import TracebackType
 from typing import Any
 
 from action_msgs.msg import GoalStatus
-from control_msgs.action import FollowJointTrajectory, ParallelGripperCommand
-from execution_manager_interfaces.msg import ResourceAuthority
+from execution_manager_interfaces.action import (
+    LeasedFollowJointTrajectory,
+    LeasedParallelGripperCommand,
+)
+from execution_manager_interfaces.msg import (
+    LeasedJointReference,
+    LeasedPoseReference,
+    LeasedTwistReference,
+    ResourceAuthority,
+)
 from geometry_msgs.msg import TwistStamped
 from moveit_msgs.msg import CartesianTrajectory
 from rclpy.action import ActionClient
@@ -29,6 +39,7 @@ from .errors import (
     ActionTimeoutError,
     ExecutionError,
     NodeAlreadyActiveError,
+    SourceAuthorityError,
     action_timeout_error,
     execution_failure_cause_and_details,
     format_jtc_guard_diagnostic_lines,
@@ -160,14 +171,13 @@ class _JtcGuardDiagnosticBuffer:
         self._subscription = None
 
 
-class NodeStatus(str, Enum):
-    """Resource-independent application view of one action node's authority."""
-
+class SourceState(str, Enum):
+    """EM-owned source lifecycle; health and resource faults are separate."""
     INACTIVE = "INACTIVE"
-    ACTIVE = "ACTIVE"
-    PARTIAL = "PARTIAL"
-    TRANSITIONING = "TRANSITIONING"
-    FAULT = "FAULT"
+    WAITING = "WAITING"
+    ACQUIRING = "ACQUIRING"
+    CONTROLLING = "CONTROLLING"
+    RELEASING = "RELEASING"
 
 
 class ExecutionState(str, Enum):
@@ -260,21 +270,24 @@ class NodeResource:
             )
         self.joint_names = tuple(node._profile.get_part_joints(name))
 
-    def submit(self, value: Any) -> None:
-        """Split one ordered joint vector and publish one atomic action batch."""
+    def select_action(self, observation: Any = None, *, selector: Any = None) -> Any:
+        """Select and split a joint vector under the node's captured epoch."""
+        return self.node._select_action(observation, selector=selector, convert=self._actions)
+
+    def submit(self, actions: Action | Sequence[Action] | None) -> None:
+        self.node.submit(actions)
+
+    def _actions(self, value: Any) -> Any:
         if value is None:
-            self.node.submit(None)
-            return
+            return None
         if isinstance(value, Action):
-            self.node.submit(value)
-            return
+            return value
         if (
             isinstance(value, Sequence)
             and value
             and all(isinstance(item, Action) for item in value)
         ):
-            self.node.submit(value)
-            return
+            return value
         values = list(value)
         if len(values) != len(self.joint_names):
             raise ValueError(
@@ -299,7 +312,7 @@ class NodeResource:
                 )
             )
             offset += width
-        self.node.submit(actions)
+        return actions
 
     def execute(self, plans: Any, *, timeout: float = 10.0) -> dict[str, Any]:
         """Execute all action-backed parts in parallel and wait for completion."""
@@ -376,74 +389,142 @@ class Node:
         self._action_client_factory = action_client_factory
         self._publishers: dict[tuple[str, str], Any] = {}
         self._action_clients: dict[str, Any] = {}
-        self._activation_lease_id: str | None = None
+        self._session_id: str | None = None
+        self._selection_lease: str | None = None
 
     def __getitem__(self, name: str) -> NodeResource:
         return NodeResource(self, name)
 
     def activate(self, *, preempt: bool = False) -> NodeActivation:
-        """Acquire scoped authority without exposing the underlying EM lease."""
-        if self._activation_lease_id is not None:
-            raise NodeAlreadyActiveError(self.name)
-        grant = self._authority.claim(
-            self.config.source_role,
-            self.name,
-            dict(self.config.resources),
-            preempt=preempt,
-            metadata={"activation": "rmi_node_scope"},
-        )
-        self._activation_lease_id = grant.lease_id
+        """Join EM's candidate pool, or explicitly preempt without joining it."""
+        if self._session_id is not None:
+            if self.state != SourceState.INACTIVE:
+                raise NodeAlreadyActiveError(self.name)
+            self.deactivate()
+        session = uuid.uuid4().hex
+        self._session_id = session
+        try:
+            self._authority.set_source_activation(self.name, session, active=True, preempt=preempt)
+        except BaseException:
+            record = self._authority.get_sources().get(self.name, {})
+            if record.get("session_id") != session or record.get("state") != 4:
+                self._session_id = None
+            raise
         return NodeActivation(self)
 
     def deactivate(self) -> None:
-        """Release this node's scoped lease, including a lease restored by EM."""
-        if self._activation_lease_id is None:
+        """Withdraw candidacy and confirm release; retain session on failure."""
+        if self._session_id is None:
             return
-        scoped_lease_id = self._activation_lease_id
-        self._activation_lease_id = None
-        restored_lease_ids: set[str] = set()
-        allocations = self._authority.get_allocations()
-        for resource in self.config.resources:
-            allocation = allocations.get(resource, {})
-            if allocation.get("source_instance") == self.name:
-                lease_id = allocation.get("lease_id")
-                if lease_id and lease_id != scoped_lease_id:
-                    restored_lease_ids.add(lease_id)
-        self._authority.release(scoped_lease_id)
-        for lease_id in sorted(restored_lease_ids):
-            self._authority.release(lease_id)
+        self._authority.set_source_activation(self.name, self._session_id, active=False)
+        self._session_id = None
+        self._selection_lease = None
 
     @property
-    def status(self) -> NodeStatus:
-        """Aggregate EM authority without exposing resources to applications."""
-        allocations = self._authority.get_allocations()
-        states: list[int] = []
-        owned = 0
-        for resource in self.config.resources:
-            allocation = allocations.get(resource, {})
-            state = int(allocation.get("authority_state", ResourceAuthority.UNOWNED))
-            states.append(state)
-            if (
-                state == int(ResourceAuthority.OWNED)
-                and allocation.get("source_instance") == self.name
-            ):
-                owned += 1
-        if any(state == int(ResourceAuthority.FAULT) for state in states):
-            return NodeStatus.FAULT
-        if any(state == int(ResourceAuthority.TRANSITIONING) for state in states):
-            return NodeStatus.TRANSITIONING
-        if owned == len(states) and states:
-            return NodeStatus.ACTIVE
-        if owned:
-            return NodeStatus.PARTIAL
-        return NodeStatus.INACTIVE
+    def state(self) -> SourceState:
+        record = self._authority.get_sources().get(self.name)
+        if record is None:
+            return SourceState.INACTIVE
+        return tuple(SourceState)[int(record["state"])]
 
     @property
-    def is_active(self) -> bool:
-        return self.status in {NodeStatus.ACTIVE, NodeStatus.PARTIAL}
+    def has_control(self) -> bool:
+        return self.state == SourceState.CONTROLLING
+
+    def wait_for_control(self, timeout: float = 10.0) -> None:
+        """Wait for an already registered candidate; never implicitly activate."""
+        if self._session_id is None:
+            raise SourceAuthorityError("source is not activated")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.has_control:
+                self._current_lease()
+                return
+            record = self._authority.get_sources().get(self.name, {})
+            if record.get("session_id") == self._session_id and self.state in {
+                SourceState.INACTIVE, SourceState.RELEASING
+            }:
+                raise SourceAuthorityError(f"source cannot execute: {self.state.value}")
+            time.sleep(0.01)
+        raise SourceAuthorityError("timed out waiting for control")
+
+    def _current_lease(self) -> str:
+        if self._session_id is None:
+            raise SourceAuthorityError("source is not activated")
+        record = self._authority.get_sources().get(self.name, {})
+        if (record.get("session_id") != self._session_id
+                or record.get("state") != 3 or not record.get("lease_id")):
+            raise SourceAuthorityError("source does not currently have control")
+        return record["lease_id"]
+
+    def select_action(self, observation: Any = None, *, selector: Any = None) -> Action | Sequence[Action] | None:
+        """Capture authority before running the producer or an explicit selector.
+
+        A selector receives observation and computes manual commands. It runs
+        here, never in submit; do not pass a previously computed action through it.
+        """
+        return self._select_action(observation, selector=selector)
+
+    def _select_action(self, observation: Any, *, selector: Any = None, convert: Any = None) -> Any:
+        lease = self._current_lease()
+        if selector is None:
+            if self.producer is None:
+                raise RuntimeError("select_action requires a producer or selector")
+            if lease != self._selection_lease and hasattr(self.producer, "on_control_acquired"):
+                self.producer.on_control_acquired(observation)
+            selector = self.producer.select_action
+        actions = selector(observation)
+        self._selection_lease = lease
+        if convert is not None:
+            actions = convert(actions)
+        if actions is None:
+            return None
+        # Lease is captured before the producer; admission stamp is taken after.
+        # Remote inference is ~300ms and EM max_command_age_s is 0.25s — a
+        # pre-inference stamp is rejected as stale_command and the arm never moves.
+        stamp = self._node.get_clock().now().to_msg()
+        def bind(action: Action) -> Action:
+            if not isinstance(action, Action):
+                raise TypeError("select_action must return Action values; use a resource view for joint vectors")
+            if action._lease_id is not None:
+                raise SourceAuthorityError("select_action cannot rebind a previously prepared action")
+            return replace(action, _lease_id=lease, _source_instance=self.name, _prepared_stamp=stamp)
+        return bind(actions) if isinstance(actions, Action) else [bind(a) for a in actions]
 
     def submit(self, actions: Action | Sequence[Action] | None) -> None:
-        """Pre-validate one action batch and publish it with one timestamp."""
+        """Submit only under current authority; never activate or enter the pool."""
+        lease = self._current_lease()
+        if actions is None:
+            return
+        items = (actions,) if isinstance(actions, Action) else tuple(actions)
+        for action in items:
+            if not isinstance(action, Action):
+                raise TypeError("submit requires actions returned by select_action")
+            if action._prepared_stamp is None or (
+                action._lease_id != lease or action._source_instance != self.name
+            ):
+                raise SourceAuthorityError("action belongs to a revoked execution epoch")
+        # Every action retains the epoch and admission timestamp from selection.
+        stamps = [a._prepared_stamp for a in items if a._prepared_stamp is not None]
+        stamp = min(stamps, key=lambda value: (value.sec, value.nanosec)) if stamps else None
+        self._submit(items, lease_id=lease, stamp=stamp)
+
+    def _leased_publisher(self, part: str, command: str) -> tuple[Any, Any]:
+        message_type = {
+            "joint_reference": LeasedJointReference,
+            "pose_reference": LeasedPoseReference,
+            "twist_reference": LeasedTwistReference,
+        }[command]
+        key = (part, command)
+        if key not in self._publishers:
+            endpoint = f"/execution_manager/ingress/{self.config.source_role.lower()}/{part}/{command}"
+            self._publishers[key] = self._node.create_publisher(
+                message_type, endpoint,
+                QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE),
+            )
+        return self._publishers[key], message_type
+
+    def _submit(self, actions: Any, *, lease_id: str, stamp: Any = None) -> None:
         if actions is None:
             return
         items = (actions,) if isinstance(actions, Action) else tuple(actions)
@@ -452,7 +533,7 @@ class Node:
 
         # Validate the complete batch before the first ROS publish.
         prepared: list[tuple[Any, Any]] = []
-        stamp = self._node.get_clock().now().to_msg()
+        stamp = stamp or self._node.get_clock().now().to_msg()
         for action in items:
             try:
                 command = self.config.resources[action.part]
@@ -481,7 +562,6 @@ class Node:
                         action.value, list(part.joint_names), False
                     )
                 )
-                message_type = JointTrajectory
             elif command == "pose_reference":
                 message = (
                     action.value
@@ -492,7 +572,6 @@ class Node:
                         part.tcp_frame or "",
                     )
                 )
-                message_type = CartesianTrajectory
             elif command == "twist_reference":
                 message = (
                     action.value
@@ -501,27 +580,27 @@ class Node:
                         action.value, part.base_frame or "base_link"
                     )
                 )
-                message_type = TwistStamped
             else:
                 raise KeyError(f"unsupported node command {command!r}")
 
             if hasattr(message, "header"):
                 message.header.stamp = stamp
 
-            key = (action.part, command)
-            if key not in self._publishers:
-                qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
-                self._publishers[key] = self._node.create_publisher(
-                    message_type, source_input.endpoint, qos
-                )
-            prepared.append((self._publishers[key], message))
+            publisher, envelope_type = self._leased_publisher(action.part, command)
+            envelope = envelope_type()
+            envelope.header.stamp = stamp
+            envelope.lease_id = lease_id
+            envelope.command = message
+            prepared.append((publisher, envelope))
 
         # ROS topic publication itself is not transactionally atomic.
         for publisher, message in prepared:
             publisher.publish(message)
 
     def execute(self, part: str, plan: Any, *, timeout: float = 5.0) -> Execution:
-        """Submit one planner trajectory; EM owns authority and handback."""
+        """Submit one planner trajectory under the activated source scope."""
+        lease = self._current_lease()
+        stamp = self._node.get_clock().now().to_msg()
         try:
             command = self.config.resources[part]
             source_input = self.config.inputs[part]
@@ -537,14 +616,14 @@ class Node:
         reject_invalid_result(plan)
         part_config = self._profile.parts[part]
         if command == "joint_trajectory":
-            action_type = FollowJointTrajectory
-            goal = FollowJointTrajectory.Goal()
+            action_type = LeasedFollowJointTrajectory
+            goal = LeasedFollowJointTrajectory.Goal()
             goal.trajectory = joint_trajectory_from_spec(
                 plan, list(part_config.joint_names), True
             )
         else:
-            action_type = ParallelGripperCommand
-            goal = ParallelGripperCommand.Goal()
+            action_type = LeasedParallelGripperCommand
+            goal = LeasedParallelGripperCommand.Goal()
             if isinstance(plan, JointState):
                 goal.command = plan
             else:
@@ -559,18 +638,23 @@ class Node:
                 goal.command = JointState(
                     name=list(part_config.joint_names), position=positions
                 )
+        goal.header.stamp = stamp
+        goal.lease_id = lease
+        goal.resource = part
+        suffix = "follow_joint_trajectory" if command == "joint_trajectory" else command
+        endpoint = f"/execution_manager/ingress/{self.config.source_role.lower()}/{part}/{suffix}"
         client = self._action_clients.get(part)
         if client is None:
             client = self._action_client_factory(
                 self._node,
                 action_type,
-                source_input.endpoint,
+                endpoint,
             )
             self._action_clients[part] = client
         if not client.wait_for_server(timeout_sec=timeout):
             raise ActionTimeoutError(
                 f"planner action server unavailable: part={part!r} "
-                f"endpoint={source_input.endpoint!r} wait_s={timeout}"
+                f"endpoint={endpoint!r} wait_s={timeout}"
             )
         feedback: list[Any] = []
         future = client.send_goal_async(

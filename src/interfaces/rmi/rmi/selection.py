@@ -2,26 +2,27 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any, Protocol
 
-from diagnostic_msgs.msg import KeyValue
 from execution_manager_interfaces.msg import (
     AuthorityEvent,
     AuthorityStatus,
     ResourceAuthority,
-    ResourceClaim,
+    SourceLifecycleStatus,
 )
-from execution_manager_interfaces.srv import ClaimControl, ReleaseControl
+from execution_manager_interfaces.srv import RecoverResources, SetSourceActivation
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import String
 
 from .errors import ExecutionManagerUnavailableError
 
-CLAIM_SERVICE = "/execution_manager/claim"
-RELEASE_SERVICE = "/execution_manager/release"
+SOURCE_SERVICE = "/execution_manager/source_activation"
+RECOVERY_SERVICE = "/execution_manager/recover_resources"
 AUTHORITY_STATUS_TOPIC = "/execution_manager/authority_status"
 AUTHORITY_EVENTS_TOPIC = "/execution_manager/authority_events"
 
@@ -34,10 +35,10 @@ _AUTHORITY_STATE_NAME = {
 
 
 class SourceRole(IntEnum):
-    POLICY = ClaimControl.Request.POLICY
-    TELEOP = ClaimControl.Request.TELEOP
-    PLANNER = ClaimControl.Request.PLANNER
-    MEMORY = ClaimControl.Request.MEMORY
+    POLICY = 1
+    TELEOP = 2
+    PLANNER = 3
+    MEMORY = 4
 
     @classmethod
     def parse(cls, value: SourceRole | str | int) -> SourceRole:
@@ -49,20 +50,6 @@ class SourceRole(IntEnum):
             except KeyError as exc:
                 raise ValueError(f"unknown source role {value!r}") from exc
         return cls(value)
-
-
-@dataclass(frozen=True)
-class EndpointBinding:
-    resource: str
-    command_contract: str
-    endpoint: str
-    is_action: bool
-
-
-@dataclass(frozen=True)
-class LeaseGrant:
-    lease_id: str
-    endpoints: dict[tuple[str, str], EndpointBinding]
 
 
 @dataclass(frozen=True)
@@ -108,32 +95,19 @@ class AuthoritySnapshot:
 
 
 class AuthorityClient(Protocol):
+    def set_source_activation(
+        self, name: str, session: str, *, active: bool, preempt: bool = False
+    ) -> None: ...
+
+    def get_sources(self) -> dict[str, dict[str, Any]]: ...
+
     def require_execution_manager(self, *, timeout_sec: float | None = None) -> None: ...
-
-    def claim(
-        self,
-        source_role: SourceRole | str | int,
-        source_instance: str,
-        resources: dict[str, str],
-        *,
-        preempt: bool = False,
-        metadata: dict[str, str] | None = None,
-    ) -> LeaseGrant: ...
-
-    def release(self, lease_id: str) -> None: ...
 
     def get_allocations(self) -> dict[str, dict[str, Any]]: ...
 
     def describe_authority(self) -> AuthoritySnapshot: ...
 
-    def clear_fault(
-        self,
-        resources: dict[str, str],
-        *,
-        source_role: SourceRole | str | int = SourceRole.POLICY,
-        source_instance: str = "rmi_clear_fault",
-        force: bool = False,
-    ) -> AuthoritySnapshot: ...
+    def clear_fault(self, resources: dict[str, str]) -> AuthoritySnapshot: ...
 
     def get_events(self, *, lease_id: str | None = None) -> list[AuthorityEvent]: ...
 
@@ -154,9 +128,18 @@ class ExecutionManagerClient:
             raise ValueError("status_timeout_sec must be positive")
         self._status_timeout_sec = status_timeout_sec
         self._last_status_monotonic: float | None = None
-        self._claim_client = node.create_client(ClaimControl, CLAIM_SERVICE)
-        self._release_client = node.create_client(ReleaseControl, RELEASE_SERVICE)
+        self._recovery_client = node.create_client(RecoverResources, RECOVERY_SERVICE)
         self._allocations: dict[str, dict[str, Any]] = {}
+        self._sources: dict[str, dict[str, Any]] = {}
+        self._source_status_time: float | None = None
+        self._source_client = node.create_client(SetSourceActivation, SOURCE_SERVICE)
+        self._heartbeat_pub = node.create_publisher(String, "/execution_manager/source_heartbeat", 10)
+        self._sessions: set[str] = set()
+        self._sessions_lock = threading.Lock()
+        self._stop_heartbeat = threading.Event()
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
+
         self._events: deque[AuthorityEvent] = deque(maxlen=2048)
         status_qos = QoSProfile(depth=1)
         status_qos.reliability = ReliabilityPolicy.RELIABLE
@@ -166,6 +149,9 @@ class ExecutionManagerClient:
         # EM retains its recent audit trail so a client started after a fault
         # can still report the original transition failure reason.
         event_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        self._source_subscription = node.create_subscription(
+            SourceLifecycleStatus, "/execution_manager/source_status", self._on_sources, status_qos
+        )
         self._status_subscription = node.create_subscription(
             AuthorityStatus, AUTHORITY_STATUS_TOPIC, self._on_status, status_qos
         )
@@ -173,79 +159,71 @@ class ExecutionManagerClient:
             AuthorityEvent, AUTHORITY_EVENTS_TOPIC, self._on_event, event_qos
         )
 
+    def set_source_activation(self, name: str, session: str, *, active: bool, preempt: bool = False) -> None:
+        if not self._source_client.wait_for_service(timeout_sec=self._timeout_sec):
+            raise ExecutionManagerUnavailableError("source lifecycle service unavailable")
+        request = SetSourceActivation.Request()
+        request.source_instance, request.session_id = name, session
+        request.active, request.preempt = active, preempt
+        if active:
+            with self._sessions_lock:
+                self._sessions.add(session)
+        try:
+            response = _wait_future(self._source_client.call_async(request), max(12.0, self._timeout_sec), "source activation")
+            if response is None or not response.success:
+                raise RuntimeError("source activation failed" if response is None else response.message)
+        except BaseException:
+            if active:
+                with self._sessions_lock:
+                    self._sessions.discard(session)
+            raise
+        if not active:
+            with self._sessions_lock:
+                self._sessions.discard(session)
+        if active and preempt:
+            deadline = time.monotonic() + self._timeout_sec
+            while time.monotonic() < deadline:
+                record = self.get_sources().get(name, {})
+                if record.get("session_id") == session and record.get("state") == 3:
+                    break
+                time.sleep(0.005)
+            else:
+                raise ExecutionManagerUnavailableError("grant acknowledged but source status unavailable")
+
+    def get_sources(self) -> dict[str, dict[str, Any]]:
+        if self._source_status_time is None:
+            return {}
+        if time.monotonic() - self._source_status_time > self._status_timeout_sec:
+            raise ExecutionManagerUnavailableError("source lifecycle status expired")
+        return {name: dict(value) for name, value in self._sources.items()}
+
+    def _on_sources(self, message: SourceLifecycleStatus) -> None:
+        self._sources = {item.source_instance: {
+            "state": int(item.state), "mode": int(item.mode),
+            "session_id": item.session_id, "lease_id": item.lease_id,
+            "reason": item.reason,
+        } for item in message.sources}
+        self._source_status_time = time.monotonic()
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop_heartbeat.wait(0.5):
+            with self._sessions_lock:
+                sessions = tuple(self._sessions)
+            for session in sessions:
+                try:
+                    self._heartbeat_pub.publish(String(data=session))
+                except Exception:
+                    # Shutdown may invalidate the ROS context before close().
+                    if not self._node.context.ok():
+                        return
+
     def require_execution_manager(self, *, timeout_sec: float | None = None) -> None:
         timeout = self._timeout_sec if timeout_sec is None else timeout_sec
         if timeout <= 0.0:
             raise ValueError("timeout_sec must be positive")
-        if not self._claim_client.wait_for_service(timeout_sec=timeout):
+        if not self._source_client.wait_for_service(timeout_sec=timeout):
             raise ExecutionManagerUnavailableError(
-                f"Execution Manager is unavailable at {CLAIM_SERVICE}"
-            )
-
-    def claim(
-        self,
-        source_role: SourceRole | str | int,
-        source_instance: str,
-        resources: dict[str, str],
-        *,
-        preempt: bool = False,
-        metadata: dict[str, str] | None = None,
-    ) -> LeaseGrant:
-        if not source_instance:
-            raise ValueError("source_instance must not be empty")
-        if not resources:
-            raise ValueError("claim requires at least one resource")
-        self.require_execution_manager()
-        request = ClaimControl.Request()
-        request.source_role = int(SourceRole.parse(source_role))
-        request.source_instance = source_instance
-        request.preempt = bool(preempt)
-        for key, value in (metadata or {}).items():
-            request.metadata.append(KeyValue(key=str(key), value=str(value)))
-        for resource, command_contract in resources.items():
-            item = ResourceClaim()
-            item.resource = resource
-            item.command_contract = command_contract
-            request.resources.append(item)
-        response = _wait_future(
-            self._claim_client.call_async(request), self._timeout_sec, "control claim"
-        )
-        if response is None or not response.success:
-            raise RuntimeError(
-                "empty Execution Manager response"
-                if response is None
-                else response.message
-            )
-        bindings = {
-            (item.resource, item.command_contract): EndpointBinding(
-                resource=item.resource,
-                command_contract=item.command_contract,
-                endpoint=item.endpoint,
-                is_action=item.is_action,
-            )
-            for item in response.endpoints
-        }
-        if set(bindings) != {(name, contract) for name, contract in resources.items()}:
-            raise RuntimeError("Execution Manager returned incomplete endpoint bindings")
-        return LeaseGrant(response.lease_id, bindings)
-
-    def release(self, lease_id: str) -> None:
-        if not lease_id:
-            raise ValueError("lease_id must not be empty")
-        if not self._release_client.wait_for_service(timeout_sec=self._timeout_sec):
-            raise ExecutionManagerUnavailableError(
-                f"Execution Manager is unavailable at {RELEASE_SERVICE}"
-            )
-        request = ReleaseControl.Request()
-        request.lease_id = lease_id
-        response = _wait_future(
-            self._release_client.call_async(request), self._timeout_sec, "control release"
-        )
-        if response is None or not response.success:
-            raise RuntimeError(
-                "empty Execution Manager response"
-                if response is None
-                else response.message
+                f"Execution Manager is unavailable at {SOURCE_SERVICE}"
             )
 
     def get_allocations(self) -> dict[str, dict[str, Any]]:
@@ -261,73 +239,24 @@ class ExecutionManagerClient:
         """Return the latest EM authority snapshot (empty if status is stale)."""
         return AuthoritySnapshot(self.get_allocations())
 
-    def clear_fault(
-        self,
-        resources: dict[str, str],
-        *,
-        source_role: SourceRole | str | int = SourceRole.POLICY,
-        source_instance: str = "rmi_clear_fault",
-        force: bool = False,
-    ) -> AuthoritySnapshot:
-        """Clear FAULT on ``resources`` via preempt claim + immediate release.
-
-        Application startup may call this when the operator is about to start a
-        session after an RT fault / restart left EM in FAULT. Controllers may
-        remain active until the next real claim; authority returns to UNOWNED.
-
-        When ``force`` is true, preempt-claim/release all given resources even if
-        the local status cache does not yet show FAULT.
-        """
+    def clear_fault(self, resources: dict[str, str]) -> AuthoritySnapshot:
+        """Recover faulted resources without acquiring execution authority."""
         if not resources:
             raise ValueError("clear_fault requires at least one resource")
-        if not source_instance:
-            raise ValueError("source_instance must not be empty")
-        snapshot = self.describe_authority()
-        if force:
-            targets = dict(resources)
-        else:
-            targets = {
-                name: contract
-                for name, contract in resources.items()
-                if int(
-                    snapshot.resources.get(name, {}).get(
-                        "authority_state", ResourceAuthority.UNOWNED
-                    )
-                )
-                == int(ResourceAuthority.FAULT)
-            }
-        if not targets:
-            return snapshot
-        grant = self.claim(
-            source_role,
-            source_instance,
-            targets,
-            preempt=True,
-            metadata={"reason": "clear_fault"},
-        )
-        self.release(grant.lease_id)
+        if not self._recovery_client.wait_for_service(timeout_sec=self._timeout_sec):
+            raise ExecutionManagerUnavailableError("resource recovery service unavailable")
+        request = RecoverResources.Request(resources=list(resources))
+        response = _wait_future(self._recovery_client.call_async(request),
+                                self._timeout_sec, "resource recovery")
+        if response is None or not response.success:
+            raise RuntimeError("empty recovery response" if response is None else response.message)
         deadline = time.monotonic() + self._timeout_sec
         while time.monotonic() < deadline:
             snapshot = self.describe_authority()
-            pending = False
-            for name in targets:
-                item = snapshot.resources.get(name)
-                if item is None:
-                    continue
-                state = int(item.get("authority_state", ResourceAuthority.UNOWNED))
-                if state == int(ResourceAuthority.FAULT):
-                    pending = True
-                    break
-                if (
-                    state == int(ResourceAuthority.OWNED)
-                    and item.get("source_instance") == source_instance
-                ):
-                    pending = True
-                    break
-            if not pending:
+            if all(name in snapshot.resources and name not in snapshot.faults for name in resources):
                 return snapshot
             time.sleep(0.01)
-        return self.describe_authority()
+        raise ExecutionManagerUnavailableError("recovery status was not confirmed")
 
     def get_events(self, *, lease_id: str | None = None) -> list[AuthorityEvent]:
         if lease_id is None:
@@ -335,12 +264,17 @@ class ExecutionManagerClient:
         return [event for event in self._events if event.lease_id == lease_id]
 
     def close(self) -> None:
+        self._stop_heartbeat.set()
+        self._heartbeat_thread.join(timeout=1.0)
+        if hasattr(self._node, "destroy_publisher"):
+            self._node.destroy_publisher(self._heartbeat_pub)
         if hasattr(self._node, "destroy_subscription"):
+            self._node.destroy_subscription(self._source_subscription)
             self._node.destroy_subscription(self._status_subscription)
             self._node.destroy_subscription(self._event_subscription)
         if hasattr(self._node, "destroy_client"):
-            self._node.destroy_client(self._claim_client)
-            self._node.destroy_client(self._release_client)
+            self._node.destroy_client(self._source_client)
+            self._node.destroy_client(self._recovery_client)
 
     def _on_status(self, message: AuthorityStatus) -> None:
         self._last_status_monotonic = time.monotonic()
@@ -377,13 +311,11 @@ def _wait_future(future: Any, timeout: float | None, context: str) -> Any:
 __all__ = [
     "AUTHORITY_EVENTS_TOPIC",
     "AUTHORITY_STATUS_TOPIC",
-    "CLAIM_SERVICE",
-    "RELEASE_SERVICE",
+    "SOURCE_SERVICE",
+    "RECOVERY_SERVICE",
     "AuthorityClient",
     "AuthoritySnapshot",
-    "EndpointBinding",
     "ExecutionManagerClient",
     "ExecutionManagerUnavailableError",
-    "LeaseGrant",
     "SourceRole",
 ]

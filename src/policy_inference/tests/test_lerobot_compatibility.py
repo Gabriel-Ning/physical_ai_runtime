@@ -12,7 +12,7 @@ from policy_inference.lerobot.compatibility import (
     validate_policy_compatibility,
     write_contract_manifest,
 )
-from policy_inference.lerobot.utils import (
+from policy_inference.lerobot.features import (
     make_dataset_features,
     make_native_resize_step,
 )

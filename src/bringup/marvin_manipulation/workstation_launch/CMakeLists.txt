@@ -18,8 +18,9 @@ install(DIRECTORY "${REPO_ROOT}/apps/profiles/"
   DESTINATION share/${PROJECT_NAME}/profiles
 )
 install(FILES
-  "${REPO_ROOT}/apps/recording/marvin_manipulation.yaml"
-  "${REPO_ROOT}/apps/recording/marvin_manipulation_no_cam.yaml"
+  "${REPO_ROOT}/apps/recording/marvin_bimanual_real.yaml"
+  "${REPO_ROOT}/apps/recording/marvin_bimanual_mujoco.yaml"
+  "${REPO_ROOT}/apps/recording/marvin_bimanual_no_cam.yaml"
   DESTINATION share/${PROJECT_NAME}/recording
 )
 

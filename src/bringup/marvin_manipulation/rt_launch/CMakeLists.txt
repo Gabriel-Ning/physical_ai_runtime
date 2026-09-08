@@ -21,6 +21,7 @@ install(DIRECTORY
   launch
   config
   urdf
+  mjcf
   docs
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE

@@ -58,10 +58,10 @@ sources:
     inputs:
       arm:
         command_contract: joint_trajectory
-        action: /action_sources/trajectory_planner/arm/follow_joint_trajectory
+        action: /execution_manager/ingress/planner/arm/follow_joint_trajectory
       end_effector:
         command_contract: gripper_command
-        action: /action_sources/trajectory_planner/end_effector/gripper_command
+        action: /execution_manager/ingress/planner/end_effector/gripper_command
 
   # (2) 实时高频流式规划通道 (CuRobo MPC / OCS2 / 动态避障 50~100Hz Topic)
   StreamingPlanner:

@@ -1,0 +1,50 @@
+<mujoco>
+  <compiler angle="radian"/>
+  <asset>
+    <material name="marvin_white" rgba="0.92 0.92 0.94 1" specular="0.5" shininess="0.4"/>
+    <material name="marvin_metal" rgba="0.40 0.42 0.45 1" specular="0.7" shininess="0.6"/>
+    <material name="pika_adaptor_mat" rgba="0.20 0.20 0.22 1" specular="0.7" shininess="0.6"/>
+    <material name="pika_chassis_white" rgba="0.95 0.95 0.97 1" specular="0.5" shininess="0.5"/>
+    <material name="pika_finray_blue" rgba="0.15 0.48 0.78 1" specular="0.4" shininess="0.3"/>
+
+    <mesh name="base_link" file="../../../../../marvin_description/share/marvin_description/meshes/base/base_link.STL"/>
+    <mesh name="Base_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Base_L.STL"/>
+    <mesh name="Link1_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link1_L.STL"/>
+    <mesh name="Link2_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link2_L.STL"/>
+    <mesh name="Link3_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link3_L.STL"/>
+    <mesh name="Link4_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link4_L.STL"/>
+    <mesh name="Link5_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link5_L.STL"/>
+    <mesh name="Link6_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link6_L.STL"/>
+    <mesh name="Link7_L" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link7_L.STL"/>
+    <mesh name="Base_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Base_R.STL"/>
+    <mesh name="Link1_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link1_R.STL"/>
+    <mesh name="Link2_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link2_R.STL"/>
+    <mesh name="Link3_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link3_R.STL"/>
+    <mesh name="Link4_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link4_R.STL"/>
+    <mesh name="Link5_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link5_R.STL"/>
+    <mesh name="Link6_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link6_R.STL"/>
+    <mesh name="Link7_R" file="../../../../../marvin_description/share/marvin_description/meshes/m6/Link7_R.STL"/>
+    <mesh name="pika_marvin_adaptor" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_adaptor/pika_marvin_adaptor.STL"/>
+    <mesh name="pika_gripper_base" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/gripper_base_link.STL"/>
+    <mesh name="pika_finray_finger" file="../../../../../pika_gripper_description/share/pika_gripper_description/meshes/pika_finray_link.STL"/>
+  </asset>
+
+  <default>
+    <default class="marvin_arm">
+      <joint damping="1.0" armature="0.1" frictionloss="0.1"/>
+      <geom type="mesh" material="marvin_white" contype="1" conaffinity="1"/>
+      <position kp="800" kv="40" forcerange="-108 108"/>
+    </default>
+    <default class="marvin_wrist">
+      <joint damping="0.5" armature="0.05" frictionloss="0.05"/>
+      <geom type="mesh" material="marvin_white" contype="1" conaffinity="1"/>
+      <position kp="300" kv="20" forcerange="-18 18"/>
+    </default>
+    <default class="pika_gripper">
+      <joint frictionloss="0.01" damping="0.1" type="slide"/>
+      <geom type="mesh" material="pika_finray_blue" contype="1" conaffinity="1" condim="4"
+            friction="1.5 0.01 0.001"/>
+      <position forcerange="-30 30" kp="200" kv="15"/>
+    </default>
+  </default>
+</mujoco>

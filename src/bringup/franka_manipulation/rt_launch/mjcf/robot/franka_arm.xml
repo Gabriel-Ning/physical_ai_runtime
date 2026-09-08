@@ -1,7 +1,7 @@
 <mujoco model="franka_arm">
   <worldbody>
-    <!-- Franka FR3 7-DOF Robotic Arm (Mounted on Tabletop at Z=0.72) -->
-    <body name="fr3_link0" pos="0.0 -0.20 0.72">
+    <!-- Official MountedPanda table offset: (-0.16 - L/2, 0, 0) with L=1.0 → x=-0.66, facing +X. -->
+    <body name="fr3_link0" pos="-0.66 0 0.90">
       <inertial pos="-0.0172 0.0004 0.0745" mass="2.3966" diaginertia="0.0090 0.0115 0.0085"/>
       <geom mesh="fr3_link0" class="fr3_arm" material="fr3_white"/>
       <geom type="cylinder" size="0.08 0.012" pos="0 0 0.012" material="fr3_joint_black" contype="0" conaffinity="0"/>

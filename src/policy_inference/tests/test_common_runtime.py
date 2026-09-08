@@ -6,13 +6,19 @@ from typing import ClassVar
 
 import numpy as np
 import pytest
-from rmi import JointGroup, JointLayout, Observation, PolicyLayout
+from rmi import (
+    JointGroup,
+    JointLayout,
+    Observation,
+    PolicyLayout,
+    ros_image_to_numpy,
+)
 from rmi.sensing import TimestampedSample
 
-from policy_inference.lerobot.bridge import (
-    LeRobotToRmiActionBridge,
-    RmiToLeRobotObservationBridge,
-    ros_image_to_numpy,
+from policy_inference.lerobot.bridges import (
+    JointActionDecoder,
+    ObservationEncoder,
+    make_action_decoder,
 )
 
 
@@ -144,17 +150,17 @@ def _observation(image: np.ndarray, *, camera_receive_time: float = 1.1) -> Obse
     )
 
 
-def test_observation_bridge_orders_joints_and_reuses_rmi_camera_payload() -> None:
+def test_observation_encoder_orders_joints_and_reuses_rmi_camera_payload() -> None:
     from lerobot.utils.constants import OBS_STR
     from lerobot.utils.feature_utils import build_dataset_frame
 
-    from policy_inference.lerobot.utils import make_dataset_features
+    from policy_inference.lerobot.features import make_dataset_features
 
     layout = _layout()
-    bridge = RmiToLeRobotObservationBridge(layout)
+    encoder = ObservationEncoder(layout)
     image = np.zeros((8, 8, 3), dtype=np.uint8)
 
-    values = bridge.encode(_observation(image))
+    values = encoder.encode(_observation(image))
     frame = build_dataset_frame(
         make_dataset_features(layout), values, prefix=OBS_STR
     )
@@ -165,9 +171,9 @@ def test_observation_bridge_orders_joints_and_reuses_rmi_camera_payload() -> Non
     assert frame["observation.images.wrist"] is image
 
 
-def test_observation_bridge_rejects_missing_sensor_and_stream_skew() -> None:
+def test_observation_encoder_rejects_missing_sensor_and_stream_skew() -> None:
     layout = _layout()
-    bridge = RmiToLeRobotObservationBridge(layout, max_stream_skew_s=0.5)
+    encoder = ObservationEncoder(layout, max_stream_skew_s=0.5)
     image = np.zeros((8, 8, 3), dtype=np.uint8)
     missing = _observation(image)
     missing = Observation(
@@ -177,16 +183,155 @@ def test_observation_bridge_rejects_missing_sensor_and_stream_skew() -> None:
     )
 
     with pytest.raises(RuntimeError, match="missing sensor 'wrist'"):
-        bridge.encode(missing)
+        encoder.encode(missing)
     with pytest.raises(RuntimeError, match="freshness window"):
-        bridge.encode(_observation(image, camera_receive_time=2.0))
+        encoder.encode(_observation(image, camera_receive_time=2.0))
 
 
-def test_action_bridge_emits_one_native_rmi_action_per_profile_resource() -> None:
+def test_observation_encoder_cartesian_packs_tcp_and_gripper() -> None:
+    from rmi.sensing import PoseSample
+
+    layout = _cartesian_layout()
+    # Expand state slots to LIBERO 8D (fake joint names matching packed length).
+    layout = PolicyLayout(
+        profile_name=layout.profile_name,
+        profile_hash=layout.profile_hash,
+        joints=JointLayout(
+            (
+                JointGroup(
+                    "arm",
+                    "pose_reference",
+                    ("s0", "s1", "s2", "s3", "s4", "s5"),
+                    0,
+                    6,
+                ),
+                JointGroup(
+                    "end_effector",
+                    "joint_reference",
+                    ("grip_l", "grip_r"),
+                    6,
+                    8,
+                ),
+            ),
+            ("s0", "s1", "s2", "s3", "s4", "s5", "grip_l", "grip_r"),
+        ),
+        state_topic=layout.state_topic,
+        action_topics=layout.action_topics,
+        camera_sources={},
+        camera_topics={},
+        camera_shapes={},
+        frequency=30.0,
+        control_mode="cartesian",
+        action_space="rel",
+        pose_part="arm",
+        gripper_parts=("end_effector",),
+    )
+    pose = PoseSample(
+        position_xyz=(0.1, 0.2, 0.3),
+        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        frame_id="base_link",
+        child_frame_id="tcp",
+    )
+    observation = Observation(
+        data={
+            "joint_names": ("s0", "s1", "s2", "s3", "s4", "s5", "grip_l", "grip_r"),
+            "joint_positions": (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04, -0.04),
+        },
+        source_time_s=1.0,
+        receive_time_s=1.0,
+        sensors=MappingProxyType(
+            {
+                "arm": TimestampedSample(
+                    value=pose,
+                    source_time_s=1.0,
+                    receive_time_s=1.05,
+                    sequence=1,
+                )
+            }
+        ),
+    )
+    encoder = ObservationEncoder(layout)
+    values = encoder.encode(observation)
+
+    assert [values[name] for name in layout.state_feature_names] == pytest.approx(
+        [0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 0.04, -0.04]
+    )
+
+
+def test_observation_encoder_cartesian_includes_tcp_in_skew_gate() -> None:
+    from rmi.sensing import PoseSample
+
+    layout = PolicyLayout(
+        profile_name="cart",
+        profile_hash="h",
+        joints=JointLayout(
+            (
+                JointGroup(
+                    "arm",
+                    "pose_reference",
+                    ("s0", "s1", "s2", "s3", "s4", "s5"),
+                    0,
+                    6,
+                ),
+                JointGroup(
+                    "end_effector",
+                    "joint_reference",
+                    ("grip_l", "grip_r"),
+                    6,
+                    8,
+                ),
+            ),
+            ("s0", "s1", "s2", "s3", "s4", "s5", "grip_l", "grip_r"),
+        ),
+        state_topic="/joint_states",
+        action_topics={
+            "arm": "/execution/arm/pose_reference",
+            "end_effector": "/execution/end_effector/joint_reference",
+        },
+        camera_sources={},
+        camera_topics={},
+        camera_shapes={},
+        frequency=30.0,
+        control_mode="cartesian",
+        action_space="rel",
+        pose_part="arm",
+        gripper_parts=("end_effector",),
+    )
+    pose = PoseSample(
+        position_xyz=(0.0, 0.0, 0.0),
+        orientation_wxyz=(1.0, 0.0, 0.0, 0.0),
+        frame_id="base",
+        child_frame_id="tcp",
+    )
+    observation = Observation(
+        data={
+            "joint_names": ("s0", "s1", "s2", "s3", "s4", "s5", "grip_l", "grip_r"),
+            "joint_positions": (0.0,) * 8,
+        },
+        source_time_s=1.0,
+        receive_time_s=1.0,
+        sensors=MappingProxyType(
+            {
+                "arm": TimestampedSample(
+                    value=pose,
+                    source_time_s=1.0,
+                    receive_time_s=2.0,
+                    sequence=1,
+                )
+            }
+        ),
+    )
+    encoder = ObservationEncoder(layout, max_stream_skew_s=0.5)
+    with pytest.raises(RuntimeError, match="freshness window"):
+        encoder.encode(observation)
+
+def test_joint_decoder_emits_one_native_rmi_action_per_profile_resource() -> None:
     layout = _layout()
 
-    actions = LeRobotToRmiActionBridge(layout).decode(np.arange(5.0))
+    decoder = make_action_decoder(layout)
+    actions = decoder.decode(np.arange(5.0))
 
+    assert isinstance(decoder, JointActionDecoder)
     assert [(action.part, action.value) for action in actions] == [
         ("left_arm", [0.0, 1.0]),
         ("left_gripper", [2.0]),
@@ -194,16 +339,54 @@ def test_action_bridge_emits_one_native_rmi_action_per_profile_resource() -> Non
     ]
 
 
-def test_action_bridge_rejects_bad_shape_and_nonfinite_values() -> None:
-    bridge = LeRobotToRmiActionBridge(_layout())
+def test_joint_decoder_rejects_bad_shape_and_nonfinite_values() -> None:
+    decoder = JointActionDecoder(_layout())
 
     with pytest.raises(ValueError, match="action shape"):
-        bridge.decode(np.zeros(4))
+        decoder.decode(np.zeros(4))
     with pytest.raises(ValueError, match="NaN or Inf"):
-        bridge.decode(np.array([0.0, 1.0, 2.0, 3.0, np.nan]))
+        decoder.decode(np.array([0.0, 1.0, 2.0, 3.0, np.nan]))
 
 
-def test_ros_image_bridge_outputs_contiguous_rgb() -> None:
+def test_joint_gripper_unit_scale_roundtrip() -> None:
+    layout = _layout()
+    decoder = JointActionDecoder(
+        layout, normalize_gripper=True, gripper_max_width=0.04
+    )
+    actions = decoder.decode(np.array([0.1, 0.2, 1.0, 0.3, 0.5]))
+    by_part = {action.part: action.value for action in actions}
+    assert by_part["left_arm"] == [pytest.approx(0.1), pytest.approx(0.2)]
+    assert by_part["left_gripper"] == [pytest.approx(0.04)]
+    assert by_part["right_arm"] == [pytest.approx(0.3), pytest.approx(0.5)]
+
+    encoder = ObservationEncoder(
+        layout, normalize_gripper=True, gripper_max_width=0.04
+    )
+    image = np.zeros((8, 8, 3), dtype=np.uint8)
+    observation = _observation(image)
+    # Override joint meters: left_gripper = 0.02 m → 0.5 after normalize.
+    observation = Observation(
+        data={
+            "joint_names": (
+                "right_2",
+                "left_gripper",
+                "left_1",
+                "right_1",
+                "left_2",
+            ),
+            "joint_positions": (4.0, 0.02, 0.0, 3.0, 1.0),
+        },
+        source_time_s=1.0,
+        receive_time_s=1.0,
+        sensors=observation.sensors,
+    )
+    encoded = encoder.encode(observation)
+    assert encoded["left_1.pos"] == pytest.approx(0.0)
+    assert encoded["left_gripper.pos"] == pytest.approx(0.5)
+    assert encoded["right_2.pos"] == pytest.approx(4.0)
+
+
+def test_ros_image_converter_outputs_contiguous_rgb() -> None:
     message = SimpleNamespace(
         encoding="bgr8",
         height=1,
@@ -216,3 +399,98 @@ def test_ros_image_bridge_outputs_contiguous_rgb() -> None:
 
     assert image.flags.c_contiguous
     assert image.tolist() == [[[3, 2, 1], [6, 5, 4]]]
+
+
+def _cartesian_layout() -> PolicyLayout:
+    joints = JointLayout(
+        (
+            JointGroup("arm", "pose_reference", ("j1", "j2"), 0, 2),
+            JointGroup("end_effector", "joint_reference", ("grip",), 2, 3),
+        ),
+        ("j1", "j2", "grip"),
+    )
+    return PolicyLayout(
+        profile_name="cart",
+        profile_hash="h",
+        joints=joints,
+        state_topic="/joint_states",
+        action_topics={
+            "arm": "/execution/arm/pose_reference",
+            "end_effector": "/execution/end_effector/joint_reference",
+        },
+        camera_sources={},
+        camera_topics={},
+        camera_shapes={},
+        frequency=30.0,
+        control_mode="cartesian",
+        action_space="rel",
+        pose_part="arm",
+        gripper_parts=("end_effector",),
+    )
+
+
+def test_cartesian_decoder_integrates_rel_to_abs_pose() -> None:
+    from policy_inference.lerobot.bridges import CartesianActionDecoder
+
+    decoder = make_action_decoder(
+        _cartesian_layout(),
+        action_space="rel",
+        gripper_max_width=0.04,
+        position_scale=1.0,
+    )
+    assert isinstance(decoder, CartesianActionDecoder)
+    decoder.set_current_pose([1.0, 2.0, 3.0], [1.0, 0.0, 0.0, 0.0])
+    actions = decoder.decode(np.array([0.1, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]))
+
+    assert actions[0].part == "arm"
+    assert actions[0].command == "pose_reference"
+    assert actions[0].value["position"] == pytest.approx([1.1, 2.0, 3.0])
+    assert actions[1].part == "end_effector"
+    assert actions[1].value == pytest.approx([0.04])
+
+
+def test_cartesian_decoder_applies_position_scale() -> None:
+    from policy_inference.lerobot.bridges import CartesianActionDecoder
+
+    decoder = CartesianActionDecoder(
+        _cartesian_layout(), action_space="rel", position_scale=0.05
+    )
+    decoder.set_current_pose([1.0, 2.0, 3.0], [1.0, 0.0, 0.0, 0.0])
+    actions = decoder.decode(np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]))
+    assert actions[0].value["position"] == pytest.approx([1.05, 2.0, 3.0])
+
+
+def test_cartesian_rel_requires_current_pose() -> None:
+    from policy_inference.lerobot.bridges import CartesianActionDecoder
+
+    decoder = CartesianActionDecoder(_cartesian_layout(), action_space="rel")
+    with pytest.raises(RuntimeError, match="set_current_pose"):
+        decoder.decode(np.zeros(7))
+
+
+def test_joint_decoder_ignores_the_optional_pose_hook() -> None:
+    decoder = JointActionDecoder(_layout())
+
+    decoder.set_current_pose([1.0, 2.0, 3.0], [1.0, 0.0, 0.0, 0.0])
+
+    assert [action.part for action in decoder.decode(np.arange(5.0))] == [
+        "left_arm",
+        "left_gripper",
+        "right_arm",
+    ]
+
+
+def test_pack_libero_ee_state_identity_quat_and_single_gripper() -> None:
+    from policy_inference.lerobot.geometry import (
+        pack_libero_ee_state,
+        quat_wxyz_to_axis_angle,
+    )
+
+    assert quat_wxyz_to_axis_angle([1.0, 0.0, 0.0, 0.0]).tolist() == pytest.approx(
+        [0.0, 0.0, 0.0]
+    )
+    state = pack_libero_ee_state([0.1, 0.2, 0.3], [1.0, 0.0, 0.0, 0.0], [0.04])
+    assert state.shape == (8,)
+    assert state[:3].tolist() == pytest.approx([0.1, 0.2, 0.3])
+    assert state[3:6].tolist() == pytest.approx([0.0, 0.0, 0.0])
+    assert state[6:].tolist() == pytest.approx([0.04, -0.04])

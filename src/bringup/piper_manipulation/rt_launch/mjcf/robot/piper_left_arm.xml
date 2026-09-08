@@ -1,0 +1,70 @@
+<mujoco>
+  <worldbody>
+    <!-- ==================== LEFT PIPER ARM ==================== -->
+    <!-- Front view is from -Y looking +Y: left arm is +X, right arm is -X. -->
+    <body name="left_base_link" pos="0.32 0.29 0.72" quat="0.7071068 0 0 -0.7071068">
+      <inertial pos="-0.00474 2.57e-05 0.04145" mass="1.02" diaginertia="0.00267 0.00283 0.00090"/>
+      <geom mesh="arm_base_link" class="piper_arm"/>
+      
+      <body name="left_link1" pos="0 0 0.123">
+        <inertial pos="0.00032 -0.00041 -0.00348" mass="0.71" diaginertia="0.00050 0.00041 0.00046"/>
+        <joint name="left_joint1" axis="0 0 1" range="-2.61799 2.61799" class="piper_arm"/>
+        <geom mesh="arm_link1" class="piper_arm"/>
+
+        <body name="left_link2" pos="0 0 0" quat="0.0479710 -0.0479709 -0.7054777 -0.7054777">
+          <inertial pos="0.21852 -0.00861 0.00126" mass="1.16" diaginertia="0.00112 0.06763 0.06756"/>
+          <joint name="left_joint2" axis="0 0 1" range="0.0 3.14159" class="piper_arm"/>
+          <geom mesh="arm_link2" class="piper_arm"/>
+
+          <body name="left_link3" pos="0.28503 0 0" quat="0.6240160 0 0 -0.7814116">
+            <inertial pos="-0.01999 -0.14808 -0.00053" mass="0.5" diaginertia="0.01348 0.00046 0.01363"/>
+            <joint name="left_joint3" axis="0 0 1" range="-2.96706 0.0" class="piper_arm"/>
+            <geom mesh="arm_link3" class="piper_arm"/>
+
+            <body name="left_link4" pos="-0.02198 -0.25075 0" quat="0.7071068 0.7071068 0 0">
+              <inertial pos="0.00013 -0.00076 -0.00394" mass="0.38" diaginertia="0.00018 0.00019 0.00015"/>
+              <joint name="left_joint4" axis="0 0 1" range="-1.74533 1.74533" class="piper_arm"/>
+              <geom mesh="arm_link4" class="piper_arm"/>
+
+              <body name="left_link5" pos="0 0 0" quat="0.7071068 -0.7071068 0 0">
+                <inertial pos="0.00018 -0.06104 -0.00227" mass="0.383" diaginertia="0.00172 0.00018 0.00171"/>
+                <joint name="left_joint5" axis="0 0 1" range="-1.22173 1.22173" class="piper_arm"/>
+                <geom mesh="arm_link5" class="piper_arm"/>
+
+                <body name="left_link6" pos="8.8259e-05 -0.091 0" quat="0.7071068 0.7071068 0 0">
+                  <inertial pos="-0.00003 0.00006 -0.002" mass="0.007" diaginertia="0.00152 0.00139 0.00031"/>
+                  <joint name="left_joint6" axis="0 0 1" range="-6.28318 6.28318" class="piper_arm"/>
+                  <geom mesh="arm_link6" class="piper_arm"/>
+
+                  <!-- Left Flange / Gripper Base -->
+                  <body name="left_gripper_base" pos="0 0 0">
+                    <inertial pos="-0.00018 8.05e-05 0.03214" mass="0.45" diaginertia="0.00093 0.00071 0.00039"/>
+                    <geom mesh="gripper_base" class="piper_gripper"/>
+                    <site name="left_gripper_tcp" pos="0 0 0.1358" euler="0 0 0"/>
+
+                    <!-- Left Wrist RealSense D435 Camera Visual Body & Sensor -->
+                    <body name="left_wrist_cam_mount" pos="-0.080 -0.035 0.050" quat="0.208542 0.675655 -0.675655 -0.208542">
+                      <camera name="left_camera" pos="0 0 0" euler="0 0 0" fovy="37" resolution="640 480"/>
+                    </body>
+
+                    <body name="left_gripper_link1" pos="0 0 0.1358" quat="0.7071068 0.7071068 0 0">
+                      <inertial pos="0.00065 -0.04919 0.00972" mass="0.025" diaginertia="7.37e-05 7.81e-06 7.47e-05"/>
+                      <joint name="left_gripper_joint1" type="slide" axis="0 0 1" range="0.0 0.04" class="piper_gripper"/>
+                      <geom mesh="gripper_link1" class="piper_gripper"/>
+                    </body>
+
+                    <body name="left_gripper_link2" pos="0 0 0.1358" quat="0 0 -0.7071068 -0.7071068">
+                      <inertial pos="0.00065 -0.04919 0.00972" mass="0.025" diaginertia="7.37e-05 7.81e-06 7.47e-05"/>
+                      <joint name="left_gripper_joint2" type="slide" axis="0 0 -1" range="-0.04 0.0" class="piper_gripper"/>
+                      <geom mesh="gripper_link2" class="piper_gripper"/>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

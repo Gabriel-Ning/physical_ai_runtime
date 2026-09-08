@@ -5,10 +5,10 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from rmi import PolicyLayout
+from rmi import PolicyLayout, ros_image_to_numpy
 from rmi.config import EmbodimentConfig
 
-from toolbox.dataset_tools.episode import ProfileEpisodeReader, ros_image_to_numpy
+from toolbox.dataset_tools.episode import ProfileEpisodeReader
 from toolbox.dataset_tools.lerobot_converter import (
     _make_dataset_features,
     _write_contract_manifest,

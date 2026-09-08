@@ -1,13 +1,14 @@
 # Copyright 2026 Physical AI Runtime contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Unified RT-Host stack bringup for Marvin Bimanual + Dual Pika Grippers.
+"""Unified RT-Host stack bringup for Marvin bimanual + dual Pika.
 
-Aggregates RT Host bringup:
-  1. Sub-launch 1: controller_bringup.launch.py (ros2_control, Marvin M6 controller, Pika grippers, safety guards)
-  2. On real hardware: prime_arm_position.launch.py (activate left/right_arm_jtc once)
-  3. Sub-launch 2: pika_camera_bringup.launch.py (Dual Pika wrist RealSense D405 + Sunplus fisheye cameras)
+Dispatches by ``backend`` like Franka / Piper:
+  - real / fake → ``controller_bringup.launch.py``
+  - mujoco → ``mujoco_bringup.launch.py``
 
-On the physical Marvin RT Host, both Pika grippers and wrist perception cameras default to enabled.
+On real hardware, optionally primes ``left/right_arm_jtc`` once (CCS
+``enter_position``). Wrist cameras stay on this host via
+``pika_camera_bringup.launch.py`` when ``with_cameras:=true``.
 """
 
 from __future__ import annotations
@@ -25,61 +26,107 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 
+_CONTROL_MODULES = {
+    "mujoco": "mujoco_bringup.launch.py",
+    "real": "controller_bringup.launch.py",
+    "fake": "controller_bringup.launch.py",
+}
 
-def _prime_actions(context: LaunchContext):
-    """Real hardware only: after controller_bringup, activate JTCs once."""
 
-    def _as_bool(name: str) -> bool:
-        return LaunchConfiguration(name).perform(context).strip().lower() in (
-            "true",
-            "1",
+def _include_launch(launch_dir: str, module: str, arguments: dict):
+    return IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, module)),
+        launch_arguments=arguments.items(),
+    )
+
+
+def _module_key(context: LaunchContext) -> str:
+    backend = LaunchConfiguration("backend").perform(context).lower().strip()
+    use_sim_mujoco = (
+        LaunchConfiguration("use_sim_mujoco").perform(context).lower().strip()
+    )
+    if backend == "mujoco" or use_sim_mujoco in ("true", "1", "yes"):
+        return "mujoco"
+    if backend in ("real", "fake"):
+        return backend
+    if backend:
+        raise RuntimeError(
+            f"'backend' must be real, fake, or mujoco, got '{backend}'"
         )
+    fake = LaunchConfiguration("use_fake_hardware").perform(context).lower().strip()
+    return "fake" if fake in ("true", "1", "yes") else "real"
 
-    if _as_bool("use_fake_hardware") or not _as_bool("prime_arm_position"):
-        return []
 
-    bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
-    return [
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                os.path.join(bringup_share, "launch", "prime_arm_position.launch.py")
+def _include_control_stack(context: LaunchContext, *args, **kwargs):
+    module_key = _module_key(context)
+    launch_dir = os.path.join(
+        get_package_share_directory("marvin_manipulation_rt_launch"), "launch"
+    )
+    if module_key == "mujoco":
+        return [
+            _include_launch(
+                launch_dir,
+                _CONTROL_MODULES[module_key],
+                {
+                    "task": LaunchConfiguration("task"),
+                    "mujoco_model": LaunchConfiguration("mujoco_model"),
+                    "headless": LaunchConfiguration("headless"),
+                    "mujoco_plugins_yaml": LaunchConfiguration("mujoco_plugins_yaml"),
+                    "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
+                    "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
+                        "jtc_guard_heartbeat_timeout_s"
+                    ),
+                    "jtc_guard_cancel_response_timeout_s": LaunchConfiguration(
+                        "jtc_guard_cancel_response_timeout_s"
+                    ),
+                },
             )
+        ]
+    actions = [
+        _include_launch(
+            launch_dir,
+            _CONTROL_MODULES[module_key],
+            {
+                "use_fake_hardware": "true" if module_key == "fake" else "false",
+                "backend": module_key,
+                "use_rviz": LaunchConfiguration("use_rviz"),
+                "cpu_affinity": LaunchConfiguration("cpu_affinity"),
+                "robot_ip": LaunchConfiguration("robot_ip"),
+                "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
+                "left_gripper_serial_port": LaunchConfiguration(
+                    "left_gripper_serial_port"
+                ),
+                "right_gripper_serial_port": LaunchConfiguration(
+                    "right_gripper_serial_port"
+                ),
+                "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
+                    "jtc_guard_heartbeat_timeout_s"
+                ),
+                "jtc_guard_cancel_response_timeout_s": LaunchConfiguration(
+                    "jtc_guard_cancel_response_timeout_s"
+                ),
+            },
         )
     ]
+    prime = LaunchConfiguration("prime_arm_position").perform(context).strip().lower()
+    if module_key == "real" and prime in ("true", "1", "yes"):
+        actions.append(
+            _include_launch(launch_dir, "prime_arm_position.launch.py", {})
+        )
+    return actions
 
 
 def generate_launch_description() -> LaunchDescription:
     bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
+    launch_dir = os.path.join(bringup_share, "launch")
     default_d405_cfg = os.path.join(bringup_share, "config", "camera", "pika_d405.yaml")
     default_fisheye_cfg = os.path.join(
         bringup_share, "config", "camera", "pika_fisheye.yaml"
     )
 
-    # 1. Real-time Controller & Hardware Interface Stack
-    controller = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "controller_bringup.launch.py")
-        ),
-        launch_arguments={
-            "use_fake_hardware": LaunchConfiguration("use_fake_hardware"),
-            "use_rviz": LaunchConfiguration("use_rviz"),
-            "cpu_affinity": LaunchConfiguration("cpu_affinity"),
-            "robot_ip": LaunchConfiguration("robot_ip"),
-            "load_pika_hardware": LaunchConfiguration("load_pika_hardware"),
-            "left_gripper_serial_port": LaunchConfiguration("left_gripper_serial_port"),
-            "right_gripper_serial_port": LaunchConfiguration(
-                "right_gripper_serial_port"
-            ),
-            "jtc_guard_heartbeat_timeout_s": LaunchConfiguration(
-                "jtc_guard_heartbeat_timeout_s"
-            ),
-        }.items(),
-    )
-
-    # 2. Dual Pika Wrist Perception Cameras Stack (D405 + Fisheye per wrist)
     cameras = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, "launch", "pika_camera_bringup.launch.py")
+            os.path.join(launch_dir, "pika_camera_bringup.launch.py")
         ),
         condition=IfCondition(LaunchConfiguration("with_cameras")),
         launch_arguments={
@@ -91,8 +138,40 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
-            # Controller & Hardware parameters
             DeclareLaunchArgument("use_fake_hardware", default_value="true"),
+            DeclareLaunchArgument(
+                "backend",
+                default_value="",
+                description="real, fake, or mujoco. Empty falls back to use_fake_hardware.",
+            ),
+            DeclareLaunchArgument(
+                "use_sim_mujoco",
+                default_value="false",
+                description="Compat alias for backend:=mujoco.",
+            ),
+            DeclareLaunchArgument(
+                "task",
+                default_value="test_marvin",
+                description=(
+                    "test_marvin, a DuoBench task id under duobench_tasks, "
+                    "or an absolute MJCF path (MuJoCo only)."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "mujoco_model",
+                default_value="",
+                description="Absolute MJCF path. When empty, resolved from task:=.",
+            ),
+            DeclareLaunchArgument(
+                "mujoco_plugins_yaml",
+                default_value=os.path.join(bringup_share, "config", "mujoco_plugins.yaml"),
+                description="CameraPlugin and SHM bridge configuration.",
+            ),
+            DeclareLaunchArgument(
+                "headless",
+                default_value="false",
+                description="Run MuJoCo without a rendering window.",
+            ),
             DeclareLaunchArgument("use_rviz", default_value="false"),
             DeclareLaunchArgument(
                 "cpu_affinity",
@@ -111,8 +190,8 @@ def generate_launch_description() -> LaunchDescription:
                 "load_pika_hardware",
                 default_value="true",
                 description=(
-                    "Load both Pika grippers (fake or real follows "
-                    "use_fake_hardware). Set false to omit both sides."
+                    "Load both Pika grippers (fake or real follows backend). "
+                    "Set false to omit both sides."
                 ),
             ),
             DeclareLaunchArgument(
@@ -127,19 +206,23 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument("jtc_guard_heartbeat_timeout_s", default_value="0.5"),
             DeclareLaunchArgument(
+                "jtc_guard_cancel_response_timeout_s", default_value="0.5"
+            ),
+            DeclareLaunchArgument(
                 "prime_arm_position",
                 default_value="true",
                 description=(
-                    "Real hardware only (ignored when use_fake_hardware:=true): "
-                    "after controller_bringup, activate left/right_arm_jtc once "
-                    "so CCS position mode is entered before the first EM claim."
+                    "Real hardware only (ignored when backend:=fake): after "
+                    "controller_bringup, activate left/right_arm_jtc once so "
+                    "CCS position mode is entered before the first EM claim."
                 ),
             ),
-            # Pika Wrist Perception Cameras parameters
             DeclareLaunchArgument(
                 "with_cameras",
                 default_value="true",
-                description="Whether to launch Pika wrist perception cameras (D405 + Fisheye) on RT Host.",
+                description=(
+                    "Launch Pika wrist perception cameras (D405 + Fisheye) on RT Host."
+                ),
             ),
             DeclareLaunchArgument(
                 "d405_config",
@@ -158,8 +241,7 @@ def generate_launch_description() -> LaunchDescription:
                     "Seconds to wait after left D405 before starting right D405."
                 ),
             ),
-            controller,
-            OpaqueFunction(function=_prime_actions),
+            OpaqueFunction(function=_include_control_stack),
             cameras,
         ]
     )

@@ -49,8 +49,8 @@
   </default>
 
   <worldbody>
-    <!-- Franka FR3 7-DOF Robotic Arm (Mounted on Tabletop at Z=0.72) -->
-    <body name="fr3_link0" pos="0.0 -0.20 0.72">
+    <!-- Official MountedPanda table offset: (-0.16 - L/2, 0, 0) with L=1.0 → x=-0.66, facing +X. -->
+    <body name="fr3_link0" pos="-0.66 0 0.90">
       <inertial pos="-0.0172 0.0004 0.0745" mass="2.3966" diaginertia="0.0090 0.0115 0.0085"/>
       <geom mesh="fr3_link0" class="fr3_arm" material="fr3_white"/>
 
@@ -107,12 +107,11 @@
                           <site name="pika_gripper_tcp" pos="0 0 0.21" quat="1 0 0 0"/>
 
                           <!-- Pika Wrist Camera Optical Frame -->
-                          <site name="pika_wrist_color_optical_frame" pos="0.04 0.03 0.08" quat="0.5 -0.5 0.5 -0.5"/>
+                          <site name="pika_wrist_color_optical_frame" pos="0 0.035 0.045" quat="0.5 -0.5 0.5 -0.5"/>
 
-                          <!-- Pika Wrist Camera (D405 / eye-in-hand) -->
-                          <camera name="pika_d405" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
-                          <camera name="wrist_camera" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
-                          <camera name="robot0_eye_in_hand" pos="0.02 0 0.05" euler="0 3.1415926 0" fovy="58" resolution="640 480"/>
+                          <camera name="pika_d405" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
+                          <camera name="wrist_camera" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
+                          <camera name="robot0_eye_in_hand" pos="0 0.035 0.045" euler="3.1415926 0 0" fovy="75" resolution="256 256"/>
 
                           <!-- Left Finger: origin at xyz="0.03898 0 0.0815", touching center at q=0 -->
                           <body name="gripper_left_link" pos="0.03898 0 0.0815">

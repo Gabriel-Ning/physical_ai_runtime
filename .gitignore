@@ -35,7 +35,9 @@ venv/
 # Runtime data and machine-local state
 .cloudxr/*
 !.cloudxr/.gitkeep
+.libero/
 data/
+logs/
 recorded_episodes/
 calibrations/
 metrics/
@@ -57,22 +59,11 @@ MUJOCO_LOG.TXT
 .DS_Store
 Thumbs.db
 
-# Reference checkouts and repos
+# Reference checkouts and repos. Examples stay local, not on v4.
 ref/
 repos/
-examples/
-!/examples/
-/examples/*
-!/examples/README.md
-!/examples/16_franka_gamepad_teleop.py
-!/examples/17_marvin_quest3_teleop.py
-!/examples/18_marvin_joint_slider.py
-!/examples/19_marvin_homing_replay.py
-!/examples/20_marvin_trajectory_recording.py
-!/examples/21_piper_leader_recording.py
-!/examples/22_piper_joint_slider.py
-!/examples/23_piper_homing_replay.py
-!/examples/24_piper_trajectory_recording.py
+/examples/
+/examples/**
 
 # ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
 # Keep the maintained manipulation controller source alongside its published Pixi binary.
@@ -81,15 +72,9 @@ examples/
 !/src/controller/manipulation_position_controllers/
 !/src/controller/manipulation_position_controllers/**
 
+# Execution Manager ships as a Pixi binary; do not snapshot source on v4.
 /src/execution/**
 !/src/execution/.gitkeep
-!/src/execution/execution_manager/
-!/src/execution/execution_manager/**
-!/src/execution/execution_manager_interfaces/
-!/src/execution/execution_manager_interfaces/**
-!/src/execution/orchestrator/
-!/src/execution/orchestrator/**
-# Keep local conda/rattler build products out of the monorepo snapshot.
 /src/execution/**/output/
 /src/execution/**/output/**
 

@@ -1,13 +1,17 @@
 # Copyright 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Marvin bimanual manipulation server for a robot/CPU host.
+"""Marvin bimanual manipulation server for **real / fake** hardware.
 
 Starts robot_state_publisher, ros2_control, and three inactive controller
 routes per arm. RMI execution services are composed by deployment launches.
 
 Site defaults for robot_ip / gripper serials match the URDF xacro defaults
 (gamma RT host); override via launch CLI when needed.
+
+MuJoCo simulation lives in ``mujoco_bringup.launch.py``.
 """
+
+from __future__ import annotations
 
 import os
 import tempfile
@@ -63,6 +67,24 @@ def _resolve_cpu_affinity(context) -> str:
     return os.environ.get("RT_CM_CPU_AFFINITY", "").strip()
 
 
+def _resolve_fake_hardware(context) -> str:
+    """Map backend:=real|fake onto use_fake_hardware; reject mujoco."""
+    backend = LaunchConfiguration("backend").perform(context).lower().strip()
+    if backend == "mujoco":
+        raise RuntimeError(
+            "MuJoCo is owned by mujoco_bringup.launch.py. "
+            "Use: ros2 launch marvin_manipulation_rt_launch mujoco_bringup.launch.py "
+            "... or rt_stack.launch.py backend:=mujoco"
+        )
+    if backend == "real":
+        return "false"
+    if backend == "fake":
+        return "true"
+    if backend:
+        raise RuntimeError(f"'backend' must be real or fake, got '{backend}'")
+    return LaunchConfiguration("use_fake_hardware").perform(context)
+
+
 def _controller_nodes(context: LaunchContext):
     bringup_share = get_package_share_directory("marvin_manipulation_rt_launch")
     marvin_share = get_package_share_directory("marvin_description")
@@ -83,6 +105,7 @@ def _controller_nodes(context: LaunchContext):
 
     load_pika_hardware = _as_bool("load_pika_hardware")
     use_rviz = _as_bool("use_rviz")
+    use_fake_hardware = _resolve_fake_hardware(context)
     robot_ip = context.perform_substitution(LaunchConfiguration("robot_ip"))
     left_serial = context.perform_substitution(
         LaunchConfiguration("left_gripper_serial_port")
@@ -106,9 +129,7 @@ def _controller_nodes(context: LaunchContext):
             "mounts_file": context.perform_substitution(
                 LaunchConfiguration("mounts_file")
             ),
-            "use_fake_hardware": context.perform_substitution(
-                LaunchConfiguration("use_fake_hardware")
-            ),
+            "use_fake_hardware": use_fake_hardware,
             "hardware_plugin": context.perform_substitution(
                 LaunchConfiguration("hardware_plugin")
             ),
@@ -345,6 +366,11 @@ def generate_launch_description() -> LaunchDescription:
                     "false: real Marvin SDK bridge -- only with the robot "
                     "present, powered, and safed."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "backend",
+                default_value="",
+                description="real or fake (not mujoco). Empty falls back to use_fake_hardware.",
             ),
             DeclareLaunchArgument(
                 "hardware_plugin",

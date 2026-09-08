@@ -69,7 +69,7 @@ def test_execution_manager_config_owns_routes():
     assert sources["TeleopTwist"]["preempt"] is True
     assert sources["TrajectoryPlanner"]["inputs"]["end_effector"] == {
         "command_contract": "gripper_command",
-        "action": "/action_sources/trajectory_planner/end_effector/gripper_command",
+        "action": "/execution_manager/ingress/planner/end_effector/gripper_command",
     }
 
 
@@ -163,14 +163,14 @@ def test_examples_16_and_17_share_homing_preemption_recording_lifecycle():
         "SmoothHomingPlanner",
         'context.make_node("DummyPolicy", policy)',
         "context.wait_until_ready(",
-        "planner_node.activate()",
+        "planner_node.activate(",
         "policy_node.activate()",
         "recorder.wait_ready(",
         "pending_episode.__enter__()",
         "episode_scope.__exit__(None, None, None)",
-        "policy_node.is_active",
+        "policy_node.has_control",
     ):
         assert contract in franka
         assert contract in marvin
     assert 'context.make_node("TrajectoryPlanner", homing_planner)' in franka
-    assert 'context.make_node("Planner", homing_planner)' in marvin
+    assert 'context.make_node("TrajectoryPlanner", homing_planner)' in marvin

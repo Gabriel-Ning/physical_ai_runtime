@@ -6,6 +6,18 @@ import yaml
 ROOT = Path(__file__).parents[1]
 
 
+def _assert_execution_controller_remaps_are_passed_to_spawner(launch: str) -> None:
+    """Gripper FCC listens on ~/commands; remaps must reach the spawner argv."""
+    assert "--controller-ros-args" in launch
+    assert 'route_args.extend(["--controller-ros-args", " ".join(route_remaps)])' in launch
+    assert "{fwd}/commands:=/execution/{side}_gripper/joint_reference" in launch
+    assert "{side}_gripper_action/gripper_cmd:=" in launch
+    assert "/execution/{side}_gripper/gripper_command" in launch
+    assert "{side}_arm_jtc/follow_joint_trajectory:=" in launch
+    assert "/execution/{side}_arm/follow_joint_trajectory" in launch
+    assert "shlex.quote" in launch
+
+
 def test_controller_config_is_present():
     assert (ROOT / "config" / "controller" / "controllers.yaml").is_file()
 
@@ -91,10 +103,10 @@ def test_jtc_cancel_deceleration_is_configured_per_joint():
             }
 
 
-def test_launch_owns_no_robot_model():
-    assert not (ROOT / "urdf").exists()
+def test_launch_owns_manipulation_composition_urdf():
+    assert (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").is_file()
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
-    assert 'get_package_share_directory("piper_description")' in launch
+    assert 'get_package_share_directory("piper_manipulation_rt_launch")' in launch
     assert '"urdf", "piper_bimanual_manipulation.urdf.xacro"' in launch
     assert "piper_with_teach.urdf.xacro" not in launch
     assert '"enable_left": str("left" in active).lower()' in launch
@@ -105,6 +117,19 @@ def test_launch_owns_no_robot_model():
     assert 'f"/execution/{side}_arm/follow_joint_trajectory"' in launch
     assert "{side}_arm_jtc/follow_joint_trajectory:=" in launch
 
+
+def test_composition_urdf_matches_franka_mujoco_pattern():
+    urdf = (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").read_text()
+    assert "use_sim_mujoco" in urdf
+    assert "mujoco_ros2_control/MujocoSystemInterface" in urdf
+    assert "PiperMujocoHardware" in urdf
+    assert "<!-- 1. Unified MuJoCo Simulation Hardware Interface -->" in urdf
+    assert "<!-- 2. Real Hardware or Generic Mock Hardware Interface -->" in urdf
+    assert urdf.count("MujocoSystemInterface") == 1
+    # Embodiment macros stay real/fake-only (no MuJoCo in piper_description parts).
+    assert "piper_arm_ros2_control" in urdf
+    assert 'xacro:unless value="$(arg use_sim_mujoco)"' in urdf
+    assert 'xacro:if value="$(arg use_sim_mujoco)"' in urdf
 
 def test_deployment_choices_are_launch_arguments():
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
@@ -162,26 +187,80 @@ def test_rviz_is_opt_in_and_reuses_description_package_config():
     )
     assert 'package="rviz2"' in launch
     assert 'os.path.join(description_share, "rviz", "visualize_piper.rviz")' in launch
+    assert 'get_package_share_directory("piper_description")' in launch
 
 
 def test_route_spawner_keeps_arm_and_gripper_routes_inactive_at_bringup():
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
     assert 'for route in ("jspc", "tskpc", "jtc")' in launch
     assert "*gripper_controllers" in launch
-    assert "/execution/{side}_gripper/joint_reference" in launch
-    assert "/execution/{side}_gripper/gripper_command" in launch
     assert 'f"{side}_gripper_action"' in launch
     for argument in ("--inactive", "--controller-manager", "/controller_manager"):
         assert f'"{argument}"' in launch
+    assert "shlex.quote" in launch
+    _assert_execution_controller_remaps_are_passed_to_spawner(launch)
+
+
+def test_rt_stack_dispatches_by_backend_like_franka():
+    combo = (ROOT / "launch" / "rt_stack.launch.py").read_text()
+    assert '_CONTROL_MODULES = {' in combo
+    assert '"mujoco": "mujoco_bringup.launch.py"' in combo
+    assert '"real": "controller_bringup.launch.py"' in combo
+    assert '"fake": "controller_bringup.launch.py"' in combo
+    assert "OpaqueFunction(function=_include_control_stack)" in combo
+    assert "execution_manager.launch.py" not in combo
+    assert 'get_package_share_directory("rmi")' not in combo
+    assert re.search(
+        r'DeclareLaunchArgument\(\s*"cpu_affinity",\s*default_value=""', combo
+    )
+
+
+def test_controller_bringup_rejects_mujoco():
+    launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
+    assert "MuJoCo is owned by mujoco_bringup.launch.py" in launch
+    assert "mujoco_image_bridge" not in launch
+    assert "_camera_bridge_parameters" not in launch
+    assert 'package="mujoco_ros2_control"' not in launch
+
+
+def test_mujoco_bringup_owns_sim_path():
+    assert (ROOT / "launch" / "mujoco_bringup.launch.py").is_file()
+    assert (ROOT / "config" / "mujoco_plugins.yaml").is_file()
+    assert (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").is_file()
+    assert (ROOT / "mjcf" / "robot" / "piper_bimanual_base.xml").is_file()
+    assert (ROOT / "mjcf" / "actuators" / "piper_position_actuators.xml").is_file()
+    launch = (ROOT / "launch" / "mujoco_bringup.launch.py").read_text()
+    assert "_resolve_mujoco_model" in launch
+    assert "mujoco_image_bridge" in launch
+    assert 'package="mujoco_ros2_control"' in launch
+    assert 'get_package_share_directory("piper_manipulation_rt_launch")' in launch
+    assert '"urdf", "piper_bimanual_manipulation.urdf.xacro"' in launch
+    assert 'os.path.join(share, "config", "mujoco_plugins.yaml")' in launch
+    assert "robotwin_tasks" in launch
+    assert 'get_package_share_directory("piper_description")' not in launch
+    assert "execution_manager.launch.py" not in launch
+    plugins = yaml.safe_load((ROOT / "config" / "mujoco_plugins.yaml").read_text())
+    camera = plugins["/**"]["ros__parameters"]["mujoco_plugins"]["mujoco_camera_plugin"]
+    assert camera["output"] == "shm"
+    assert camera["head_camera"]["image_topic"] == (
+        "/observation/static_orbbec/color/image_raw"
+    )
+    _assert_execution_controller_remaps_are_passed_to_spawner(launch)
+    assert "shlex.quote" in launch
 
 
 def test_rt_stack_contains_only_rt_runtime_components():
     combo = (ROOT / "launch" / "rt_stack.launch.py").read_text()
     assert "controller_bringup.launch.py" in combo
+    assert "mujoco_bringup.launch.py" in combo
     assert "execution_manager.launch.py" not in combo
     assert 'get_package_share_directory("rmi")' not in combo
-    assert 'DeclareLaunchArgument(\n        "left_can_interface",\n        default_value="piper0"' in combo or 'DeclareLaunchArgument(\n                "left_can_interface"' in combo
-    assert 'DeclareLaunchArgument(\n        "right_can_interface",\n        default_value="piper1"' in combo or 'DeclareLaunchArgument(\n                "right_can_interface"' in combo
+    assert re.search(
+        r'DeclareLaunchArgument\(\s*"left_can_interface"', combo
+    )
+    assert re.search(
+        r'DeclareLaunchArgument\(\s*"right_can_interface"', combo
+    )
     assert re.search(
         r'DeclareLaunchArgument\(\s*"cpu_affinity",\s*default_value=""', combo
     )
@@ -204,6 +283,7 @@ def test_package_xml_declares_runtime_plugins():
         "parallel_gripper_action_controller",
         "launch",
         "launch_ros",
+        "robotwin_tasks",
     ):
         assert f"<exec_depend>{dep}</exec_depend>" in text
 

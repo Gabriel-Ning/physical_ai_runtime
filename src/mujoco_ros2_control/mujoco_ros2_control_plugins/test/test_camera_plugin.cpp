@@ -201,12 +201,12 @@ TEST_F(CameraPluginTest, SamplesStateTimeWithoutClockDelivery)
 
 TEST_F(CameraPluginTest, ShmOnlyCreatesNoImageOrInfoPublishers)
 {
-  const std::string prefix = "mujoco_plugins.mujoco_camera_plugin.";
+  const std::string prefix = "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".";
   const std::string shm_prefix = "/pai_plugin_test_" + std::to_string(getpid()) + "_";
-  node_->declare_parameter(prefix + "output", "shm");
-  node_->declare_parameter(prefix + "shm_prefix", shm_prefix);
-  node_->declare_parameter(prefix + "default_policy", "disabled");
-  node_->declare_parameter(prefix + "test_cam.policy", "streaming");
+  plugin_node_->declare_parameter(prefix + "output", "shm");
+  plugin_node_->declare_parameter(prefix + "shm_prefix", shm_prefix);
+  plugin_node_->declare_parameter(prefix + "default_policy", "disabled");
+  plugin_node_->declare_parameter(prefix + "test_cam.policy", "streaming");
   load_model(R"(<mujoco><worldbody>
     <geom type="plane" size="2 2 0.1"/>
     <camera name="test_cam" pos="0 0 1" resolution="64 64"/>
@@ -333,8 +333,9 @@ TEST_F(CameraPluginTest, InitAndPublish)
 // Only polled cameras should expose a trigger service; streaming cameras should not.
 TEST_F(CameraPluginTest, OnlyPolledCamerasCreateTriggerService)
 {
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.stream_cam.policy", std::string("streaming"));
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.policy", std::string("polled"));
+  const std::string param_prefix = "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".";
+  plugin_node_->declare_parameter(param_prefix + "stream_cam.policy", std::string("streaming"));
+  plugin_node_->declare_parameter(param_prefix + "poll_cam.policy", std::string("polled"));
   load_model(R"(<?xml version="1.0"?>
 <mujoco model="two_cameras">
   <worldbody>
@@ -389,7 +390,8 @@ TEST_F(CameraPluginTest, PolledCameraPublishesOncePerTrigger)
 )");
   ASSERT_EQ(model_->ncam, 1);
 
-  plugin_node_->declare_parameter("mujoco_plugins.mujoco_camera_plugin.poll_cam.policy", std::string("polled"));
+  const std::string param_prefix = "mujoco_plugins." + plugin_node_->get_sub_namespace() + ".";
+  plugin_node_->declare_parameter(param_prefix + "poll_cam.policy", std::string("polled"));
 
   mujoco_ros2_control_plugins::CameraPlugin plugin;
   EXPECT_TRUE(plugin.init(plugin_node_, model_, data_, []() { return 0; }));

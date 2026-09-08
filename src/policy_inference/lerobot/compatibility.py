@@ -151,7 +151,9 @@ def validate_policy_compatibility(
     _check_vector_shape(
         errors, config.input_features, "observation.state", layout.joints.dimension
     )
-    _check_vector_shape(errors, config.output_features, "action", layout.joints.dimension)
+    _check_vector_shape(
+        errors, config.output_features, "action", layout.action_dimension
+    )
 
     if manifest is None:
         warnings.append(

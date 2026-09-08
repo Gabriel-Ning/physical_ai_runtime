@@ -1,0 +1,36 @@
+<mujoco>
+  <asset>
+    <!-- Robot materials -->
+    <material name="piper_white" rgba="0.9 0.9 0.9 1"/>
+    <material name="piper_grey" rgba="0.3 0.3 0.3 1"/>
+    <material name="piper_black" rgba="0.1 0.1 0.1 1"/>
+
+    <!-- Arm meshes (from piper_description), Franka-style install-relative paths -->
+    <mesh name="arm_base_link" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/base_link.stl"/>
+    <mesh name="arm_link1" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link1.stl"/>
+    <mesh name="arm_link2" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link2.stl"/>
+    <mesh name="arm_link3" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link3.stl"/>
+    <mesh name="arm_link4" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link4.stl"/>
+    <mesh name="arm_link5" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link5.stl"/>
+    <mesh name="arm_link6" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/link6.stl"/>
+    <mesh name="arm_flange" file="../../../../piper_description/share/piper_description/meshes/piper_arm/collision/flange.stl"/>
+
+    <!-- Gripper meshes (from piper_description) -->
+    <mesh name="gripper_base" file="../../../../piper_description/share/piper_description/meshes/piper_gripper/collision/gripper_base.stl"/>
+    <mesh name="gripper_link1" file="../../../../piper_description/share/piper_description/meshes/piper_gripper/collision/gripper_link1.stl"/>
+    <mesh name="gripper_link2" file="../../../../piper_description/share/piper_description/meshes/piper_gripper/collision/gripper_link2.stl"/>
+  </asset>
+
+  <default>
+    <default class="piper_arm">
+      <joint damping="1.0" armature="0.05" frictionloss="0.1"/>
+      <geom type="mesh" material="piper_grey" contype="1" conaffinity="1"/>
+      <position kp="400" kv="40" forcerange="-100 100"/>
+    </default>
+    <default class="piper_gripper">
+      <joint frictionloss="0" type="slide"/>
+      <geom type="mesh" material="piper_black" contype="1" conaffinity="1" condim="4" friction="1.2 0.005 0.0001"/>
+      <position forcerange="-20 20" kp="80" kv="5"/>
+    </default>
+  </default>
+</mujoco>

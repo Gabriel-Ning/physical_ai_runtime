@@ -105,8 +105,8 @@ def test_marvin_no_camera_profile_only_selects_no_camera_recording():
     config = EmbodimentConfig.from_yaml(
         PROFILES / "site" / "marvin_bimanual_no_cam.yaml"
     )
-    assert "right_gripper" in config.nodes["Policy"].resources
-    assert "right_gripper" in config.nodes["TeleopJoint"].resources
+    assert "right_gripper" in config.nodes["JointPolicy"].resources
+    assert "right_gripper" in config.nodes["TeleopJoint_Right"].resources
     assert set(config.cameras) == {
         "left_pika_d405",
         "left_pika_fisheye",
@@ -116,7 +116,7 @@ def test_marvin_no_camera_profile_only_selects_no_camera_recording():
         "third_person_d435",
     }
     assert config.recording["config"].endswith(
-        "recording/marvin_manipulation_no_cam.yaml"
+        "recording/marvin_bimanual_no_cam.yaml"
     )
 
 

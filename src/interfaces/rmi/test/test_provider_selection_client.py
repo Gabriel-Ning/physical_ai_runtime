@@ -4,19 +4,17 @@ import pytest
 from execution_manager_interfaces.msg import (
     AuthorityEvent,
     AuthorityStatus,
-    CommandEndpoint,
     ResourceAuthority,
 )
-from execution_manager_interfaces.srv import ClaimControl, ReleaseControl
-
+from execution_manager_interfaces.srv import SetSourceActivation, RecoverResources
 from rmi.selection import (
     AUTHORITY_EVENTS_TOPIC,
     AUTHORITY_STATUS_TOPIC,
-    CLAIM_SERVICE,
-    RELEASE_SERVICE,
+    SOURCE_SERVICE,
+    RECOVERY_SERVICE,
     AuthoritySnapshot,
-    ExecutionManagerUnavailableError,
     ExecutionManagerClient,
+    ExecutionManagerUnavailableError,
     SourceRole,
 )
 
@@ -54,25 +52,18 @@ class FakeClient:
 
 class FakeNode:
     def __init__(self, *, available=True):
-        endpoint = CommandEndpoint()
-        endpoint.resource = "arm"
-        endpoint.command_contract = "joint_reference"
-        endpoint.endpoint = "/action_sources/policy/arm/joint_reference"
-        claim = ClaimControl.Response()
-        claim.success = True
-        claim.lease_id = "lease-1"
-        claim.endpoints = [endpoint]
-        release = ReleaseControl.Response()
-        release.success = True
         self.clients = {
-            CLAIM_SERVICE: FakeClient(claim, available=available),
-            RELEASE_SERVICE: FakeClient(release, available=available),
+            SOURCE_SERVICE: FakeClient(SetSourceActivation.Response(success=True), available=available),
+            RECOVERY_SERVICE: FakeClient(RecoverResources.Response(success=True), available=available),
         }
         self.subscriptions = []
 
     def create_client(self, service_type, endpoint):
         del service_type
-        return self.clients[endpoint]
+        return self.clients.setdefault(endpoint, FakeClient(SimpleNamespace(success=True, message="ok")))
+
+    def create_publisher(self, message_type, endpoint, qos):
+        return SimpleNamespace(publish=lambda message: None)
 
     def create_subscription(self, message_type, topic, callback, qos):
         subscription = SimpleNamespace(
@@ -82,26 +73,19 @@ class FakeNode:
         return subscription
 
 
-def test_typed_claim_returns_lease_and_static_endpoint():
+def test_only_source_protocol_is_exposed():
     node = FakeNode()
     client = ExecutionManagerClient(None, node, timeout_sec=0.1)
-
-    grant = client.claim(
-        "POLICY",
-        "policy-v2",
-        {"arm": "joint_reference"},
-        metadata={"task": "pick"},
-    )
-
-    assert grant.lease_id == "lease-1"
-    assert grant.endpoints[("arm", "joint_reference")].endpoint.endswith(
-        "/policy/arm/joint_reference"
-    )
-    request = node.clients[CLAIM_SERVICE].requests[0]
-    assert request.source_role == SourceRole.POLICY
-    assert request.source_instance == "policy-v2"
-    assert request.preempt is False
-    assert [(item.key, item.value) for item in request.metadata] == [("task", "pick")]
+    try:
+        client.set_source_activation("Policy", "session", active=True)
+        request = node.clients[SOURCE_SERVICE].requests[0]
+        assert request.source_instance == "Policy"
+        assert request.session_id == "session"
+        assert request.active and not request.preempt
+        assert not hasattr(client, "claim")
+        assert not hasattr(client, "release")
+    finally:
+        client.close()
 
 
 def test_status_and_events_are_typed_and_lease_addressable():
@@ -143,13 +127,6 @@ def test_stale_status_does_not_report_authority(monkeypatch):
     assert client.get_allocations() == {}
 
 
-def test_release_uses_exact_lease_identity():
-    node = FakeNode()
-    client = ExecutionManagerClient(None, node, timeout_sec=0.1)
-    client.release("lease-1")
-    assert node.clients[RELEASE_SERVICE].requests[0].lease_id == "lease-1"
-
-
 def test_missing_execution_manager_is_explicit():
     client = ExecutionManagerClient(None, FakeNode(available=False), timeout_sec=0.01)
     with pytest.raises(ExecutionManagerUnavailableError):
@@ -174,60 +151,44 @@ def test_describe_authority_reports_faults():
     assert snapshot.state_name("missing") == "UNKNOWN"
 
 
-def test_clear_fault_preempt_claims_then_releases():
+def test_recovery_does_not_claim_authority():
     node = FakeNode()
-    endpoint = CommandEndpoint()
-    endpoint.resource = "arm"
-    endpoint.command_contract = "joint_reference"
-    endpoint.endpoint = "/action_sources/policy/arm/joint_reference"
-    clear = ClaimControl.Response()
-    clear.success = True
-    clear.lease_id = "lease-clear"
-    clear.endpoints = [endpoint]
-    node.clients[CLAIM_SERVICE].response = clear
-
     client = ExecutionManagerClient(None, node, timeout_sec=0.1)
-    status_sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
-
-    def _publish(state: int, *, lease_id: str = "", instance: str = "") -> None:
-        authority = ResourceAuthority()
-        authority.resource = "arm"
-        authority.authority_state = state
-        authority.lease_id = lease_id
-        authority.source_instance = instance
-        status = AuthorityStatus()
-        status.resources = [authority]
-        status_sub.callback(status)
-
-    _publish(ResourceAuthority.FAULT)
-
-    release_client = node.clients[RELEASE_SERVICE]
-    original_release = release_client.call_async
-
-    def release_then_unowned(request):
-        future = original_release(request)
-        _publish(ResourceAuthority.UNOWNED)
+    sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
+    recovery = node.clients[RECOVERY_SERVICE]
+    original = recovery.call_async
+    def recover(request):
+        future = original(request)
+        sub.callback(AuthorityStatus(resources=[ResourceAuthority(resource="arm", authority_state=ResourceAuthority.UNOWNED)]))
         return future
+    recovery.call_async = recover
+    try:
+        snapshot = client.clear_fault({"arm": "joint_reference"})
+        assert recovery.requests[0].resources == ["arm"]
+        assert node.clients[SOURCE_SERVICE].requests == []
+        assert snapshot.unowned == ("arm",)
+    finally:
+        client.close()
 
-    release_client.call_async = release_then_unowned  # type: ignore[method-assign]
 
-    snapshot = client.clear_fault({"arm": "joint_reference"})
-    assert node.clients[CLAIM_SERVICE].requests[-1].preempt is True
-    assert release_client.requests[-1].lease_id == "lease-clear"
-    assert snapshot.faults == ()
-    assert snapshot.unowned == ("arm",)
-
-def test_clear_fault_noops_when_not_faulted():
+def test_recovery_rejection_is_reported():
     node = FakeNode()
+    node.clients[RECOVERY_SERVICE].response = RecoverResources.Response(success=False, message="resources_owned")
     client = ExecutionManagerClient(None, node, timeout_sec=0.1)
-    status_sub = next(x for x in node.subscriptions if x.topic == AUTHORITY_STATUS_TOPIC)
-    authority = ResourceAuthority()
-    authority.resource = "arm"
-    authority.authority_state = ResourceAuthority.UNOWNED
-    status = AuthorityStatus()
-    status.resources = [authority]
-    status_sub.callback(status)
+    try:
+        with pytest.raises(RuntimeError, match="resources_owned"):
+            client.clear_fault({"arm": "joint_reference"})
+    finally:
+        client.close()
 
-    client.clear_fault({"arm": "joint_reference"})
-    assert node.clients[CLAIM_SERVICE].requests == []
-    assert node.clients[RELEASE_SERVICE].requests == []
+
+def test_candidate_registration_has_independent_heartbeat_membership():
+    client = ExecutionManagerClient(None, FakeNode(), timeout_sec=0.1)
+    try:
+        client.set_source_activation("Policy", "session", active=True)
+        assert "session" in client._sessions
+        assert not client.get_sources()  # Registration is not an observed grant.
+        client.set_source_activation("Policy", "session", active=False)
+        assert not client._sessions
+    finally:
+        client.close()

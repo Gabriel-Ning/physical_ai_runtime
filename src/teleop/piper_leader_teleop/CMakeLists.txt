@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -20,6 +21,7 @@ find_package(libpiper CONFIG REQUIRED)
 add_executable(piper_leader_node src/piper_leader_node.cpp)
 ament_target_dependencies(piper_leader_node
   rclcpp
+  rosgraph_msgs
   sensor_msgs
   std_msgs
   std_srvs
