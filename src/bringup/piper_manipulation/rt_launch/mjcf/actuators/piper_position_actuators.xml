@@ -1,0 +1,28 @@
+<mujoco>
+  <!-- Gripper Mimic Coupling (Slaved joint2 -> Master joint1) -->
+  <equality>
+    <joint joint1="left_gripper_joint2" joint2="left_gripper_joint1" polycoef="0 -1 0 0 0"/>
+    <joint joint1="right_gripper_joint2" joint2="right_gripper_joint1" polycoef="0 -1 0 0 0"/>
+  </equality>
+
+  <!-- Actuators for ros2_control binding -->
+  <actuator>
+    <!-- Left Arm Joints -->
+    <position name="left_joint1" joint="left_joint1" ctrlrange="-2.61799 2.61799" class="piper_arm"/>
+    <position name="left_joint2" joint="left_joint2" ctrlrange="0.0 3.14159" class="piper_arm"/>
+    <position name="left_joint3" joint="left_joint3" ctrlrange="-2.96706 0.0" class="piper_arm"/>
+    <position name="left_joint4" joint="left_joint4" ctrlrange="-1.74533 1.74533" class="piper_arm"/>
+    <position name="left_joint5" joint="left_joint5" ctrlrange="-1.22173 1.22173" class="piper_arm"/>
+    <position name="left_joint6" joint="left_joint6" ctrlrange="-6.28318 6.28318" class="piper_arm"/>
+    <position name="left_gripper_joint1" joint="left_gripper_joint1" class="piper_gripper" ctrlrange="0.0 0.04"/>
+
+    <!-- Right Arm Joints -->
+    <position name="right_joint1" joint="right_joint1" ctrlrange="-2.61799 2.61799" class="piper_arm"/>
+    <position name="right_joint2" joint="right_joint2" ctrlrange="0.0 3.14159" class="piper_arm"/>
+    <position name="right_joint3" joint="right_joint3" ctrlrange="-2.96706 0.0" class="piper_arm"/>
+    <position name="right_joint4" joint="right_joint4" ctrlrange="-1.74533 1.74533" class="piper_arm"/>
+    <position name="right_joint5" joint="right_joint5" ctrlrange="-1.22173 1.22173" class="piper_arm"/>
+    <position name="right_joint6" joint="right_joint6" ctrlrange="-6.28318 6.28318" class="piper_arm"/>
+    <position name="right_gripper_joint1" joint="right_gripper_joint1" class="piper_gripper" ctrlrange="0.0 0.04"/>
+  </actuator>
+</mujoco>

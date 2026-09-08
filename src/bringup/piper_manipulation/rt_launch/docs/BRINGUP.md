@@ -10,12 +10,15 @@ workstation (planner / policy / teleop)
               -> this package: xacro mappings + ros2_control_node
 ```
 
-This package launches the cell; it does not own the URDF:
+This package owns the cell composition URDF (Franka pattern):
 
-- Assembly — `piper_manipulation_rt_launch/urdf/piper_bimanual_manipulation.urdf.xacro`
+- Assembly — `urdf/piper_bimanual_manipulation.urdf.xacro`
+- Arm / gripper parts — `piper_description` (unmodified includes)
 - Gripper TCP — `piper_description/config/gripper_tcp.yaml`
 - `config/controller/controllers.yaml` — controller_manager + route controllers
-- Arm / gripper `ros2_control` — `piper_hardware_interface`
+- `config/mujoco_plugins.yaml` — MuJoCo CameraPlugin / SHM bridge (sim only)
+- Robot MJCF + actuators — `mjcf/robot/`, `mjcf/actuators/` (meshes stay in `piper_description`)
+- Arm / gripper `ros2_control` macros — `piper_description` (real/fake only; MuJoCo is unified in the composition xacro)
 
 Planning (cuRobo) stays on the workstation. Do not import `motion_planner_core`
 on the RT host. cuRobo robot YAMLs live in `curobo_robot_models`. If you change
@@ -29,11 +32,12 @@ All route controllers start **inactive**. The Execution Manager activates one af
 acquires control via the explicit selection API. Marker and leader sources are both teleop
 producers and should not publish concurrently unless the application orchestrates acquire/release.
 
-`controller_bringup.launch.py` owns ros2_control only (no Execution Manager).
-`rt_stack.launch.py` is the RT-host entry and includes controller bringup
-only. Workstation composition uses the `piper_bimanual` RMI profile after
-this stack is up. Leader teach models are parsed by teleop nodes and never
-enter this controller manager.
+`controller_bringup.launch.py` owns **real / fake** ros2_control only (no
+Execution Manager, no MuJoCo). `mujoco_bringup.launch.py` owns the sim path
+(task→MJCF, image bridge). `rt_stack.launch.py` is the RT-host entry and
+dispatches by `backend` (same pattern as Franka). Workstation composition uses
+the `piper_bimanual` RMI profile after this stack is up. Leader teach models are
+parsed by teleop nodes and never enter this controller manager.
 
 Launch commands (visualize / fake / real): see [../README.md](../README.md).
 Use a **pixi-activated** shell so `ROS_DOMAIN_ID=1` and CycloneDDS are set.
@@ -86,7 +90,7 @@ TSKPC `tip_frame` is `<side>_gripper_tcp` when the native gripper is enabled.
 | `use_fake_hardware` | `true` \| `false` (`true`) |
 | `left_can_interface` / `right_can_interface` | SocketCAN names (`piper0` / `piper1`). Real dual-arm must differ. |
 | `left_end_effector` / `right_end_effector` | `none` \| `piper_gripper` (`piper_gripper`) |
-| `left_xyz` / `right_xyz`, `*_rpy` | Empty defers to `piper_description` (`±0.32 0.29 0.72`, yaw `-π/2`) |
+| `left_xyz` / `right_xyz`, `*_rpy` | Empty defers to `piper_description` (`left=+0.32`, `right=-0.32`, `0.29 0.72`, yaw `-π/2`; front is −Y) |
 | `use_rviz` | `true` \| `false` (`false`) |
 | `cpu_affinity` | e.g. `14,15`; empty uses `RT_CM_CPU_AFFINITY`; `none` disables pinning |
 

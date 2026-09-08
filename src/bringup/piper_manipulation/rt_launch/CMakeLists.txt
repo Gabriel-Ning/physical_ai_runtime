@@ -11,8 +11,9 @@ endif()
 install(DIRECTORY
   launch
   config
-  docs
   urdf
+  mjcf
+  docs
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
 )

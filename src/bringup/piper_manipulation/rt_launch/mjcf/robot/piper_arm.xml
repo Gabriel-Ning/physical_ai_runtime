@@ -1,0 +1,58 @@
+<mujoco model="piper_arm">
+  <worldbody>
+    <!-- ==================== STANDALONE 6-DOF PIPER ARM ==================== -->
+    <body name="base_link" pos="0 0 0" quat="0.7071068 0 0 -0.7071068">
+      <inertial pos="-0.00474 2.57e-05 0.04145" mass="1.02" diaginertia="0.00267 0.00283 0.00090"/>
+      <geom mesh="arm_base_link" class="piper_arm"/>
+      
+      <body name="link1" pos="0 0 0.123">
+        <inertial pos="0.00032 -0.00041 -0.00348" mass="0.71" diaginertia="0.00050 0.00041 0.00046"/>
+        <joint name="joint1" axis="0 0 1" range="-2.61799 2.61799" class="piper_arm"/>
+        <geom mesh="arm_link1" class="piper_arm"/>
+
+        <body name="link2" pos="0 0 0" quat="0.0479710 -0.0479709 -0.7054777 -0.7054777">
+          <inertial pos="0.21852 -0.00861 0.00126" mass="1.16" diaginertia="0.00112 0.06763 0.06756"/>
+          <joint name="joint2" axis="0 0 1" range="0.0 3.14159" class="piper_arm"/>
+          <geom mesh="arm_link2" class="piper_arm"/>
+
+          <body name="link3" pos="0.28503 0 0" quat="0.6240160 0 0 -0.7814116">
+            <inertial pos="-0.01999 -0.14808 -0.00053" mass="0.5" diaginertia="0.01348 0.00046 0.01363"/>
+            <joint name="joint3" axis="0 0 1" range="-2.96706 0.0" class="piper_arm"/>
+            <geom mesh="arm_link3" class="piper_arm"/>
+
+            <body name="link4" pos="-0.02198 -0.25075 0" quat="0.7071068 0.7071068 0 0">
+              <inertial pos="0.00013 -0.00076 -0.00394" mass="0.38" diaginertia="0.00018 0.00019 0.00015"/>
+              <joint name="joint4" axis="0 0 1" range="-1.74533 1.74533" class="piper_arm"/>
+              <geom mesh="arm_link4" class="piper_arm"/>
+
+              <body name="link5" pos="0 0 0" quat="0.7071068 -0.7071068 0 0">
+                <inertial pos="0.00018 -0.06104 -0.00227" mass="0.383" diaginertia="0.00172 0.00018 0.00171"/>
+                <joint name="joint5" axis="0 0 1" range="-1.22173 1.22173" class="piper_arm"/>
+                <geom mesh="arm_link5" class="piper_arm"/>
+
+                <body name="link6" pos="8.8259e-05 -0.091 0" quat="0.7071068 0.7071068 0 0">
+                  <inertial pos="-0.00003 0.00006 -0.002" mass="0.007" diaginertia="0.00152 0.00139 0.00031"/>
+                  <joint name="joint6" axis="0 0 1" range="-6.28318 6.28318" class="piper_arm"/>
+                  <geom mesh="arm_link6" class="piper_arm"/>
+
+                  <!-- Flange Attachment Site for Gripper / DexHand -->
+                  <site name="flange_link" pos="0 0 0" quat="1 0 0 0"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <exclude body1="base_link" body2="link1"/>
+    <exclude body1="link1" body2="link2"/>
+    <exclude body1="link2" body2="link3"/>
+    <exclude body1="link3" body2="link4"/>
+    <exclude body1="link4" body2="link5"/>
+    <exclude body1="link5" body2="link6"/>
+  </contact>
+
+</mujoco>

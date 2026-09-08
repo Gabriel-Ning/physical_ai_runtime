@@ -1,0 +1,35 @@
+/**:
+  ros__parameters:
+    mujoco_plugins:
+      mujoco_camera_plugin:
+        type: "mujoco_ros2_control_plugins/CameraPlugin"
+        # Align ROS topics with apps/profiles/piper_bimanual.yaml sensors.
+        # MJCF camera names stay head_camera / left_camera / right_camera.
+        default_policy: disabled
+        shm_prefix: /pai_mj_cam_
+        camera_publish_rate: 30.0
+        # ros: publish in CM; shm: SHM only, independent bridge publishes images;
+        # both: debug only (SHM plus in-process ROS publishers).
+        output: shm
+        head_camera:
+          policy: streaming
+          frame_name: camera_head_color_optical_frame
+          info_topic: /observation/static_orbbec/color/camera_info
+          image_topic: /observation/static_orbbec/color/image_raw
+          depth_topic: /observation/static_orbbec/aligned_depth_to_color/image_raw
+        left_camera:
+          policy: streaming
+          frame_name: left_camera_color_optical_frame
+          info_topic: /observation/left_hand_realsense/color/camera_info
+          image_topic: /observation/left_hand_realsense/color/image_raw
+          depth_topic: /observation/left_hand_realsense/aligned_depth_to_color/image_raw
+        right_camera:
+          policy: streaming
+          frame_name: right_camera_color_optical_frame
+          info_topic: /observation/right_hand_realsense/color/camera_info
+          image_topic: /observation/right_hand_realsense/color/image_raw
+          depth_topic: /observation/right_hand_realsense/aligned_depth_to_color/image_raw
+      free_joint_state_publisher:
+        type: "mujoco_ros2_control_plugins/FreeJointStatePublisherPlugin"
+        topic: /free_joint_states
+        publish_rate: 50.0
