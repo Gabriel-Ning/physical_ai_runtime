@@ -26,10 +26,13 @@ platforms = [{ platform = "linux-64", glibc = "2.35" }]
 [dependencies]
 mcap = ">=1.2.0"
 python = "3.12.*"
+pyyaml = "*"
 
 # ── Minimal ROS 2 policy-provider baseline ───────────────────────────────────
 # Keep this layer free of OpenCV, MoveIt runtime, hardware SDKs, visualization,
 # and ros2_control binaries so LeRobot can share the same Python process.
+# tf2 is included here so cartesian / EE proprio eval works in both default
+# and lerobot environments without cross-prefix imports.
 ros-jazzy-ros-core = "*"
 ros-jazzy-rmw-cyclonedds-cpp = "*"
 ros-jazzy-action-msgs = "*"
@@ -41,9 +44,12 @@ ros-jazzy-moveit-msgs = "*"
 ros-jazzy-sensor-msgs = "*"
 ros-jazzy-std-msgs = "*"
 ros-jazzy-trajectory-msgs = "*"
+ros-jazzy-tf2-msgs = "*"
+ros-jazzy-tf2-ros = "*"
+ros-jazzy-tf2-ros-py = "*"
 # Binary interface ABI shared by policy-provider and runtime environments.
 ros-jazzy-execution-manager-interfaces = "==0.2.0"
-pyyaml = "*"
+
 
 # ── Full robot runtime / development layer ───────────────────────────────────
 [feature.runtime.dependencies]
@@ -60,6 +66,7 @@ rosdep = "*"
 # launch_testing build compatible with pytest 9.
 pytest = ">=8,<9"
 ruff = ">=0.12,<1"
+
 coacd = "*"
 trimesh = "*"
 huggingface_hub = "*"
@@ -164,7 +171,7 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTH
 
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
-ROS_DOMAIN_ID = "1"
+ROS_DOMAIN_ID = "20"
 CMAKE_GENERATOR = "Ninja"
 
 [feature.runtime.tasks]
@@ -225,9 +232,7 @@ decompose-mesh = "python src/tasks/robotwin_tasks/robotwin_tasks/tools/process_m
 
 [feature.cuda13.pypi-options]
 index-url = "https://pypi.org/simple"
-extra-index-urls = [
-    "https://pypi.nvidia.com",
-]
+extra-index-urls = ["https://pypi.nvidia.com"]
 
 [feature.cuda13.pypi-dependencies]
 torch = { version = "==2.13.0", index = "https://download.pytorch.org/whl/cu130" }
@@ -260,7 +265,6 @@ nvidia-curobo = { git = "https://github.com/Gabriel-Ning/curobo.git", rev = "77c
 # Runtime orchestration HTTP/WebSocket transport.
 fastapi = ">=0.139.2, <0.140"
 uvicorn = ">=0.51.0, <0.52"
-
 
 
 [feature.cuda13.activation.env]
@@ -299,6 +303,10 @@ ros-jazzy-rosbag2-storage-mcap = "*"
 # hf-egl-probe (pulled by the `all` extra) hard-codes `make -j` in setup.py.
 make = "*"
 cuda-toolkit = "12.8.*"
+# torchcodec 0.11 loads FFmpeg SONAMEs at import (libavutil.so.56–60).
+# Without this, LeRobot falls back to pyav even though the wheel is installed.
+ffmpeg = ">=7,<9"
+
 # Prefer conda-forge's cp312 binary.  The PyPI sdist generates ecodes against
 # the host kernel headers and can then fail against the Pixi sysroot headers.
 evdev = "==2.0.0"
@@ -311,12 +319,15 @@ CMAKE_GENERATOR = "Unix Makefiles"
 [feature.lerobot.pypi-dependencies]
 torch = { version = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" }
 torchvision = { version = "==0.26.0", index = "https://download.pytorch.org/whl/cu128" }
+torchcodec = { version = "==0.11.1", index = "https://download.pytorch.org/whl/cu128" }
 # Dao-AILab does not publish a cp312 / Torch 2.11 wheel for v2.8.3.  Use the
 # community wheel linked from upstream issue #2425; its cu12 / CXX11 ABI tuple
 # matches torch 2.11.0+cu128 in this solve group.
 flash-attn = { url = "https://github.com/lesj0610/flash-attention/releases/download/v2.8.3-cu12-torch2.11/flash_attn-2.8.3%2Bcu12torch2.11cxx11abiTRUE-cp312-cp312-linux_x86_64.whl" }
 safetensors = "==0.7.0"
-lerobot = { git = "https://github.com/Gabriel-Ning/lerobot.git", rev = "97482f665dfb6937d8e48355c8293791104ae654", extras = ["all"] }
+lerobot = { git = "https://github.com/Gabriel-Ning/lerobot.git", rev = "97482f665dfb6937d8e48355c8293791104ae654", extras = [
+    "all",
+] }
 
 [feature.lerobot.tasks]
 lerobot-versions = "python -c \"import flash_attn, lerobot, torch, torchvision; print(f'lerobot={lerobot.__version__} torch={torch.__version__} torchvision={torchvision.__version__} cuda={torch.version.cuda} flash_attn={flash_attn.__version__}')\""
