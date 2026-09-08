@@ -186,12 +186,17 @@ def test_rt_stack_contains_only_rt_runtime_components():
         r'DeclareLaunchArgument\(\s*"cpu_affinity",\s*default_value=""', combo
     )
     assert "cpu_affinity:=none" not in combo
+    assert "mujoco" not in combo
+    assert "backend" not in combo
 
 
 def test_controller_bringup_still_leaves_em_to_rmi_deployment():
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
     assert "execution_manager.launch.py" not in launch
     assert "manipulation_execution_manager" not in launch
+    assert "mujoco" not in launch
+    assert 'package="mujoco_ros2_control"' not in launch
+    assert "robotwin_tasks" not in launch
 
 
 def test_package_xml_declares_runtime_plugins():
@@ -206,6 +211,12 @@ def test_package_xml_declares_runtime_plugins():
         "launch_ros",
     ):
         assert f"<exec_depend>{dep}</exec_depend>" in text
+    for dep in (
+        "mujoco_ros2_control",
+        "mujoco_ros2_control_plugins",
+        "robotwin_tasks",
+    ):
+        assert f"<exec_depend>{dep}</exec_depend>" not in text
 
 
 def test_docs_do_not_point_at_removed_new_apps():

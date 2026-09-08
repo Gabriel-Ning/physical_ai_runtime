@@ -59,10 +59,4 @@ ros2 topic hz /joint_states --window 20
 
 细节：[docs/BRINGUP.md](docs/BRINGUP.md)。
 
-## Workstation（RT 起来之后）
-
-```bash
-ros2 launch piper_manipulation_workstation_launch workstation_stack.launch.py
-```
-
-Profile：`apps/profiles/piper_bimanual.yaml`。
+本分支是真机 RT，不含 MuJoCo / RoboTwin。
