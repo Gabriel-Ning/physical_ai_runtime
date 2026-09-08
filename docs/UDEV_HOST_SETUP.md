@@ -41,6 +41,7 @@ not change yet, unplug/replug it or reboot.
 | `99-can-piper1.rules` | gs_usb serial → **`piper1`** (right Piper follower), 1 Mbps, `txqueuelen=1000` |
 | `99-obsensor-libusb.rules` | Orbbec (obsensor) USB permissions / vendor symlinks |
 | `99-realsense-libusb.rules` | Intel RealSense USB permissions |
+| `99-realsense-uvcvideo-unbind.rules` | Unbind kernel `uvcvideo` from Intel UVC so RSUSB/libusb can claim D435 |
 | `99-pika.rules` | Pika wrist cable by host `ID_PATH`. **Marvin gamma**: left `usb-0:7.*` / right `usb-0:9.*` → `/dev/pika_{left,right}_{gripper,fisheye}`. **Franka beta**: `usb-0:6.*` → `/dev/pika_left_{gripper,fisheye}`. Never `/dev/ttyUSB*`. |
 
 Serials in the CAN rules are site-specific identities of the USB-CAN dongles

@@ -1,0 +1,14 @@
+# RealSense D400 UVC interfaces must not stay bound to kernel uvcvideo when
+# librealsense uses the RSUSB/libusb backend (this workspace: handle-libusb.h).
+# Intel documents the kernel UVC/V4L path and RSUSB as mutually exclusive:
+# https://github.com/IntelRealSense/librealsense/blob/master/doc/installation_jetson.md
+#
+# 99-realsense-libusb.rules only sets MODE/GROUP. libusb_detach_kernel_driver
+# is supposed to drop uvcvideo, but on this host uvcvideo kept probing D435IF
+# while realsense2_camera held isochronous endpoints, then xHCI died:
+# "host not responding to stop endpoint command".
+#
+# Unbind UVC (class 0e) only. HID/IMU stays with the official libusb rules.
+
+ACTION=="bind", DRIVER=="uvcvideo", ATTRS{idVendor}=="8086", RUN+="/bin/sh -c 'echo -n %k > /sys/bus/usb/drivers/uvcvideo/unbind'"
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_interface", ATTRS{idVendor}=="8086", ATTR{bInterfaceClass}=="0e", RUN+="/bin/sh -c 'echo -n %k > /sys/bus/usb/drivers/uvcvideo/unbind'"
