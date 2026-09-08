@@ -1,0 +1,205 @@
+# RealSense D435 instances. Add another top-level entry to add a camera of this
+# model. Each entry is independent; parameters are forwarded to rs_launch.py.
+# startup_delay is measured from launch start, in seconds.
+
+left_hand_realsense:
+  startup_delay: 0.0
+  sdk_log_level: ERROR
+  parameters:
+    camera_namespace: observation
+    serial_no: "_332522075913"
+    log_level: info
+    output: screen
+    # Device selection / startup. Empty strings leave optional selectors unset.
+    usb_port_id: ""
+    device_type: ""
+    json_file_path: ""
+    initial_reset: false
+    # Allow USB enumeration, and retry after short disconnects.
+    wait_for_device_timeout: 30.0
+    reconnect_timeout: 2.0
+
+    # Live hardware by default. This is SDK bag playback, not ROS rosbag2 playback.
+    rosbag_filename: ""
+    rosbag_loop: false
+    accelerate_gpu_with_glsl: false
+
+    # RGB recording: preserve the existing 640x480 @ 30 Hz profile.
+    enable_color: true
+    rgb_camera.color_profile: "640x480x30"
+    rgb_camera.color_format: "RGB8"
+    rgb_camera.enable_auto_exposure: true
+
+    # Depth / infrared are off to keep USB bandwidth for multiple cameras.
+    # 0,0,0 lets the SDK select a supported profile when a stream is enabled.
+    enable_depth: false
+    enable_infra: false
+    enable_infra1: false
+    enable_infra2: false
+    depth_module.depth_profile: "0,0,0"
+    depth_module.depth_format: "Z16"
+    depth_module.infra_profile: "0,0,0"
+    depth_module.infra_format: "RGB8"
+    depth_module.infra1_format: "Y8"
+    depth_module.infra2_format: "Y8"
+
+    # Depth exposure. Manual exposure / gain apply with auto exposure disabled.
+    depth_module.enable_auto_exposure: true
+    depth_module.exposure: 8500
+    depth_module.gain: 16
+    # Alternating HDR exposures apply only when depth HDR is enabled.
+    depth_module.hdr_enabled: false
+    depth_module.exposure.1: 7500
+    depth_module.gain.1: 16
+    depth_module.exposure.2: 1
+    depth_module.gain.2: 16
+
+    # RGB-D synchronization is local to each device. Hardware inter-camera sync
+    # needs wiring and a master/slave setup; cameras remain independent.
+    enable_sync: false
+    enable_rgbd: false
+    depth_module.inter_cam_sync_mode: 0
+
+    # D435i IMU. Zero FPS selects the driver's default; streams remain disabled.
+    enable_gyro: false
+    enable_accel: false
+    gyro_fps: 0
+    accel_fps: 0
+    # 0: separate IMU topics, 1: copy, 2: linear interpolation.
+    unite_imu_method: 0
+    angular_velocity_cov: 0.01
+    linear_accel_cov: 0.01
+
+    # TF / diagnostics. Zero dynamic TF rate keeps static transforms only.
+    publish_tf: true
+    tf_publish_rate: 0.0
+    base_frame_id: "link"
+    tf_prefix: ""
+    diagnostics_period: 0.0
+
+    # Depth clipping in metres; negative disables clipping.
+    clip_distance: -2.0
+    align_depth.enable: false
+    pointcloud.enable: false
+    # 2 selects color texture, stream index 0 selects the default stream.
+    pointcloud.stream_filter: 2
+    pointcloud.stream_index_filter: 0
+    pointcloud.ordered_pc: false
+    pointcloud.allow_no_texture_points: false
+
+    # Post-processing filters: retain raw images unless explicitly enabled.
+    colorizer.enable: false
+    decimation_filter.enable: false
+    decimation_filter.filter_magnitude: 2
+    rotation_filter.enable: false
+    rotation_filter.rotation: 0.0
+    spatial_filter.enable: false
+    temporal_filter.enable: false
+    disparity_filter.enable: false
+    hole_filling_filter.enable: false
+    hdr_merge.enable: false
+
+    # Other-model options in rs_launch.py are intentionally omitted:
+    # depth_module.color_profile / color_format (D405), enable_motion / motion_fps
+    # (DDS IMU), and safety_camera / depth_mapping_camera streams (other devices).
+
+right_hand_realsense:
+  startup_delay: 10.0
+  sdk_log_level: ERROR
+  parameters:
+    camera_namespace: observation
+    serial_no: "_332322073584"
+    log_level: info
+    output: screen
+    # Device selection / startup. Empty strings leave optional selectors unset.
+    usb_port_id: ""
+    device_type: ""
+    json_file_path: ""
+    initial_reset: false
+    # Allow USB enumeration, and retry after short disconnects.
+    wait_for_device_timeout: 30.0
+    reconnect_timeout: 2.0
+
+    # Live hardware by default. This is SDK bag playback, not ROS rosbag2 playback.
+    rosbag_filename: ""
+    rosbag_loop: false
+    accelerate_gpu_with_glsl: false
+
+    # RGB recording: preserve the existing 640x480 @ 30 Hz profile.
+    enable_color: true
+    rgb_camera.color_profile: "640x480x30"
+    rgb_camera.color_format: "RGB8"
+    rgb_camera.enable_auto_exposure: true
+
+    # Depth / infrared are off to keep USB bandwidth for multiple cameras.
+    # 0,0,0 lets the SDK select a supported profile when a stream is enabled.
+    enable_depth: false
+    enable_infra: false
+    enable_infra1: false
+    enable_infra2: false
+    depth_module.depth_profile: "0,0,0"
+    depth_module.depth_format: "Z16"
+    depth_module.infra_profile: "0,0,0"
+    depth_module.infra_format: "RGB8"
+    depth_module.infra1_format: "Y8"
+    depth_module.infra2_format: "Y8"
+
+    # Depth exposure. Manual exposure / gain apply with auto exposure disabled.
+    depth_module.enable_auto_exposure: true
+    depth_module.exposure: 8500
+    depth_module.gain: 16
+    # Alternating HDR exposures apply only when depth HDR is enabled.
+    depth_module.hdr_enabled: false
+    depth_module.exposure.1: 7500
+    depth_module.gain.1: 16
+    depth_module.exposure.2: 1
+    depth_module.gain.2: 16
+
+    # RGB-D synchronization is local to each device. Hardware inter-camera sync
+    # needs wiring and a master/slave setup; cameras remain independent.
+    enable_sync: false
+    enable_rgbd: false
+    depth_module.inter_cam_sync_mode: 0
+
+    # D435i IMU. Zero FPS selects the driver's default; streams remain disabled.
+    enable_gyro: false
+    enable_accel: false
+    gyro_fps: 0
+    accel_fps: 0
+    # 0: separate IMU topics, 1: copy, 2: linear interpolation.
+    unite_imu_method: 0
+    angular_velocity_cov: 0.01
+    linear_accel_cov: 0.01
+
+    # TF / diagnostics. Zero dynamic TF rate keeps static transforms only.
+    publish_tf: true
+    tf_publish_rate: 0.0
+    base_frame_id: "link"
+    tf_prefix: ""
+    diagnostics_period: 0.0
+
+    # Depth clipping in metres; negative disables clipping.
+    clip_distance: -2.0
+    align_depth.enable: false
+    pointcloud.enable: false
+    # 2 selects color texture, stream index 0 selects the default stream.
+    pointcloud.stream_filter: 2
+    pointcloud.stream_index_filter: 0
+    pointcloud.ordered_pc: false
+    pointcloud.allow_no_texture_points: false
+
+    # Post-processing filters: retain raw images unless explicitly enabled.
+    colorizer.enable: false
+    decimation_filter.enable: false
+    decimation_filter.filter_magnitude: 2
+    rotation_filter.enable: false
+    rotation_filter.rotation: 0.0
+    spatial_filter.enable: false
+    temporal_filter.enable: false
+    disparity_filter.enable: false
+    hole_filling_filter.enable: false
+    hdr_merge.enable: false
+
+    # Other-model options in rs_launch.py are intentionally omitted:
+    # depth_module.color_profile / color_format (D405), enable_motion / motion_fps
+    # (DDS IMU), and safety_camera / depth_mapping_camera streams (other devices).

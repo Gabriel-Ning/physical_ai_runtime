@@ -11,6 +11,16 @@ if(BUILD_TESTING)
     TIMEOUT 60
   )
   ament_add_pytest_test(
+    test_launch_config_loading
+    test/test_launch_config_loading.py
+    APPEND_ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+  )
+  ament_add_pytest_test(
+    test_realsense_launch_scope
+    test/test_realsense_launch_scope.py
+    APPEND_ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+  )
+  ament_add_pytest_test(
     test_piper_workstation_bringup_contract
     test/test_piper_workstation_bringup_contract.py
   )

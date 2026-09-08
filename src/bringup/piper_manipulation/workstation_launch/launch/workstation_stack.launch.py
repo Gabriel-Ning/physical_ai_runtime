@@ -1,4 +1,8 @@
-"""Launch the Piper workstation stack from package-owned child launches."""
+"""Launch the Piper workstation stack from package-owned child launches.
+
+Each child launch reads its own file under config/. This stack only declares
+whether to start a child and forwards use_sim_time.
+"""
 
 from __future__ import annotations
 
@@ -13,9 +17,10 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description() -> LaunchDescription:
-    share = get_package_share_directory("piper_manipulation_workstation_launch")
-    launch_dir = os.path.join(share, "launch")
-
+    workstation_share = get_package_share_directory(
+        "piper_manipulation_workstation_launch"
+    )
+    launch_dir = os.path.join(workstation_share, "launch")
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -23,24 +28,32 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="false",
                 description="Use simulation clock (/clock); required for MuJoCo RT.",
             ),
-            DeclareLaunchArgument("with_execution_manager", default_value="true"),
-            DeclareLaunchArgument("with_recorder", default_value="true"),
+            DeclareLaunchArgument(
+                "with_execution_manager",
+                default_value="true",
+                description="Launch Execution Manager from config/execution_manager.yaml.",
+            ),
+            DeclareLaunchArgument(
+                "with_recorder",
+                default_value="true",
+                description="Launch episode_recorder.",
+            ),
             DeclareLaunchArgument(
                 "with_orbbec",
                 default_value="true",
-                description="Start static Orbbec (Femto Bolt) on the workstation.",
+                description="Start Femto Bolt cameras from config/camera/femto_bolt.yaml.",
             ),
             DeclareLaunchArgument(
                 "with_realsense",
                 default_value="true",
-                description="Start dual wrist RealSense D435i on the workstation.",
+                description="Start D435 cameras from config/camera/realsense_d435.yaml.",
             ),
             DeclareLaunchArgument(
                 "with_leaders",
-                default_value="false",
+                default_value="true",
                 description=(
-                    "Start Piper leader teleop arms. Default off; enable when "
-                    "leaders are connected (with_leaders:=true)."
+                    "Start Piper leader teleop arms. Default on for real hardware; "
+                    "disable for MuJoCo (with_leaders:=false)."
                 ),
             ),
             IncludeLaunchDescription(
@@ -53,18 +66,14 @@ def generate_launch_description() -> LaunchDescription:
                 }.items(),
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(launch_dir, "recorder.launch.py")
-                ),
+                PythonLaunchDescriptionSource(os.path.join(launch_dir, "recorder.launch.py")),
                 condition=IfCondition(LaunchConfiguration("with_recorder")),
                 launch_arguments={
                     "use_sim_time": LaunchConfiguration("use_sim_time"),
                 }.items(),
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(launch_dir, "piper_orbbec.launch.py")
-                ),
+                PythonLaunchDescriptionSource(os.path.join(launch_dir, "piper_orbbec.launch.py")),
                 condition=IfCondition(LaunchConfiguration("with_orbbec")),
             ),
             IncludeLaunchDescription(
@@ -74,9 +83,7 @@ def generate_launch_description() -> LaunchDescription:
                 condition=IfCondition(LaunchConfiguration("with_realsense")),
             ),
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    os.path.join(launch_dir, "piper_leaders.launch.py")
-                ),
+                PythonLaunchDescriptionSource(os.path.join(launch_dir, "piper_leaders.launch.py")),
                 condition=IfCondition(LaunchConfiguration("with_leaders")),
                 launch_arguments={
                     "use_sim_time": LaunchConfiguration("use_sim_time"),

@@ -1,7 +1,11 @@
-# Static Orbbec Femto Bolt profile. This is a ROS parameter file, so it uses
-# the standard ros__parameters wrapper expected by orbbec_camera.
-/**:
-  ros__parameters:
+# Orbbec Femto Bolt instances. Add another top-level entry to add a camera.
+# The entry key is camera_name. piper_orbbec.launch.py forwards parameters to
+# orbbec_camera/femto_bolt.launch.py.
+
+static_orbbec:
+  camera_namespace: observation
+  serial_number: ""
+  parameters:
     depth_registration: false
 
     enable_color: true
@@ -32,7 +36,7 @@
     sync_mode: "standalone"
     enable_frame_sync: true
     # Stamp frames with the host realtime clock so their header timestamps can
-    # be compared with the two RealSense streams.
+    # be compared with RealSense streams.
     time_domain: "system"
     timestamp_clock_type: "realtime"
     publish_tf: true

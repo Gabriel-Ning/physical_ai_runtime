@@ -12,7 +12,7 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description() -> LaunchDescription:
-    share = get_package_share_directory("episode_recorder")
+    recorder_share = get_package_share_directory("episode_recorder")
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -22,10 +22,10 @@ def generate_launch_description() -> LaunchDescription:
             ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(share, "launch", "recorder.launch.py")
+                    os.path.join(recorder_share, "launch", "recorder.launch.py")
                 ),
                 launch_arguments={
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
+                    "use_sim_time": LaunchConfiguration("use_sim_time")
                 }.items(),
             ),
         ]
