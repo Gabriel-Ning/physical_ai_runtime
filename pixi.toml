@@ -169,7 +169,7 @@ CMAKE_GENERATOR = "Ninja"
 
 [feature.runtime.tasks]
 setup = "bash scripts/setup.sh"
-setup-rt = "bash scripts/setup.sh --rt"
+setup-rt = "bash -c 'bash scripts/setup_cpu_rt_host.sh \"$@\"' --"
 build = "colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release"
 # --python-testing pytest: colcon's default Python testing step only picks
 # pytest when a package's *exact* extracted test dependency name is

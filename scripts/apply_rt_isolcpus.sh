@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Print / apply / ensure GRUB isolcpus from scripts/rt_cpu_profile.env.
+# Print / apply / ensure GRUB isolcpus from RT_CPU_PROFILE_FILE.
 # Does NOT reboot.
 #
 # Usage:
@@ -10,8 +10,17 @@
 # Exit: 0 ok, 3 GRUB updated (reboot), 1 failure
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck disable=SC1091
-source "$ROOT/scripts/rt_cpu_profile.env"
+_profile="${RT_CPU_PROFILE_FILE:-}"
+if [[ -z "$_profile" ]]; then
+  echo "Set RT_CPU_PROFILE_FILE or run: pixi run setup-rt <piper|marvin|franka>" >&2
+  exit 1
+fi
+if [[ ! -f "$_profile" ]]; then
+  echo "Missing CPU profile: $_profile" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+source "$_profile"
 
 CPUS="$RT_ISOL_CPUS"
 FRAGMENT="isolcpus=${CPUS} nohz_full=${CPUS} rcu_nocbs=${CPUS}"

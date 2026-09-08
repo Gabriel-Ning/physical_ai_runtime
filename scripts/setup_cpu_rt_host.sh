@@ -1,27 +1,61 @@
 #!/usr/bin/env bash
-# CPU / realtime-kernel host setup for Physical AI Runtime.
+# One RT-host setup for all robots. Isolation numbers live in the env file.
 #
-# Called from `pixi run setup-rt`. Applies:
-#   1. CPU frequency governor → performance (now + boot service)
-#   2. PAM realtime limits + `realtime` group (SCHED_FIFO / mlock)
-#   3. Kernel CPU isolation from scripts/rt_cpu_profile.env (GRUB; reboot if needed)
-#   4. Raise min frequency on isolated CPUs when isolation is already active
+#   pixi run setup-rt piper
+#   pixi run setup-rt marvin
+#   pixi run setup-rt franka
 #
-# Process affinity for ros2_control is NOT applied here — bringups read
-# RT_CM_CPU_AFFINITY and prefix ros2_control_node with taskset.
+# Applies governor, PAM rtprio/memlock, GRUB isolcpus from
+# scripts/rt_cpu_profile.<robot>.env. Franka also installs FCI NIC IRQ tuning
+# when RT_FRANKA_NIC is set.
 #
-# Exit codes:
-#   0  host ready (or soft warnings only)
-#   1  hard failure (e.g. missing profile)
-#   3  GRUB/limits updated — reboot (or re-login for limits-only) required
+# Exit: 0 ready, 1 error, 3 reboot/re-login required.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# shellcheck disable=SC1091
-source "$ROOT/scripts/rt_cpu_profile.env"
+ROBOT="${1:-}"
+
+usage() {
+  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  echo "Robots: piper | marvin | franka"
+}
+
+case "$ROBOT" in
+  piper|marvin|franka) ;;
+  -h|--help|"")
+    usage
+    [[ -n "$ROBOT" ]] || exit 2
+    exit 0
+    ;;
+  *)
+    echo "Unknown robot '$ROBOT'. Use: piper | marvin | franka" >&2
+    exit 2
+    ;;
+esac
+
+PROFILE="$ROOT/scripts/rt_cpu_profile.${ROBOT}.env"
+if [[ ! -f "$PROFILE" ]]; then
+  echo "Missing $PROFILE" >&2
+  exit 1
+fi
+# shellcheck disable=SC1090
+source "$PROFILE"
+export RT_CPU_PROFILE_FILE="$PROFILE"
+
+_record_selected_profile() {
+  local dest_user dest_group
+  mkdir -p "$ROOT/.pixi"
+  printf '%s\n' enabled >"$ROOT/.pixi/rt-profile-enabled"
+  printf '%s\n' "$ROBOT" >"$ROOT/.pixi/rt-profile"
+  dest_user="${SUDO_USER:-$USER}"
+  dest_group="$(id -gn "$dest_user" 2>/dev/null || true)"
+  if [[ -n "$dest_user" && -n "$dest_group" ]]; then
+    chown "$dest_user:$dest_group" \
+      "$ROOT/.pixi/rt-profile-enabled" "$ROOT/.pixi/rt-profile" 2>/dev/null || true
+  fi
+}
 
 expand_cpu_list() {
-  # Normalize "14,15" / "14-15" / "12,13,14-15" → sorted unique comma list.
   local spec="${1// /}" part a b i
   local -a out=()
   IFS=',' read -ra parts <<< "$spec"
@@ -71,6 +105,7 @@ print_status() {
   gov="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
   rtprio="$(ulimit -r 2>/dev/null || echo unknown)"
   echo "CPU RT host status:"
+  echo "  robot:       ${ROBOT}"
   echo "  profile:     ${RT_CPU_PROFILE_NAME}"
   echo "  governor:    ${gov}"
   echo "  isolated:    ${isolated:-"(none)"}"
@@ -84,25 +119,20 @@ print_status() {
   fi
 }
 
-echo "Configuring CPU RT host (profile=${RT_CPU_PROFILE_NAME})…"
+_record_selected_profile
+echo "Configuring CPU RT host (robot=${ROBOT} profile=${RT_CPU_PROFILE_NAME})…"
 
-# ── 1. Performance governor ────────────────────────────────────────────────
 if ! bash "$ROOT/scripts/enable_cpu_performance_governor.sh" --ensure-boot; then
   echo "WARNING: could not enable CPU performance governor (sudo required)." >&2
   echo "  Run once: sudo bash scripts/enable_cpu_performance_governor.sh --install" >&2
 fi
 
-# ── 2. SCHED_FIFO / mlock PAM limits ───────────────────────────────────────
 reboot_needed=0
 limits_rc=0
 bash "$ROOT/scripts/ensure_realtime_limits.sh" --ensure || limits_rc=$?
 case "$limits_rc" in
   0) ;;
-  3)
-    # Re-login is enough for PAM; if isolcpus also needs a reboot, one reboot
-    # covers both. Track as action-required either way.
-    reboot_needed=1
-    ;;
+  3) reboot_needed=1 ;;
   *)
     echo "WARNING: could not ensure realtime limits (sudo required?)." >&2
     echo "  Run once: sudo bash scripts/ensure_realtime_limits.sh --apply" >&2
@@ -110,48 +140,50 @@ case "$limits_rc" in
     ;;
 esac
 
-# ── 3. Kernel isolation (isolcpus / nohz_full / rcu_nocbs) ─────────────────
 expected="$(expand_cpu_list "$RT_ISOL_CPUS")"
 active="$(expand_cpu_list "$(tr -d '[:space:]' </sys/devices/system/cpu/isolated 2>/dev/null || true)")"
 
 if [[ -n "$active" && "$active" == "$expected" ]]; then
   echo "CPU isolation already active: ${active}"
   raise_isol_min_freq "$active"
-elif [[ -n "$active" && "$active" != "$expected" ]]; then
-  echo "WARNING: active isolcpus=${active} differs from profile expected=${expected}." >&2
-  echo "  Edit scripts/rt_cpu_profile.env or GRUB manually; reboot if you change GRUB." >&2
-  raise_isol_min_freq "$active"
 else
-  # Not active in this boot — ensure GRUB has the fragment, then require reboot.
+  echo "Applying GRUB isolcpus=${RT_ISOL_CPUS} (replace any previous set)."
   ensure_rc=0
-  bash "$ROOT/scripts/apply_rt_isolcpus.sh" --ensure || ensure_rc=$?
+  bash "$ROOT/scripts/apply_rt_isolcpus.sh" --apply --replace || ensure_rc=$?
   case "$ensure_rc" in
     0)
-      # GRUB already correct but cmdline not active → reboot pending
-      echo "GRUB isolation configured for ${expected}, but this boot has no matching isolcpus."
-      reboot_needed=1
+      if [[ -z "$active" || "$active" != "$expected" ]]; then
+        echo "GRUB isolation configured for ${expected}, but this boot has no matching isolcpus."
+        reboot_needed=1
+      fi
       ;;
-    3)
-      reboot_needed=1
-      ;;
+    3) reboot_needed=1 ;;
     *)
-      echo "WARNING: could not ensure isolcpus in GRUB (sudo required?)." >&2
-      echo "  Run once: sudo bash scripts/apply_rt_isolcpus.sh --apply && sudo reboot" >&2
+      echo "WARNING: could not write isolcpus in GRUB (sudo required?)." >&2
+      echo "  Run once: sudo bash scripts/setup_cpu_rt_host.sh ${ROBOT}" >&2
       ;;
   esac
+fi
+
+if [[ -n "${RT_FRANKA_NIC:-}" ]]; then
+  echo "Applying Franka FCI NIC IRQ / coalesce (${RT_FRANKA_NIC})…"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    bash "$ROOT/scripts/apply_franka_rt_networking.sh" --install
+  elif sudo -n true 2>/dev/null; then
+    sudo bash "$ROOT/scripts/apply_franka_rt_networking.sh" --install
+  else
+    echo "WARNING: Franka NIC IRQ setup needs root." >&2
+    echo "  sudo bash scripts/setup_cpu_rt_host.sh franka" >&2
+  fi
 fi
 
 print_status
 
 if ((reboot_needed)); then
   echo
-  echo "REBOOT (or re-login) REQUIRED for RT host changes to take effect:"
-  echo "  - isolcpus / nohz_full / rcu_nocbs → need reboot"
-  echo "  - realtime group + rtprio PAM limits → need re-login (reboot also works)"
+  echo "REBOOT (or re-login) REQUIRED for RT host changes to take effect."
   echo "  sudo reboot"
-  echo "After reboot, re-run: pixi run setup-rt"
-  echo "Verify: ulimit -r   # expect 99"
-  echo "Then launch controllers without manual taskset (bringup reads RT_CM_CPU_AFFINITY)."
+  echo "After reboot: pixi run setup-rt ${ROBOT} && ulimit -r   # expect 99"
   exit 3
 fi
 

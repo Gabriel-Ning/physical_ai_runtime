@@ -9,13 +9,8 @@
 #   sudo scripts/apply_franka_rt_networking.sh --uninstall
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# Prefer the Franka beta profile; fall back to the active host profile.
-# shellcheck disable=SC1091
-if [[ -f "$ROOT/scripts/rt_cpu_profile.franka_beta.env" ]]; then
-  source "$ROOT/scripts/rt_cpu_profile.franka_beta.env"
-else
-  source "$ROOT/scripts/rt_cpu_profile.env"
-fi
+# shellcheck disable=SC1090
+source "${RT_CPU_PROFILE_FILE:-$ROOT/scripts/rt_cpu_profile.franka.env}"
 
 UNIT_PATH=/etc/systemd/system/pai-franka-rt-networking.service
 WRAPPER=/usr/local/sbin/pai-franka-rt-networking
