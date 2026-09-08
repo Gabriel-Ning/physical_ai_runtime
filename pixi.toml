@@ -48,7 +48,7 @@ ros-jazzy-tf2-msgs = "*"
 ros-jazzy-tf2-ros = "*"
 ros-jazzy-tf2-ros-py = "*"
 # Binary interface ABI shared by policy-provider and runtime environments.
-ros-jazzy-execution-manager-interfaces = "==0.2.0"
+ros-jazzy-execution-manager-interfaces = "==0.2.1"
 
 
 # ── Full robot runtime / development layer ───────────────────────────────────
@@ -133,7 +133,7 @@ ros-jazzy-manipulation-position-controllers = "==0.3.7"
 ros-jazzy-joint-trajectory-controller-guard = "==0.2.1"
 # Execution Manager binary.  Its interfaces live in the minimal default layer
 # so an in-process policy provider does not need the full runtime.
-ros-jazzy-execution-manager = "==0.2.1"
+ros-jazzy-execution-manager = "==0.2.2"
 # pinocchio's CMake find_dependency(Qhull) requires the CLI tools under
 # $PREFIX/bin (qhull, qconvex, …). Keep an explicit pin so installs that
 # clobber/drop those binaries can be repaired by reinstalling this package.

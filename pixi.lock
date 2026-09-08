@@ -1010,8 +1010,8 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ndcurves-2.3.0-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.6.1-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.1-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.2-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.1-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.2.1-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.3.7-hb0f4dca_0.conda
       - pypi: direct+https://pypi.nvidia.com/isaacteleop/isaacteleop-1.5.124rc1-cp312-cp312-manylinux_2_35_x86_64.whl
@@ -2100,8 +2100,8 @@ environments:
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ndcurves-2.3.0-hb0f4dca_2.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/placo-0.9.23-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-episode-recorder-0.6.1-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.1-hb0f4dca_0.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.2-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.1-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.2.1-hb0f4dca_0.conda
       - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-manipulation-position-controllers-0.3.7-hb0f4dca_0.conda
   lerobot:
@@ -2635,7 +2635,7 @@ environments:
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-yaml-cpp-vendor-9.0.1-np2py312h2ed9cc7_16.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros-jazzy-zstd-vendor-0.26.9-np2py312h2ed9cc7_16.conda
       - conda: https://conda.anaconda.org/robostack-jazzy/linux-64/ros2-distro-mutex-0.14.0-jazzy_16.conda
-      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.0-hb0f4dca_0.conda
+      - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.1-hb0f4dca_0.conda
       - pypi: direct+https://github.com/lesj0610/flash-attention/releases/download/v2.8.3-cu12-torch2.11/flash_attn-2.8.3%2Bcu12torch2.11cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
       - pypi: git+https://github.com/Gabriel-Ning/lerobot.git?rev=97482f665dfb6937d8e48355c8293791104ae654#97482f665dfb6937d8e48355c8293791104ae654
       - pypi: https://download-r2.pytorch.org/whl/cu128/torch-2.11.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl
@@ -27812,15 +27812,15 @@ packages:
   run_exports: {}
   size: 515126
   timestamp: 1788543745118
-- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.1-hb0f4dca_0.conda
-  sha256: cf1233a6e83414b40c3870cae50af0cd1f8a887b10736c4b0a6c2fa310fe5104
-  md5: 33546b41fb76c678839e4e72fcececc0
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-0.2.2-hb0f4dca_0.conda
+  sha256: 05727553271b391188681d15481c826b789d75f2134d976dda40661331d04335
+  md5: 993f952828d6344d3154985e1d2206c1
   depends:
   - ros-jazzy-action-msgs
   - ros-jazzy-control-msgs
   - ros-jazzy-controller-manager-msgs
   - ros-jazzy-diagnostic-msgs
-  - ros-jazzy-execution-manager-interfaces >=0.2.0
+  - ros-jazzy-execution-manager-interfaces >=0.2.1
   - ros-jazzy-geometry-msgs
   - ros-jazzy-launch-ros
   - ros-jazzy-moveit-msgs
@@ -27837,11 +27837,11 @@ packages:
   - yaml-cpp >=0.8.0,<0.9.0a0
   license: Apache-2.0
   run_exports: {}
-  size: 1308302
-  timestamp: 1788580020865
-- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.0-hb0f4dca_0.conda
-  sha256: a86fec040cc79524e6b5a31946acf973d11655110d130082deb337522077f66d
-  md5: 26e38e7fbca2b77f1b4c4c069b013bbc
+  size: 694926
+  timestamp: 1788879881207
+- conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-execution-manager-interfaces-0.2.1-hb0f4dca_0.conda
+  sha256: ef6f32c9418724f396748ef32b236b7e347bb00bcc140529cf307605aec1701e
+  md5: d5ceeee19a86df4a675108eafb8d1ea2
   depends:
   - python
   - ros-jazzy-rosidl-default-runtime
@@ -27858,8 +27858,8 @@ packages:
   - python_abi 3.12.* *_cp312
   license: Apache-2.0
   run_exports: {}
-  size: 688864
-  timestamp: 1788105435940
+  size: 679279
+  timestamp: 1788879807657
 - conda: https://prefix.dev/gabriel-robotics/linux-64/ros-jazzy-joint-trajectory-controller-guard-0.2.1-hb0f4dca_0.conda
   sha256: a77f6c77937d662423cc6b0341aebb13bdd9ab099bab38ee3671322b87121fa0
   md5: f41a950c21f0cf7765f63f14f2027398
