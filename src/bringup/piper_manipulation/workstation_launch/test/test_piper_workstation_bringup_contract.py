@@ -150,7 +150,7 @@ def test_leader_defaults_live_in_teleop_config_not_launch():
             encoding="utf-8"
         )
     )
-    for side, can_interface in (("left", "can1"), ("right", "can0")):
+    for side, can_interface in (("left", "can0"), ("right", "can1")):
         params = config[f"piper_leader_{side}"]["ros__parameters"]
         assert params["can_interface"] == can_interface
         assert params["autostart"] is True

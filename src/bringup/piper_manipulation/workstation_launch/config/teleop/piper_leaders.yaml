@@ -4,7 +4,7 @@
 piper_leader_left:
   ros__parameters:
     preempt_service: /piper_leader_left/preempt
-    can_interface: can1
+    can_interface: can0
     publish_rate_hz: 200.0
     feedback_timeout_s: 0.1
     mit_kd_effort_damping: 0.0
@@ -26,7 +26,7 @@ piper_leader_left:
 piper_leader_right:
   ros__parameters:
     preempt_service: /piper_leader_right/preempt
-    can_interface: can0
+    can_interface: can1
     publish_rate_hz: 200.0
     feedback_timeout_s: 0.1
     mit_kd_effort_damping: 0.0
