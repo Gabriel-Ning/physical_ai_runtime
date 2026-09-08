@@ -171,7 +171,7 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT/src:$PIXI_PROJECT_ROOT/src/interfaces/rmi:$PYTH
 
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
-ROS_DOMAIN_ID = "20"
+ROS_DOMAIN_ID = "1"
 CMAKE_GENERATOR = "Ninja"
 
 [feature.runtime.tasks]
