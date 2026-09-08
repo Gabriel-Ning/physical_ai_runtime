@@ -65,12 +65,9 @@ repos/
 /examples/
 /examples/**
 
-# ROS package checkouts under src/ are managed as independent repositories or Pixi binary packages.
-# Keep the maintained manipulation controller source alongside its published Pixi binary.
+# Controllers ship as Pixi binaries; do not snapshot source on v4.
 /src/controller/**
 !/src/controller/.gitkeep
-!/src/controller/manipulation_position_controllers/
-!/src/controller/manipulation_position_controllers/**
 
 # Execution Manager ships as a Pixi binary; do not snapshot source on v4.
 /src/execution/**
