@@ -69,6 +69,8 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT/src:$PYTHONPATH"
 RMW_IMPLEMENTATION = "rmw_cyclonedds_cpp"
 CYCLONEDDS_URI = "file://$PIXI_PROJECT_ROOT/.config/cyclonedds_default.xml"
 ROS_DOMAIN_ID = "1"
+# Jazzy defaults to LOCALHOST, which hides RT topics from the workstation.
+ROS_AUTOMATIC_DISCOVERY_RANGE = "SUBNET"
 CMAKE_GENERATOR = "Ninja"
 
 [tasks]
