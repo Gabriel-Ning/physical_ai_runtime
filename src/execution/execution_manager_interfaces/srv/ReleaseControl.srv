@@ -1,8 +1,0 @@
-uint8 UNOWNED=0
-uint8 FAULT=3
-
-string lease_id
----
-bool success
-uint8 authority_state
-string message
