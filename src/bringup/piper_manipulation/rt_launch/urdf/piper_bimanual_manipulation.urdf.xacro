@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<!-- Dual Piper real-hardware assembly owned by piper_manipulation_rt_launch.
+
+     Embodiment parts stay in piper_description:
+       - Arm / gripper kinematics / meshes
+       - Arm / gripper ros2_control macros
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="piper_bimanual_manipulation">
+  <xacro:include filename="$(find piper_description)/urdf/parts/piper_arm.xacro"/>
+  <xacro:include filename="$(find piper_description)/urdf/parts/piper_gripper.xacro"/>
+  <xacro:include filename="$(find piper_description)/urdf/parts/piper_arm.ros2_control.xacro"/>
+  <xacro:include filename="$(find piper_description)/urdf/parts/piper_gripper.ros2_control.xacro"/>
+  <xacro:include filename="$(find piper_description)/urdf/parts/experiment_table.xacro"/>
+  <xacro:include filename="$(find piper_description)/urdf/parts/piper_mounting_plate.xacro"/>
+
+  <xacro:arg name="enable_left" default="true"/>
+  <xacro:arg name="enable_right" default="true"/>
+  <xacro:arg name="connected_to" default="world"/>
+  <xacro:arg name="enable_table" default="true"/>
+  <xacro:arg name="table_xyz" default="0 0 0"/>
+  <xacro:arg name="table_rpy" default="0 0 0"/>
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="left_can_interface" default="can0"/>
+  <xacro:arg name="right_can_interface" default="can1"/>
+  <xacro:arg name="left_mit_kd_effort_damping" default="0.0"/>
+  <xacro:arg name="right_mit_kd_effort_damping" default="0.0"/>
+  <xacro:arg name="enable_left_gripper" default="true"/>
+  <xacro:arg name="enable_right_gripper" default="true"/>
+  <xacro:arg name="left_gripper_home_on_activate" default="true"/>
+  <xacro:arg name="right_gripper_home_on_activate" default="true"/>
+  <xacro:arg name="left_xyz" default="-0.32 0.29 0.72"/>
+  <xacro:arg name="right_xyz" default="0.32 0.29 0.72"/>
+  <xacro:arg name="left_rpy" default="0 0 -1.57079632679"/>
+  <xacro:arg name="right_rpy" default="0 0 -1.57079632679"/>
+
+  <xacro:property
+    name="gripper_tcp"
+    value="${xacro.load_yaml('$(find piper_description)/config/gripper_tcp.yaml')}"/>
+
+  <link name="$(arg connected_to)"/>
+
+  <xacro:if value="$(arg enable_table)">
+    <xacro:experiment_table
+      prefix="table_"
+      parent="$(arg connected_to)"
+      xyz="$(arg table_xyz)"
+      rpy="$(arg table_rpy)"/>
+  </xacro:if>
+
+  <xacro:if value="$(arg enable_left)">
+    <joint name="world_to_left_mount" type="fixed">
+      <parent link="$(arg connected_to)"/><child link="left_mount"/>
+      <origin xyz="$(arg left_xyz)" rpy="$(arg left_rpy)"/>
+    </joint>
+    <xacro:piper_mounting_plate
+      prefix="left_"
+      parent="$(arg connected_to)"
+      xyz="$(arg left_xyz)"/>
+    <xacro:piper_arm prefix="left_" connected_to="left_mount"/>
+    <xacro:if value="$(arg enable_left_gripper)">
+      <xacro:piper_gripper
+        prefix="left_"
+        parent_link="left_flange_link"
+        tcp_xyz="${gripper_tcp['origin']['xyz']}"
+        tcp_rpy="${gripper_tcp['origin']['rpy']}"/>
+    </xacro:if>
+  </xacro:if>
+
+  <xacro:if value="$(arg enable_right)">
+    <joint name="world_to_right_mount" type="fixed">
+      <parent link="$(arg connected_to)"/><child link="right_mount"/>
+      <origin xyz="$(arg right_xyz)" rpy="$(arg right_rpy)"/>
+    </joint>
+    <xacro:piper_mounting_plate
+      prefix="right_"
+      parent="$(arg connected_to)"
+      xyz="$(arg right_xyz)"/>
+    <xacro:piper_arm prefix="right_" connected_to="right_mount"/>
+    <xacro:if value="$(arg enable_right_gripper)">
+      <xacro:piper_gripper
+        prefix="right_"
+        parent_link="right_flange_link"
+        tcp_xyz="${gripper_tcp['origin']['xyz']}"
+        tcp_rpy="${gripper_tcp['origin']['rpy']}"/>
+    </xacro:if>
+  </xacro:if>
+
+  <xacro:if value="$(arg enable_left)">
+    <xacro:piper_arm_ros2_control
+      name="left_piper_hardware" prefix="left_"
+      can_interface="$(arg left_can_interface)"
+      use_fake_hardware="$(arg use_fake_hardware)"
+      mit_kd_effort_damping="$(arg left_mit_kd_effort_damping)"/>
+    <xacro:if value="$(arg enable_left_gripper)">
+      <xacro:piper_gripper_ros2_control
+        name="left_piper_gripper_hardware" prefix="left_"
+        can_interface="$(arg left_can_interface)"
+        use_fake_hardware="$(arg use_fake_hardware)"
+        home_on_activate="$(arg left_gripper_home_on_activate)"/>
+    </xacro:if>
+  </xacro:if>
+  <xacro:if value="$(arg enable_right)">
+    <xacro:piper_arm_ros2_control
+      name="right_piper_hardware" prefix="right_"
+      can_interface="$(arg right_can_interface)"
+      use_fake_hardware="$(arg use_fake_hardware)"
+      mit_kd_effort_damping="$(arg right_mit_kd_effort_damping)"/>
+    <xacro:if value="$(arg enable_right_gripper)">
+      <xacro:piper_gripper_ros2_control
+        name="right_piper_gripper_hardware" prefix="right_"
+        can_interface="$(arg right_can_interface)"
+        use_fake_hardware="$(arg use_fake_hardware)"
+        home_on_activate="$(arg right_gripper_home_on_activate)"/>
+    </xacro:if>
+  </xacro:if>
+</robot>

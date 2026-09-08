@@ -12,6 +12,7 @@ install(DIRECTORY
   launch
   config
   docs
+  urdf
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
 )

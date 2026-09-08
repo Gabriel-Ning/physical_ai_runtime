@@ -91,11 +91,13 @@ def test_jtc_cancel_deceleration_is_configured_per_joint():
             }
 
 
-def test_launch_owns_no_robot_model():
-    assert not (ROOT / "urdf").exists()
+def test_launch_owns_composition_xacro():
+    assert (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").is_file()
     launch = (ROOT / "launch" / "controller_bringup.launch.py").read_text()
-    assert 'get_package_share_directory("piper_description")' in launch
+    assert 'get_package_share_directory("piper_manipulation_rt_launch")' in launch
     assert '"urdf", "piper_bimanual_manipulation.urdf.xacro"' in launch
+    assert "pika_gripper" not in (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").read_text()
+    assert "mujoco" not in (ROOT / "urdf" / "piper_bimanual_manipulation.urdf.xacro").read_text().lower()
     assert "piper_with_teach.urdf.xacro" not in launch
     assert '"enable_left": str("left" in active).lower()' in launch
     assert '"enable_right": str("right" in active).lower()' in launch

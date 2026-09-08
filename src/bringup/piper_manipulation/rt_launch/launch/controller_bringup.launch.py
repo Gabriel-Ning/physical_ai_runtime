@@ -125,9 +125,10 @@ def _nodes(context):
                 ).perform(context),
             }
         )
+    bringup_share = get_package_share_directory("piper_manipulation_rt_launch")
     description = xacro.process_file(
         os.path.join(
-            description_share, "urdf", "piper_bimanual_manipulation.urdf.xacro"
+            bringup_share, "urdf", "piper_bimanual_manipulation.urdf.xacro"
         ),
         mappings=mappings,
     ).toprettyxml(indent="  ")

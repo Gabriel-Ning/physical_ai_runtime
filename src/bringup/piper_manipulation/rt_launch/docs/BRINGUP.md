@@ -12,7 +12,7 @@ workstation (planner / policy / teleop)
 
 This package launches the cell; it does not own the URDF:
 
-- Assembly — `piper_description/urdf/piper_bimanual_manipulation.urdf.xacro`
+- Assembly — `piper_manipulation_rt_launch/urdf/piper_bimanual_manipulation.urdf.xacro`
 - Gripper TCP — `piper_description/config/gripper_tcp.yaml`
 - `config/controller/controllers.yaml` — controller_manager + route controllers
 - Arm / gripper `ros2_control` — `piper_hardware_interface`

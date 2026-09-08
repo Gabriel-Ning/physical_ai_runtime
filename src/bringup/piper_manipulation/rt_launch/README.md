@@ -4,7 +4,7 @@
 本包**不含**腕部相机 / EM / leader（那些在 workstation）。
 
 Package: `piper_manipulation_rt_launch`  
-装配：`piper_description/urdf/piper_bimanual_manipulation.urdf.xacro`
+装配：`piper_manipulation_rt_launch/urdf/piper_bimanual_manipulation.urdf.xacro`（零件仍来自 `piper_description`）
 
 ## 配置
 
