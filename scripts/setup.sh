@@ -10,16 +10,7 @@ mkdir -p build install log/ros data .pixi
 pixi_env="${PIXI_ENVIRONMENT_NAME:-default}"
 printf '%s\n' "${pixi_env}" > .pixi/environment
 
-if [[ "${pixi_env}" == "cuda13" ]]; then
-  CLOUDXR_DIR="${CLOUDXR_DIR:-${workspace_root}/.cloudxr}"
-  mkdir -p "${CLOUDXR_DIR}"
-  if [[ ! -f "${CLOUDXR_DIR}/cloudxr-env-config.env" ]]; then
-    echo "Notice: CloudXR workspace directory initialized: ${CLOUDXR_DIR}"
-    echo "        Run 'pixi run -e cuda13 cloudxr-setup' to download CloudXR runtime assets."
-  fi
-fi
-
-# Prefer: pixi run setup-rt <piper|marvin|franka>
+# Prefer: pixi run setup-rt piper
 # Kept so `pixi run setup --rt piper` still works.
 cpu_rt_rc=0
 if [[ "${1:-}" == "--rt" || "${1:-}" == "-rt" ]]; then
@@ -31,7 +22,7 @@ if [[ "${1:-}" == "--rt" || "${1:-}" == "-rt" ]]; then
   fi
 fi
 
-for command in python ros2 colcon vcs rosdep cmake ninja; do
+for command in python ros2 colcon cmake ninja; do
   if ! command -v "${command}" >/dev/null 2>&1; then
     echo "Missing required command in Pixi environment: ${command}" >&2
     exit 1
@@ -44,10 +35,6 @@ echo "  pixi env:  ${pixi_env}"
 echo "  python:    $(command -v python)"
 echo "  ros2:      $(command -v ros2)"
 echo "  colcon:    $(command -v colcon)"
-if [[ "${pixi_env}" == "cuda13" ]]; then
-  echo "  cloudxr:   ${CLOUDXR_DIR}"
-fi
-
 # Print RT host status only after this workspace has enabled the profile.
 if [[ -f "${workspace_root}/.pixi/rt-profile-enabled" ]]; then
   # shellcheck disable=SC1091
@@ -71,6 +58,6 @@ if [[ "${cpu_rt_rc}" -eq 3 ]]; then
   echo
   echo "Setup finished, but a reboot (or re-login) is required for RT host changes."
   echo "  sudo reboot"
-  echo "After reboot: pixi run setup-rt <piper|marvin|franka> && ulimit -r   # expect 99"
+  echo "After reboot: pixi run setup-rt piper && ulimit -r   # expect 99"
   exit 3
 fi

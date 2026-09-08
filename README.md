@@ -1,5 +1,15 @@
 # Physical AI Runtime
 
+This `piper` branch is the Piper real-hardware RT host:
+
+- `src/bringup/piper_manipulation/rt_launch`
+- `src/embodiments` (Piper robot packages)
+- empty `src/*` placeholders matching the `dev-v4` layout
+- Pixi binaries for `libpiper`, `manipulation_position_controllers`, and `joint_trajectory_controller_guard`
+- `pixi run setup-rt piper` plus `scripts/rt_cpu_profile.piper.env` / CAN udev
+
+Apps, examples, and other package sources stay on `dev-v4`.
+
 A Pixi-managed **ROS 2 Jazzy workspace** for Physical AI systems. The repository
 owns the shared development environment, RMI Python SDK, reusable controllers,
 robot RT bringup composition, host setup and architecture contracts. Teleop,

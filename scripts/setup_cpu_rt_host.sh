@@ -1,34 +1,30 @@
 #!/usr/bin/env bash
-# One RT-host setup for all robots. Isolation numbers live in the env file.
+# Piper RT-host setup. Isolation numbers live in the env file.
 #
 #   pixi run setup-rt piper
-#   pixi run setup-rt marvin
-#   pixi run setup-rt franka
 #
 # Applies governor, PAM rtprio/memlock, GRUB isolcpus from
-# scripts/rt_cpu_profile.<robot>.env. Franka also installs FCI NIC IRQ tuning
-# when RT_FRANKA_NIC is set.
+# scripts/rt_cpu_profile.piper.env.
 #
 # Exit: 0 ready, 1 error, 3 reboot/re-login required.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ROBOT="${1:-}"
+ROBOT="${1:-piper}"
 
 usage() {
   sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
-  echo "Robots: piper | marvin | franka"
+  echo "Robot: piper"
 }
 
 case "$ROBOT" in
-  piper|marvin|franka) ;;
-  -h|--help|"")
+  piper) ;;
+  -h|--help)
     usage
-    [[ -n "$ROBOT" ]] || exit 2
     exit 0
     ;;
   *)
-    echo "Unknown robot '$ROBOT'. Use: piper | marvin | franka" >&2
+    echo "Unknown robot '$ROBOT'. Use: piper" >&2
     exit 2
     ;;
 esac
@@ -163,18 +159,6 @@ else
       echo "  Run once: sudo bash scripts/setup_cpu_rt_host.sh ${ROBOT}" >&2
       ;;
   esac
-fi
-
-if [[ -n "${RT_FRANKA_NIC:-}" ]]; then
-  echo "Applying Franka FCI NIC IRQ / coalesce (${RT_FRANKA_NIC})…"
-  if [[ "$(id -u)" -eq 0 ]]; then
-    bash "$ROOT/scripts/apply_franka_rt_networking.sh" --install
-  elif sudo -n true 2>/dev/null; then
-    sudo bash "$ROOT/scripts/apply_franka_rt_networking.sh" --install
-  else
-    echo "WARNING: Franka NIC IRQ setup needs root." >&2
-    echo "  sudo bash scripts/setup_cpu_rt_host.sh franka" >&2
-  fi
 fi
 
 print_status
