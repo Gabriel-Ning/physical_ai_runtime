@@ -62,6 +62,24 @@ const char *modeToString(LeaderMode mode) {
   return "unknown";
 }
 
+const char *robotModeToString(piper::RobotMode mode) {
+  switch (mode) {
+    case piper::RobotMode::kIdle:
+      return "idle";
+    case piper::RobotMode::kMove:
+      return "move";
+    case piper::RobotMode::kGuiding:
+      return "guiding";
+    case piper::RobotMode::kReflex:
+      return "reflex";
+    case piper::RobotMode::kAutomaticErrorRecovery:
+      return "automatic_error_recovery";
+    case piper::RobotMode::kOther:
+      return "other";
+  }
+  return "unknown";
+}
+
 LeaderMode modeFromString(const std::string &str) {
   if (str == "shadow" || str == "shadow_tracking") {
     return LeaderMode::kShadowTracking;
@@ -379,19 +397,26 @@ private:
 
     const LeaderMode old_mode = mode_;
     mode_ = target_mode;
+    const bool restart_control =
+        old_mode == LeaderMode::kShadowTracking ||
+        old_mode == LeaderMode::kPassiveGravityComp ||
+        old_mode == LeaderMode::kActivePreempt;
 
     // Handle switching between position control (Shadow) and torque control (Gravity comp / Preempt)
     if (target_mode == LeaderMode::kShadowTracking) {
       last_commanded_pendant_width_ = -1.0;
-      startShadowTrackingControlLocked();
+      startShadowTrackingControlLocked(restart_control);
     } else if (target_mode == LeaderMode::kPassiveGravityComp || target_mode == LeaderMode::kActivePreempt) {
+      if (old_mode != LeaderMode::kPassiveGravityComp && old_mode != LeaderMode::kActivePreempt) {
+        startTorqueControlLocked(restart_control);
+      }
+      // enableFingerFreeMove() must run *after* Robot::enableArm() (see
+      // teaching_pendant.h). startTorqueControlLocked() re-enables the arm,
+      // which re-engages the EE servo, so free the fingers afterwards.
       if (pendant_) {
         try {
           pendant_->enableFingerFreeMove();
         } catch (...) {}
-      }
-      if (old_mode != LeaderMode::kPassiveGravityComp && old_mode != LeaderMode::kActivePreempt) {
-        startTorqueControlLocked();
       }
     }
 
@@ -446,20 +471,44 @@ private:
       throw std::runtime_error(
           "Piper leader has no fresh coherent joint feedback");
     }
-    robot_->enableArm();
-
     pendant_ = std::make_unique<piper::TeachingPendant>(can_interface_, false);
-    pendant_->enableFingerFreeMove();
 
     last_arm_sequence_ = 0;
     last_pendant_sequence_ = 0;
   }
 
-  void startShadowTrackingControlLocked() {
+  void startControlLoopLocked(bool restart_control) {
+    // stop() returns firmware STANDBY (this firmware feels like motors off).
+    // Never stop() on the first enable. Always enableArm() immediately before
+    // controlAsync so CAN_COMMAND is latched with the command stream.
+    if (restart_control) {
+      try {
+        robot_->stop();
+      } catch (...) {}
+    }
+    robot_->enableArm();
+    const auto after_enable = robot_->readLatest();
+    // After a CAN glitch this firmware can sit in Reflex/Idle with motors
+    // effectively off; a second enableArm() is required before MIT gravity
+    // actually reaches the drives.
+    if (after_enable.robot_mode == piper::RobotMode::kReflex ||
+        after_enable.robot_mode == piper::RobotMode::kIdle) {
+      RCLCPP_WARN(
+          get_logger(),
+          "Leader still %s after enableArm() (healthy=%s fallback=%s "
+          "timeouts=%llu rejects=%llu). Retrying enableArm().",
+          robotModeToString(after_enable.robot_mode),
+          after_enable.healthy ? "true" : "false",
+          after_enable.safe_fallback_applied ? "true" : "false",
+          static_cast<unsigned long long>(after_enable.callback_timeout_count),
+          static_cast<unsigned long long>(after_enable.command_reject_count));
+      robot_->enableArm();
+    }
+  }
+
+  void startShadowTrackingControlLocked(bool restart_control) {
     if (!robot_) return;
-    try {
-      robot_->stop();
-    } catch (...) {}
+    startControlLoopLocked(restart_control);
 
     current_shadow_target_ = robot_->readLatest().q;
 
@@ -494,11 +543,9 @@ private:
     }, piper::ControlType::kInternalJointPos);
   }
 
-  void startTorqueControlLocked() {
+  void startTorqueControlLocked(bool restart_control) {
     if (!robot_) return;
-    try {
-      robot_->stop();
-    } catch (...) {}
+    startControlLoopLocked(restart_control);
 
     robot_->controlAsync([this](const piper::RobotState &state,
                                 piper::Duration) -> piper::Torques {
@@ -646,6 +693,56 @@ private:
     }
 
     publishStatus(&arm, &pendant);
+    logDriveLossIfNeeded(arm);
+  }
+
+  void logDriveLossIfNeeded(const piper::RobotState &arm) {
+    // Disabled/idle-at-boot is expected. Only flag limp while ROS thinks the
+    // leader is actively controlling (shadow / gravity / preempt).
+    if (mode_ == LeaderMode::kDisabled) {
+      drive_loss_logged_ = false;
+      return;
+    }
+    piper::Robot::FirmwareStatus fw{};
+    if (robot_) {
+      fw = robot_->firmwareStatus();
+    }
+    const bool drive_loss =
+        arm.robot_mode == piper::RobotMode::kReflex ||
+        arm.robot_mode == piper::RobotMode::kIdle || !arm.healthy ||
+        arm.safe_fallback_applied || fw.ctrl_mode == 0;
+    if (drive_loss && !drive_loss_logged_) {
+      RCLCPP_ERROR(
+          get_logger(),
+          "Leader drive-loss: ros_mode=%s robot_mode=%s healthy=%s "
+          "safe_fallback=%s ctrl_mode=0x%02x mode_feed=0x%02x arm_status=%u "
+          "timeouts=%llu rejects=%llu. Arm will feel unpowered until re-enable.",
+          modeToString(mode_), robotModeToString(arm.robot_mode),
+          arm.healthy ? "true" : "false",
+          arm.safe_fallback_applied ? "true" : "false", fw.ctrl_mode,
+          fw.mode_feed, static_cast<unsigned>(fw.arm_status),
+          static_cast<unsigned long long>(arm.callback_timeout_count),
+          static_cast<unsigned long long>(arm.command_reject_count));
+      drive_loss_logged_ = true;
+    } else if (drive_loss) {
+      RCLCPP_ERROR_THROTTLE(
+          get_logger(), throttle_clock_, 2000,
+          "Leader still in drive-loss: ros_mode=%s robot_mode=%s healthy=%s "
+          "fallback=%s ctrl_mode=0x%02x timeouts=%llu rejects=%llu",
+          modeToString(mode_), robotModeToString(arm.robot_mode),
+          arm.healthy ? "true" : "false",
+          arm.safe_fallback_applied ? "true" : "false", fw.ctrl_mode,
+          static_cast<unsigned long long>(arm.callback_timeout_count),
+          static_cast<unsigned long long>(arm.command_reject_count));
+    } else if (drive_loss_logged_) {
+      RCLCPP_INFO(
+          get_logger(),
+          "Leader drive-loss cleared: ros_mode=%s robot_mode=%s healthy=%s "
+          "ctrl_mode=0x%02x mode_feed=0x%02x",
+          modeToString(mode_), robotModeToString(arm.robot_mode),
+          arm.healthy ? "true" : "false", fw.ctrl_mode, fw.mode_feed);
+      drive_loss_logged_ = false;
+    }
   }
 
   void publishStatus(const piper::RobotState *arm,
@@ -668,7 +765,20 @@ private:
            << ",\"arm_valid\":" << (arm->valid ? "true" : "false")
            << ",\"arm_coherent\":" << (arm->coherent ? "true" : "false")
            << ",\"arm_source_age_s\":" << age
-           << ",\"arm_q\":[";
+           << ",\"robot_mode\":" << static_cast<int>(arm->robot_mode)
+           << ",\"control_type\":" << static_cast<int>(arm->control_type)
+           << ",\"healthy\":" << (arm->healthy ? "true" : "false")
+           << ",\"safe_fallback_applied\":"
+           << (arm->safe_fallback_applied ? "true" : "false")
+           << ",\"callback_timeout_count\":" << arm->callback_timeout_count
+           << ",\"command_reject_count\":" << arm->command_reject_count;
+      if (robot_) {
+        const auto fw = robot_->firmwareStatus();
+        json << ",\"ctrl_mode\":" << static_cast<int>(fw.ctrl_mode)
+             << ",\"mode_feed\":" << static_cast<int>(fw.mode_feed)
+             << ",\"arm_status\":" << static_cast<int>(fw.arm_status);
+      }
+      json << ",\"arm_q\":[";
       for (size_t i = 0; i < piper::kNumJoints; ++i) {
         if (i != 0) {
           json << ",";
@@ -676,6 +786,25 @@ private:
         json << arm->q[i];
       }
       json << "]";
+      json << ",\"tau_j\":[";
+      for (size_t i = 0; i < piper::kNumJoints; ++i) {
+        if (i != 0) {
+          json << ",";
+        }
+        json << arm->tau_J[i];
+      }
+      json << "]";
+      if (model_ && model_->isLoaded()) {
+        const auto g = model_->gravity(*arm);
+        json << ",\"gravity_tau\":[";
+        for (size_t i = 0; i < piper::kNumJoints; ++i) {
+          if (i != 0) {
+            json << ",";
+          }
+          json << g[i];
+        }
+        json << "]";
+      }
     }
     if (pendant) {
       const double age =
@@ -768,6 +897,7 @@ private:
   std::vector<std::string> joint_names_;
   uint64_t last_arm_sequence_{0};
   uint64_t last_pendant_sequence_{0};
+  bool drive_loss_logged_{false};
 
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr joint_pub_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pendant_pub_;

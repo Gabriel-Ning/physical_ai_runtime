@@ -26,7 +26,7 @@ else
 fi
 
 bitrate=1000000
-txqueuelen=10
+txqueuelen=1000
 
 for iface in "${interfaces[@]}"; do
   echo "Resetting Piper teleop CAN interface: $iface"

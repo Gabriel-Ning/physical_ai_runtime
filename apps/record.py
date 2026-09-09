@@ -206,15 +206,14 @@ def verify_leader_preempt_services(
     return ok
 
 
-def set_teleop_preempt(
-    node: Any, teleoperators: dict[str, Any], preempt_active: bool
+def _call_set_bool_services(
+    node: Any,
+    named_services: list[tuple[str, str]],
+    data: bool,
+    *,
+    verb: str,
 ) -> bool:
-    """Call every leader ``~/preempt`` in parallel. Leaders publish clutch to EM."""
-    cfgs = [
-        (name, cfg.get("preempt_service"))
-        for name, cfg in _device_cfgs(teleoperators).items()
-    ]
-    if not cfgs:
+    if not named_services:
         return True
     if not _node_context_ok(node):
         return False
@@ -222,9 +221,9 @@ def set_teleop_preempt(
     futures: list[tuple[str, str, Any]] = []
     failures: list[str] = []
     try:
-        for name, srv_name in cfgs:
+        for name, srv_name in named_services:
             if not srv_name:
-                failures.append(f"{name}: missing preempt_service")
+                failures.append(f"{name}: missing service")
                 continue
             client = node.create_client(SetBool, srv_name)
             clients.append(client)
@@ -232,14 +231,12 @@ def set_teleop_preempt(
                 failures.append(f"{name}: {srv_name} unavailable")
                 continue
             futures.append(
-                (name, srv_name, client.call_async(SetBool.Request(data=preempt_active)))
+                (name, srv_name, client.call_async(SetBool.Request(data=data)))
             )
         t_end = time.monotonic() + 5.0
         pending = list(futures)
         while pending and time.monotonic() < t_end:
-            pending = [
-                item for item in pending if not item[2].done()
-            ]
+            pending = [item for item in pending if not item[2].done()]
             if pending:
                 time.sleep(0.01)
         for name, srv_name, future in futures:
@@ -256,10 +253,7 @@ def set_teleop_preempt(
                     f"{name}: {getattr(response, 'message', 'no response')}"
                 )
                 continue
-            mode_label = (
-                "ACTIVE (0-G Float)" if preempt_active else "RELEASED (Shadow/Passive)"
-            )
-            print(f"  [✓] {name} Preempt {mode_label}: {response.message}")
+            print(f"  [✓] {name} {verb}: {response.message}")
     finally:
         for client in clients:
             try:
@@ -270,6 +264,22 @@ def set_teleop_preempt(
         print("  [!] Leader mode transition failed: " + "; ".join(failures))
         return False
     return True
+
+
+def set_teleop_preempt(
+    node: Any, teleoperators: dict[str, Any], preempt_active: bool
+) -> bool:
+    """Call every leader ``~/preempt`` in parallel. Leaders publish clutch to EM."""
+    cfgs = [
+        (name, cfg.get("preempt_service"))
+        for name, cfg in _device_cfgs(teleoperators).items()
+    ]
+    verb = (
+        "Preempt ACTIVE (0-G Float)"
+        if preempt_active
+        else "Preempt RELEASED (Shadow/Passive)"
+    )
+    return _call_set_bool_services(node, cfgs, preempt_active, verb=verb)
 
 
 def _drain_stdin() -> None:
@@ -358,15 +368,45 @@ def verify_cameras(
         print(f"    {icon} {cam_id:<16}: {topic} ({detail}) -> {status}")
 
 
+def _quintic_home_plan(
+    joint_names: list[str],
+    q_start: list[float],
+    q_goal: list[float],
+    duration_s: float,
+    steps: int = 80,
+) -> rmi.PlanResult:
+    """Minimum-jerk quintic with matching velocities for JTC interpolation."""
+    steps = max(steps, 10)
+    duration_s = max(duration_s, 0.1)
+    points: list[rmi.PlanPoint] = []
+    for i in range(steps + 1):
+        s = i / steps
+        h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
+        vel_scale = (30.0 * (s**2) - 60.0 * (s**3) + 30.0 * (s**4)) / duration_s
+        points.append(
+            rmi.PlanPoint(
+                positions=[
+                    q_start[j] + h * (q_goal[j] - q_start[j]) for j in range(len(q_start))
+                ],
+                velocities=[
+                    vel_scale * (q_goal[j] - q_start[j]) for j in range(len(q_start))
+                ],
+                time_from_start_s=s * duration_s,
+            )
+        )
+    return rmi.PlanResult(valid=True, joint_names=joint_names, points=points)
+
+
 def smooth_homing(
     ctx: rmi.Context,
     robot: rmi.Robot,
     home_pose: list[float] | dict[str, list[float]],
     teleoperators: dict[str, Any],
-    duration_s: float = 2.5,
+    duration_s: float = 5.0,
     rate_hz: float = 50.0,
 ) -> None:
-    """Smooth quintic spline staging motion to home poses."""
+    """Smooth JTC quintic staging motion to home poses."""
+    del rate_hz  # JTC interpolates the quintic; recorder Hz is not the motion rate.
     obs = robot.get_observation()
     name_to_pos = dict(zip(obs.joint_names, obs.joint_positions))
 
@@ -398,41 +438,34 @@ def smooth_homing(
                 list(home_pose),
             )
         if grip_spec and all(j in name_to_pos for j in grip_spec.joint_names):
-            parts_to_home[grip_p] = (
-                [name_to_pos[j] for j in grip_spec.joint_names],
-                [0.020],
+            parts_to_home.setdefault(
+                grip_p,
+                (
+                    [name_to_pos[j] for j in grip_spec.joint_names],
+                    [0.020],
+                ),
             )
 
-    steps = int(max(duration_s * rate_hz, 10))
-    dt = duration_s / steps
+    if not parts_to_home:
+        return
 
-    policy_node = ctx.make_node("JointPolicy")
-    with policy_node.activate(preempt=True):
-        t_start = time.monotonic()
-        for i in range(steps + 1):
-            def select_reference(_):
-                s = i / steps
-                h = 10.0 * (s**3) - 15.0 * (s**4) + 6.0 * (s**5)
-
-                actions = [
-                    rmi.Action(
-                        part=part_name,
-                        command="joint_reference",
-                        value=[
-                            q_start[j] + h * (q_goal[j] - q_start[j])
-                            for j in range(len(q_goal))
-                        ],
-                    )
-                    for part_name, (q_start, q_goal) in parts_to_home.items()
-                ]
-                return actions
-            actions = policy_node.select_action(selector=select_reference)
-            policy_node.submit(actions)
-
-            elapsed = time.monotonic() - t_start
-            target_t = (i + 1) * dt
-            if target_t > elapsed:
-                time.sleep(target_t - elapsed)
+    planner = ctx.make_node("TrajectoryPlanner")
+    with planner.activate(preempt=True):
+        executions = []
+        for part_name, (q_start, q_goal) in parts_to_home.items():
+            part_spec = ctx.profile.parts[part_name]
+            if len(q_goal) < 2:
+                executions.append(planner.execute(part_name, q_goal))
+                continue
+            plan = _quintic_home_plan(
+                list(part_spec.joint_names),
+                q_start,
+                q_goal,
+                duration_s=duration_s,
+            )
+            executions.append(planner.execute(part_name, plan))
+        for execution in executions:
+            execution.wait(timeout=duration_s + 5.0)
 
 
 def _open_context(profile: str, *, use_sim_time: bool):

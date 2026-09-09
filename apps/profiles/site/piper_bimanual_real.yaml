@@ -107,7 +107,7 @@ sensors:
 
 # 【可修改】机械臂归位安全姿态（真实台架安全防撞初始姿态）
 homing:
-  duration_s: 8.0
+  duration_s: 5.0
   joint_positions:
     left_arm: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     left_gripper: [0.0]
