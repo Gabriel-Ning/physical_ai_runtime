@@ -221,3 +221,8 @@ owns those ABIs.
   `test` / `clean` / `stop`).
 - Contribute Pixi/docs/template changes here; contribute package changes in
   each package's own repository.
+
+## License
+
+Copyright 2026 Gabriel-Ning. Licensed under the [Apache License 2.0](LICENSE);
+see [NOTICE](NOTICE).
